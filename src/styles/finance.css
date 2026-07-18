@@ -1,0 +1,812 @@
+/* FINANCE PAGE */
+
+.finance-page-header {
+  margin-bottom: 22px;
+}
+
+/* TOP METRICS */
+
+.finance-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.finance-metric-card {
+  min-height: 145px;
+  padding: 19px;
+  background: #ffffff;
+  border: 1px solid #e7edf5;
+  border-top: 4px solid transparent;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.finance-metric-card span {
+  display: block;
+  margin-bottom: 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.finance-metric-card strong {
+  display: block;
+  margin-bottom: 9px;
+  color: #0f172a;
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.finance-metric-card small {
+  display: block;
+  color: #8491a0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.finance-metric-card.income {
+  border-top-color: #22c55e;
+}
+
+.finance-metric-card.expense {
+  border-top-color: #ef4444;
+}
+
+.finance-metric-card.net {
+  border-top-color: #0ea5e9;
+}
+
+.finance-metric-card.teacher {
+  border-top-color: #f59e0b;
+}
+
+.finance-metric-card.income strong {
+  color: #16a34a;
+}
+
+.finance-metric-card.expense strong {
+  color: #dc2626;
+}
+
+.finance-metric-card.net strong {
+  color: #0284c7;
+}
+
+.finance-metric-card.teacher strong {
+  color: #d97706;
+}
+
+/* TABS */
+
+.finance-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+  padding: 7px;
+  overflow-x: auto;
+  background: #ffffff;
+  border: 1px solid #e7edf5;
+  border-radius: 16px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.finance-tabs button {
+  flex-shrink: 0;
+  padding: 11px 17px;
+  color: #526579;
+  font-size: 14px;
+  font-weight: 800;
+  background: transparent;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.finance-tabs button:hover {
+  color: #087e95;
+  background: #f0fbfd;
+}
+
+.finance-tabs button.active {
+  color: #087e95;
+  background: #dff6fa;
+}
+
+/* OVERVIEW */
+
+.finance-overview-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.finance-overview-card,
+.finance-table-card {
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #e7edf5;
+  border-radius: 20px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.finance-overview-wide {
+  grid-column: 1 / -1;
+}
+
+.finance-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.finance-section-heading h2,
+.finance-section-heading h3 {
+  margin: 0 0 5px;
+  color: #0f172a;
+}
+
+.finance-section-heading h2 {
+  font-size: 20px;
+}
+
+.finance-section-heading h3 {
+  font-size: 18px;
+}
+
+.finance-section-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.finance-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  color: #526579;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.finance-summary-row:last-child {
+  border-bottom: none;
+}
+
+.finance-summary-row strong {
+  color: #0f172a;
+}
+
+.finance-summary-row.total {
+  margin-top: 3px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.finance-summary-row.total strong {
+  font-size: 18px;
+}
+
+.finance-teacher-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.finance-teacher-summary-item {
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+}
+
+.finance-teacher-summary-item span {
+  display: block;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.finance-teacher-summary-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.finance-teacher-summary-item.paid strong {
+  color: #16a34a;
+}
+
+.finance-teacher-summary-item.pending strong {
+  color: #dc2626;
+}
+
+.finance-teacher-summary-item.lessons strong {
+  color: #0284c7;
+}
+
+/* PRIMARY BUTTON */
+
+.finance-primary-button {
+  flex-shrink: 0;
+  padding: 11px 15px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  background: linear-gradient(
+    135deg,
+    #09a6d3,
+    #12b8ad
+  );
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.finance-primary-button:hover {
+  box-shadow: 0 7px 18px rgba(9, 166, 211, 0.2);
+  transform: translateY(-1px);
+}
+
+/* ENTRY FORMS */
+
+.finance-entry-form {
+  margin-bottom: 22px;
+  padding: 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 17px;
+}
+
+.finance-entry-form-heading {
+  margin-bottom: 18px;
+}
+
+.finance-entry-form-heading h3 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.finance-entry-form-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.finance-form-actions {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  gap: 11px;
+  margin-top: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-top: none;
+  box-shadow: none;
+  transform: none;
+}
+
+.finance-form-actions::before,
+.finance-form-actions::after {
+  display: none;
+  content: none;
+}
+
+/* LIST CONTROLS */
+
+.finance-list-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.finance-search-box {
+  width: min(430px, 100%);
+}
+
+.finance-search-box label {
+  display: block;
+  margin-bottom: 7px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.finance-search-box input {
+  width: 100%;
+  padding: 12px 14px;
+  color: #334155;
+  font-size: 14px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.finance-search-box input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #0ea5e9;
+  box-shadow:
+    0 0 0 4px rgba(14, 165, 233, 0.09);
+}
+
+.finance-record-count {
+  flex-shrink: 0;
+  padding: 9px 13px;
+  color: #527000;
+  font-size: 13px;
+  font-weight: 800;
+  background: #e7f9b9;
+  border-radius: 12px;
+}
+
+/* TABLES */
+
+.finance-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e7edf5;
+  border-radius: 15px;
+}
+
+.finance-table {
+  min-width: 1050px;
+}
+
+.finance-source-badge,
+.finance-status {
+  display: inline-block;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.finance-source-badge.automatic {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.finance-source-badge.manual {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+.finance-readonly-label {
+  color: #8491a0;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.finance-status.paid {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.finance-status.partial {
+  color: #ca8a04;
+  background: #fef3c7;
+}
+
+.finance-status.pending {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+/* TEACHER PAYMENTS */
+
+.finance-teacher-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.finance-teacher-metric-card {
+  min-height: 105px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #e7edf5;
+  border-top: 4px solid #f59e0b;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.finance-teacher-metric-card span {
+  display: block;
+  margin-bottom: 11px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.finance-teacher-metric-card strong {
+  display: block;
+  color: #d97706;
+  font-size: 24px;
+}
+
+.finance-teacher-metric-card.paid {
+  border-top-color: #22c55e;
+}
+
+.finance-teacher-metric-card.paid strong {
+  color: #16a34a;
+}
+
+.finance-teacher-metric-card.pending {
+  border-top-color: #ef4444;
+}
+
+.finance-teacher-metric-card.pending strong {
+  color: #dc2626;
+}
+
+.finance-teacher-metric-card.lessons {
+  border-top-color: #0ea5e9;
+}
+
+.finance-teacher-metric-card.lessons strong {
+  color: #0284c7;
+}
+
+.finance-payment-history {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #e7edf5;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 1150px) {
+  .finance-metric-grid,
+  .finance-teacher-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-teacher-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .finance-overview-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-overview-wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 750px) {
+  .finance-metric-grid,
+  .finance-teacher-metric-grid,
+  .finance-teacher-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-section-heading,
+  .finance-list-controls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .finance-primary-button,
+  .finance-search-box {
+    width: 100%;
+  }
+
+  .finance-record-count {
+    align-self: flex-end;
+  }
+}
+
+/* TEACHER PAYMENT SUMMARY */
+
+.teacher-payment-summary {
+  margin: 16px 0 20px;
+  padding: 18px;
+  background: linear-gradient(135deg, #f8fafc, #ecfeff);
+  border: 1px solid #dbeafe;
+  border-radius: 17px;
+}
+
+.teacher-payment-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.teacher-payment-summary-head > div > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.teacher-payment-summary-head h4 {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.teacher-payment-summary-head p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.teacher-payment-summary-grid.compact {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.teacher-payment-summary-item {
+  min-width: 0;
+  padding: 14px 15px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.teacher-payment-summary-item small {
+  display: block;
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.teacher-payment-summary-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 19px;
+}
+
+.teacher-payment-summary-item.paid strong {
+  color: #16a34a;
+}
+
+.teacher-payment-summary-item.pending strong {
+  color: #dc2626;
+}
+
+.teacher-payment-summary-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid #dbeafe;
+}
+
+.teacher-payment-summary-footer > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.teacher-payment-summary-footer button.teacher-package-toggle {
+  appearance: none;
+  padding: 7px 11px !important;
+  color: #0369a1 !important;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  background: #ffffff !important;
+  border: 1px solid #bae6fd !important;
+  border-radius: 9px;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.teacher-payment-summary-footer button.teacher-package-toggle:hover {
+  color: #075985 !important;
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  text-decoration: none;
+}
+
+.teacher-package-list {
+  margin-top: 13px;
+}
+
+.teacher-package-list-grid {
+  display: grid;
+  gap: 9px;
+}
+
+.teacher-package-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+}
+
+.teacher-package-list-item strong,
+.teacher-package-list-item small {
+  display: block;
+}
+
+.teacher-package-list-item strong {
+  margin-bottom: 3px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.teacher-package-list-item small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.teacher-package-amounts {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 3px;
+  color: #475569;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.teacher-package-amounts span:last-child {
+  color: #0369a1;
+  font-weight: 800;
+}
+
+.teacher-payment-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+  row-gap: 14px;
+  align-items: start;
+  margin-top: 20px;
+}
+
+.teacher-payment-entry-grid .form-group {
+  min-width: 0;
+  margin: 0;
+}
+
+.teacher-payment-entry-grid .form-group > label {
+  display: block;
+  min-height: 18px;
+  margin: 0 0 8px;
+  line-height: 18px;
+}
+
+.teacher-payment-entry-grid .form-group > input,
+.teacher-payment-entry-grid .form-group > select {
+  width: 100%;
+}
+
+.finance-payment-amount-group {
+  min-width: 0;
+}
+
+.finance-payment-quick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 0 2px;
+}
+
+.finance-payment-remaining-note {
+  display: block;
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.finance-entry-form button.finance-fill-remaining-button {
+  appearance: none;
+  flex-shrink: 0;
+  padding: 8px 12px !important;
+  color: #0369a1 !important;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  background: #e0f2fe !important;
+  border: 1px solid #7dd3fc !important;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.finance-entry-form button.finance-fill-remaining-button:hover {
+  color: #075985 !important;
+  background: #bae6fd !important;
+  border-color: #38bdf8 !important;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.finance-entry-form button.finance-fill-remaining-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14);
+}
+
+.finance-form-actions .save-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 850px) {
+  .teacher-payment-summary-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-package-list-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .teacher-package-amounts {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 650px) {
+  .teacher-payment-entry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-payment-summary-head,
+  .teacher-payment-summary-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .finance-payment-quick-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .finance-fill-remaining-button {
+    align-self: flex-end;
+  }
+}

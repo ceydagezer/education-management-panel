@@ -1,0 +1,34 @@
+:root {
+  --blue: #0ea5e9;
+  --teal: #14b8a6;
+  --yellow: #facc15;
+  --red: #ef4444;
+  --green: #22c55e;
+  --bg: #f6f8fc;
+  --text: #1f2937;
+  --muted: #64748b;
+  --border: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+button,
+input {
+  font-family: inherit;
+}

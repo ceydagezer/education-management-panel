@@ -1,0 +1,177 @@
+/* PACKAGES PAGE */
+
+.package-form-card {
+  margin-bottom: 22px;
+  padding-bottom: 26px;
+}
+
+.package-form {
+  margin: 0;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.delete-button {
+  border: none;
+  background: #fef2f2;
+  color: #ef4444;
+  padding: 9px 13px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.delete-button:hover {
+  background: #fee2e2;
+}
+
+/* Select ok hizası düzeltildi */
+.package-form-card select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 46px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2333455f' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 16px;
+}
+
+/* Paket özeti alanı */
+
+.package-calculation-box {
+  margin-top: 4px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(240px, 1.1fr) minmax(0, 2fr);
+  gap: 18px;
+  align-items: center;
+  background: linear-gradient(135deg, #f8fafc, #ecfeff);
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+}
+
+.package-calculation-box span {
+  display: block;
+  margin-bottom: 6px;
+  color: #0369a1;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.package-calculation-box p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.package-summary-description {
+  min-width: 0;
+}
+
+.package-calculation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.package-summary-grid {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+}
+
+.package-calculation-item {
+  min-width: 0;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+}
+
+.package-calculation-item small {
+  display: block;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* Yazılar küçültüldü */
+.package-summary-grid .package-calculation-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 800;
+  word-break: break-word;
+}
+
+/* Paket formu butonları */
+
+.package-form-actions {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 0;
+  border: none;
+  border-top: none;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.package-form-actions::before,
+.package-form-actions::after {
+  display: none;
+  content: none;
+}
+
+.package-form-card form::before,
+.package-form-card form::after {
+  display: none;
+  content: none;
+}
+
+.package-form-card .form-actions {
+  margin-top: 22px;
+  padding-top: 0;
+  border: none;
+  border-top: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 1200px) {
+  .package-calculation-box {
+    grid-template-columns: 1fr;
+  }
+
+  .package-summary-grid {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .package-calculation-grid,
+  .package-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .package-form-actions {
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .package-summary-grid .package-calculation-item strong {
+    font-size: 15px;
+  }
+}

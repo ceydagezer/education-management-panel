@@ -1,0 +1,1182 @@
+.teacher-form-card {
+  overflow: visible;
+  padding: 28px;
+}
+
+.teacher-form-card .section-title-row {
+  margin-bottom: 24px;
+}
+
+.teacher-form-top {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.teacher-photo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.teacher-photo-label {
+  width: 100%;
+  margin-bottom: 10px;
+  color: #29445f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.teacher-photo-upload {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid #dce4ec;
+  border-radius: 20px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.teacher-photo-upload:hover {
+  border-color: #17a8c1;
+  box-shadow: 0 8px 24px rgba(16, 155, 180, 0.12);
+  transform: translateY(-1px);
+}
+
+.teacher-default-photo-icon {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.teacher-default-photo-icon svg {
+  width: 132px;
+  height: 132px;
+  fill: #a9adb2;
+}
+
+.teacher-photo-large-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.teacher-photo-plus {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1;
+  background: #9da1a6;
+  border: 4px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+
+.teacher-photo-upload:hover .teacher-photo-plus {
+  background: #13a8bf;
+}
+
+.teacher-photo-help {
+  width: 100%;
+  margin: 9px 0 0;
+  color: #8491a0;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.teacher-photo-remove {
+  margin-top: 7px;
+  padding: 0;
+  color: #c43f3f;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.teacher-photo-remove:hover {
+  text-decoration: underline;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.teacher-active-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.teacher-active-row input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+}
+
+.teacher-form-content {
+  min-width: 0;
+}
+
+.teacher-form-card .form-grid {
+  align-items: start;
+  column-gap: 20px;
+  row-gap: 18px;
+}
+
+.teacher-form-card .form-group {
+  min-width: 0;
+}
+
+.teacher-form-card .form-group > label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.teacher-form-card textarea {
+  min-height: 110px;
+}
+
+.required-star {
+  margin-left: 4px;
+  color: #ef4444;
+}
+
+.field-help-text {
+  display: block;
+  margin-top: 7px;
+  color: #7b8b9d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.specialty-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.specialty-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.specialty-item input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.specialty-item.selected {
+  color: #65a30d;
+  background: #ecfccb;
+  border-color: #84cc16;
+}
+
+.specialty-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.specialty-add-row-bottom {
+  margin-top: 12px;
+}
+
+.specialty-add-row button {
+  padding: 10px 14px;
+  color: #65a30d;
+  font-weight: 800;
+  background: #ecfccb;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.teacher-commission-box {
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) minmax(0, 1.6fr);
+  gap: 20px;
+  align-items: center;
+  width: 100%;
+  margin-top: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8fbff 0%, #ecfeff 100%);
+  border: 1px solid #cfe8f3;
+  border-radius: 18px;
+}
+
+.teacher-commission-box > div:first-child > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #0369a1;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.teacher-commission-box > div:first-child > p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.teacher-payment-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.teacher-payment-summary-grid .package-calculation-item {
+  display: flex;
+  min-width: 0;
+  min-height: 82px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 15px 16px;
+  background: #ffffff;
+  border: 1px solid #dbe4ec;
+  border-radius: 15px;
+}
+
+.teacher-payment-summary-grid small {
+  display: block;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.teacher-payment-summary-grid strong {
+  color: #0f172a;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.teacher-cv-section {
+  margin-top: 22px;
+}
+
+.teacher-cv-section > label:first-child {
+  display: block;
+  margin-bottom: 8px;
+  color: #29445f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.teacher-cv-dropzone {
+  display: flex;
+  min-height: 135px;
+  align-items: center;
+  justify-content: center;
+  background: #f8fbfd;
+  border: 2px dashed #cbd8e5;
+  border-radius: 16px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.teacher-cv-dropzone:hover,
+.teacher-cv-dropzone-active {
+  background: #f0fbfd;
+  border-color: #17abc3;
+  box-shadow: 0 0 0 4px rgba(23, 171, 195, 0.08);
+}
+
+.teacher-cv-empty {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+  text-align: left;
+}
+
+.teacher-upload-icon {
+  display: flex;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  background: #e5f7fa;
+  border-radius: 14px;
+}
+
+.teacher-upload-icon svg {
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: #119fb8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.teacher-cv-empty strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #17324c;
+  font-size: 15px;
+}
+
+.teacher-cv-empty p {
+  margin: 0 0 5px;
+  color: #64778a;
+  font-size: 14px;
+}
+
+.teacher-cv-empty small {
+  color: #8b98a6;
+  font-size: 12px;
+}
+
+.teacher-cv-selected {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+}
+
+.teacher-cv-file-icon {
+  display: flex;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: #0795ad;
+  font-size: 14px;
+  font-weight: 800;
+  background: #e7f8fb;
+  border-radius: 13px;
+}
+
+.teacher-cv-file-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.teacher-cv-file-info strong {
+  overflow: hidden;
+  color: #21384f;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-cv-file-info span {
+  color: #6b7c8d;
+  font-size: 12px;
+}
+
+.teacher-cv-remove {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  color: #b83b3b;
+  font-size: 13px;
+  font-weight: 700;
+  background: #fee7e7;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.teacher-cv-remove:hover {
+  background: #fbd0d0;
+}
+
+.teacher-form-card form > .form-actions {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 0;
+  transform: none;
+}
+
+.teacher-table-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teacher-table-photo {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #087f94;
+  font-size: 14px;
+  font-weight: 700;
+  background: #e0f5f9;
+  border: 1px solid #d7e0e8;
+  border-radius: 50%;
+}
+
+.teacher-table-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 1050px) {
+  .teacher-commission-box {
+    grid-template-columns: 1fr;
+  }
+
+  .specialty-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .teacher-form-top {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-photo-section {
+    align-items: flex-start;
+  }
+
+  .teacher-photo-upload,
+  .teacher-photo-label {
+    width: 220px;
+  }
+}
+
+@media (max-width: 650px) {
+  .teacher-form-card {
+    padding: 20px;
+  }
+
+  .teacher-photo-upload,
+  .teacher-photo-label {
+    width: 180px;
+  }
+
+  .teacher-photo-upload {
+    height: 180px;
+  }
+
+  .specialty-grid,
+  .teacher-payment-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-cv-empty {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .teacher-cv-selected {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .teacher-cv-remove {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   ÖĞRETMEN AKTİF / PASİF YÖNETİMİ
+   ========================================================= */
+
+.teacher-current-status {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.teacher-current-status > span {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.teacher-current-status div {
+  min-width: 0;
+}
+
+.teacher-current-status strong,
+.teacher-current-status small {
+  display: block;
+}
+
+.teacher-current-status strong {
+  margin-bottom: 2px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.teacher-current-status small {
+  color: #7b8b9d;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.teacher-current-status.active {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.teacher-current-status.active > span {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px #dcfce7;
+}
+
+.teacher-current-status.passive {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.teacher-current-status.passive > span {
+  background: #f97316;
+  box-shadow: 0 0 0 4px #ffedd5;
+}
+
+.teacher-status-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 20px;
+  background: #fbfdff;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.teacher-status-filter-button {
+  padding: 8px 13px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  background: #ffffff;
+  border: 1px solid #dce5ee;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.teacher-status-filter-button:hover {
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+.teacher-status-filter-button.selected {
+  color: #0369a1;
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.08);
+}
+
+.teacher-status-cell {
+  display: flex;
+  min-width: 140px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.teacher-status-cell small {
+  max-width: 190px;
+  color: #7b8b9d;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.teacher-passive-button,
+.teacher-reactivate-button {
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.teacher-passive-button {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.teacher-passive-button:hover {
+  background: #fde68a;
+}
+
+.teacher-reactivate-button {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.teacher-reactivate-button:hover {
+  background: #bbf7d0;
+}
+
+@media (max-width: 650px) {
+  .teacher-status-filter-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .teacher-status-filter-button {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   ÖĞRETMEN EXCEL / PDF İŞLEMLERİ VE TABLO HİZALAMASI
+   ========================================================= */
+
+.teacher-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.teacher-page-actions .excel-button,
+.teacher-page-actions .manage-button {
+  min-height: 42px;
+}
+
+.teacher-pdf-button {
+  padding: 8px 11px;
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 800;
+  background: #ede9fe;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.teacher-pdf-button:hover {
+  background: #ddd6fe;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th,
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td {
+  vertical-align: middle;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(5),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(5),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(6),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(6),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(7),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(7),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(8),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(8),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(9),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(9),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(10),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(10) {
+  text-align: center;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(8)
+  .teacher-status-cell {
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(9),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(9) {
+  width: 120px;
+  min-width: 120px;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th:nth-child(10),
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(10) {
+  width: 285px;
+  min-width: 285px;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table td:nth-child(10)
+  .teacher-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper
+  .lesson-table th {
+  white-space: nowrap;
+}
+
+@media (max-width: 650px) {
+  .teacher-page-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .teacher-page-actions .excel-button,
+  .teacher-page-actions .manage-button {
+    width: 100%;
+  }
+}
+
+
+/* =========================================================
+   ÖĞRETMEN LİSTESİ - KOMPAKT MASAÜSTÜ TABLOSU
+   İletişim tek sütunda gösterilir, notlar listeden kaldırılır.
+   ========================================================= */
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper {
+  overflow-x: visible;
+}
+
+.teacher-list-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.teacher-list-table th,
+.teacher-list-table td {
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.teacher-list-table th {
+  padding: 13px 12px;
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.teacher-list-table td {
+  padding: 16px 12px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(1),
+.teacher-list-table td:nth-child(1) {
+  width: 15%;
+  text-align: left;
+}
+
+.teacher-list-table th:nth-child(2),
+.teacher-list-table td:nth-child(2) {
+  width: 17%;
+  text-align: left;
+}
+
+.teacher-list-table th:nth-child(3),
+.teacher-list-table td:nth-child(3) {
+  width: 12%;
+  text-align: left;
+}
+
+.teacher-list-table th:nth-child(4),
+.teacher-list-table td:nth-child(4) {
+  width: 9%;
+}
+
+.teacher-list-table th:nth-child(5),
+.teacher-list-table td:nth-child(5) {
+  width: 8%;
+}
+
+.teacher-list-table th:nth-child(6),
+.teacher-list-table td:nth-child(6) {
+  width: 12%;
+}
+
+.teacher-list-table th:nth-child(7),
+.teacher-list-table td:nth-child(7) {
+  width: 9%;
+}
+
+.teacher-list-table th:nth-child(8),
+.teacher-list-table td:nth-child(8) {
+  width: 18%;
+}
+
+.teacher-list-table .teacher-table-user {
+  min-width: 0;
+}
+
+.teacher-list-table .teacher-table-user strong {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-contact-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.teacher-contact-cell span {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-contact-cell b {
+  color: #334155;
+  font-size: 11px;
+}
+
+.teacher-list-table .teacher-status-cell {
+  align-items: center;
+  min-width: 0;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.teacher-list-table .teacher-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.teacher-list-table .teacher-pdf-button,
+.teacher-list-table .detail-button,
+.teacher-list-table .teacher-passive-button,
+.teacher-list-table .teacher-reactivate-button {
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .teacher-status-filter-bar
+    + .payment-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .teacher-list-table {
+    min-width: 1050px;
+    table-layout: auto;
+  }
+
+  .teacher-list-table th,
+  .teacher-list-table td {
+    white-space: nowrap;
+  }
+
+  .teacher-list-table th:nth-child(n),
+  .teacher-list-table td:nth-child(n) {
+    width: auto;
+  }
+}
+
+
+/* =========================================================
+   ÖĞRETMEN LİSTESİ - TELEFON VE E-POSTA AYRI SÜTUNLAR
+   ========================================================= */
+
+.teacher-status-filter-bar
+  + .payment-table-wrapper {
+  overflow-x: visible;
+}
+
+.teacher-list-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.teacher-list-table th,
+.teacher-list-table td {
+  vertical-align: middle;
+}
+
+.teacher-list-table th {
+  padding: 13px 9px;
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.teacher-list-table td {
+  padding: 16px 9px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(1),
+.teacher-list-table td:nth-child(1) {
+  width: 14%;
+  text-align: left;
+}
+
+.teacher-list-table th:nth-child(2),
+.teacher-list-table td:nth-child(2) {
+  width: 10%;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(3),
+.teacher-list-table td:nth-child(3) {
+  width: 13%;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(4),
+.teacher-list-table td:nth-child(4) {
+  width: 11%;
+  text-align: left;
+}
+
+.teacher-list-table th:nth-child(5),
+.teacher-list-table td:nth-child(5) {
+  width: 8%;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(6),
+.teacher-list-table td:nth-child(6) {
+  width: 7%;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(7),
+.teacher-list-table td:nth-child(7) {
+  width: 10%;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(8),
+.teacher-list-table td:nth-child(8) {
+  width: 7%;
+  text-align: center;
+}
+
+.teacher-list-table th:nth-child(9),
+.teacher-list-table td:nth-child(9) {
+  width: 20%;
+  text-align: center;
+}
+
+.teacher-phone-cell,
+.teacher-email-cell {
+  overflow: hidden;
+  color: #64748b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teacher-list-table td:nth-child(8)
+  .teacher-status-cell {
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.teacher-list-table td:nth-child(9)
+  .teacher-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .teacher-status-filter-bar
+    + .payment-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .teacher-list-table {
+    min-width: 1120px;
+    table-layout: auto;
+  }
+
+  .teacher-list-table th:nth-child(n),
+  .teacher-list-table td:nth-child(n) {
+    width: auto;
+  }
+
+  .teacher-list-table th,
+  .teacher-list-table td {
+    white-space: nowrap;
+  }
+}
+
+/* =========================================================
+   ÖĞRETMEN FORMU SELECT OKLARI
+   Cinsiyet ve aylık ödeme günü alanlarında oku görünür tutar
+   ve sağ kenardan biraz sola taşır.
+   ========================================================= */
+
+.teacher-form-card .form-group select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+
+  padding-right: 48px !important;
+
+  background-color: #f8fafc !important;
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent 50%,
+      #334155 50%
+    ),
+    linear-gradient(
+      135deg,
+      #334155 50%,
+      transparent 50%
+    ) !important;
+  background-repeat: no-repeat !important;
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 15px) 50% !important;
+  background-size:
+    5px 5px,
+    5px 5px !important;
+}
+
+/* Öğretmen formu select okları */
+
+.teacher-form-card .form-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  padding-right: 46px;
+
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23334155' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 18px center !important;
+  background-size: 14px 14px !important;
+}
+
+/* =========================================================
+   ÖĞRETMEN EXCEL / PDF DOSYA OLUŞTURMA DURUMLARI
+   Mevcut form, CV alanı ve tablo tasarımı korunur.
+   ========================================================= */
+
+.teacher-page-actions button:disabled,
+.teacher-pdf-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.teacher-pdf-button:disabled {
+  min-width: 96px;
+}

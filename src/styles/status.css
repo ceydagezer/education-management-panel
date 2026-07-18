@@ -1,0 +1,1840 @@
+/* STATUS PAGE */
+
+/* FİLTRE ALANI */
+
+.status-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr) minmax(220px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 20px 24px;
+  border-top: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.status-filter-grid .form-group {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.status-filter-grid label {
+  color: #1e3858;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.status-filter-grid select,
+.student-search-control input {
+  width: 100%;
+  height: 52px;
+  color: #06172f;
+  font-family: inherit;
+  font-size: 15px;
+  background-color: #f8fafc;
+  border: 1px solid #d9e2ef;
+  border-radius: 14px;
+  outline: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.status-filter-grid select {
+  padding: 0 44px 0 16px;
+}
+
+.status-filter-grid select:focus,
+.student-search-control input:focus {
+  background: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
+}
+
+.status-filter-grid .cancel-button {
+  height: 52px;
+  padding: 0 20px;
+  white-space: nowrap;
+}
+
+.student-filter-group {
+  z-index: 70;
+}
+
+.student-search-control {
+  position: relative;
+}
+
+.student-search-control input {
+  padding: 0 44px 0 44px;
+}
+
+.student-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  z-index: 2;
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  color: #718399;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.student-search-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.student-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #64748b;
+  font-size: 20px;
+  line-height: 1;
+  background: #edf2f7;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.student-search-clear:hover {
+  color: #0f172a;
+  background: #dfe7ef;
+}
+
+.student-search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  z-index: 3000;
+  max-height: 310px;
+  overflow-y: auto;
+  padding: 7px;
+  background: #ffffff;
+  border: 1px solid #dbe5f0;
+  border-radius: 14px;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.16);
+}
+
+.student-search-result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  padding: 10px;
+  color: #1e3858;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.student-search-result:hover,
+.student-search-result.selected {
+  background: #f0f9ff;
+}
+
+.student-result-avatar {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: #087f94;
+  font-size: 13px;
+  font-weight: 800;
+  background: #e1f5f8;
+  border-radius: 50%;
+}
+
+.student-result-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.student-result-content strong,
+.student-result-content small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-result-content strong {
+  color: #18334d;
+  font-size: 13px;
+}
+
+.student-result-content small {
+  color: #7a8a9b;
+  font-size: 11px;
+}
+
+.student-search-empty {
+  padding: 18px 12px;
+  color: #8493a5;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* HAFTALIK PROGRAM ÜST BUTONLAR */
+
+.status-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.makeup-add-button {
+  padding: 9px 14px;
+  color: #a16207;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #fef3c7;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.makeup-add-button:hover {
+  background: #fde68a;
+  transform: translateY(-1px);
+}
+
+/* HAFTALIK PROGRAM TABLOSU */
+
+.weekly-schedule-wrapper {
+  overflow-x: hidden;
+  overflow-y: visible;
+  padding: 18px 12px 24px;
+}
+
+.status-weekly-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.status-weekly-table,
+.status-weekly-table tbody,
+.status-weekly-table tr,
+.status-weekly-table td {
+  overflow: visible;
+}
+
+.status-weekly-table th {
+  padding: 14px 12px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.status-weekly-table th:first-child {
+  width: 72px;
+}
+
+.status-weekly-table th:not(:first-child) {
+  width: calc((100% - 72px) / 7);
+  min-width: 0;
+}
+
+.status-weekly-table td {
+  position: relative;
+  height: 58px;
+  padding: 8px;
+  vertical-align: top;
+  font-size: 14px;
+  background: #ffffff;
+  border-right: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.status-weekly-table td.status-cell-has-lessons {
+  height: auto;
+  min-height: 58px;
+  background: #fcfdff;
+}
+
+.status-weekly-table .schedule-hour {
+  width: 72px;
+  min-width: 72px;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 700;
+  background: #f8fafc !important;
+}
+
+.status-weekly-table .empty-slot {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* BİR SAATTE BİRDEN FAZLA DERS */
+
+.status-cell-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* KOMPAKT DERS KARTI */
+
+.status-lesson-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 8px 8px 10px;
+  cursor: default;
+  background: #ffffff;
+  border: 1px solid #dce7f0;
+  border-left: 4px solid #38bdf8;
+  border-radius: 10px;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.status-lesson-card:hover {
+  z-index: 20;
+  border-color: #b9d8e8;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.09);
+  transform: translateY(-1px);
+}
+
+.status-lesson-card.menu-open {
+  z-index: 999;
+}
+
+.status-card-top {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.status-card-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-teacher-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-teacher-line strong {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  color: #0f172a;
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-lesson-card .status-card-text > span {
+  display: flex;
+  overflow: hidden;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: #52657a;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-lesson-card .status-card-text > span b {
+  color: #a0aec0;
+  font-size: 8px;
+}
+
+.status-teacher-line em {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 3px 6px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  border-radius: 999px;
+}
+
+/* ÜÇ NOKTA MENÜ */
+
+.lesson-action-wrapper {
+  position: relative;
+  z-index: 1000;
+  flex-shrink: 0;
+}
+
+.lesson-menu-button {
+  display: flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #8493a5;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
+}
+
+.lesson-menu-button:hover {
+  color: #0f172a;
+  background: #eef3f7;
+  opacity: 1;
+}
+
+.lesson-action-menu {
+  position: absolute;
+  top: 23px;
+  right: 0;
+  z-index: 2000;
+  min-width: 140px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #dbe5f0;
+  border-radius: 12px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+}
+
+.lesson-action-menu button {
+  width: 100%;
+  padding: 9px 10px;
+  color: #1e3858;
+  font-size: 12.5px;
+  font-weight: 750;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.lesson-action-menu button:hover {
+  background: #f1f5f9;
+}
+
+/* DURUMLAR: YOĞUN TAKVİMDE TAM RENK BLOĞU YERİNE ŞERİT */
+
+.status-lesson-card.planned {
+  background: #fbfdff;
+  border-color: #d8e8f2;
+  border-left-color: #38bdf8;
+}
+
+.status-lesson-card.planned .status-teacher-line em {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.status-lesson-card.completed {
+  background: #fbfffc;
+  border-color: #d7eedc;
+  border-left-color: #22c55e;
+}
+
+.status-lesson-card.completed .status-teacher-line em {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-lesson-card.cancelled {
+  background: #fffdfd;
+  border-color: #f2dada;
+  border-left-color: #ef4444;
+}
+
+.status-lesson-card.cancelled .status-teacher-line em {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-lesson-card.makeup-waiting {
+  background: #fffef8;
+  border-color: #f1e4ba;
+  border-left-color: #eab308;
+}
+
+.status-lesson-card.makeup-waiting .status-teacher-line em {
+  color: #854d0e;
+  background: #fef3c7;
+}
+
+.status-lesson-card.makeup-completed {
+  background: #fbfffd;
+  border-color: #d3eee1;
+  border-left-color: #10b981;
+}
+
+.status-lesson-card.makeup-completed .status-teacher-line em {
+  color: #047857;
+  background: #d1fae5;
+}
+
+/* TELAFİ KALDIRMA */
+
+.makeup-delete-button {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  z-index: 5;
+  display: flex;
+  width: 17px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  background: #ffffff;
+  border: 1px solid #f1d38b;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.status-lesson-card:hover .makeup-delete-button {
+  opacity: 1;
+}
+
+.makeup-delete-button:hover {
+  color: #9a3412;
+  background: #fff7ed;
+}
+
+.status-lesson-card.makeup-card {
+  padding-left: 12px;
+}
+
+/* FAZLA DERSLER */
+
+.status-more-button {
+  width: 100%;
+  padding: 6px 8px;
+  color: #52657a;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.status-more-button:hover {
+  color: #0369a1;
+  background: #eef9ff;
+  border-color: #7dd3fc;
+}
+
+/* TELAFİ FORMU */
+
+.slide-down-panel {
+  overflow: hidden;
+  padding: 0;
+  animation: slideDownPanel 0.28s ease;
+}
+
+.slide-down-panel .section-title-row {
+  align-items: flex-start;
+  padding: 22px 26px 8px;
+}
+
+.slide-down-panel .section-title-row h2 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.slide-down-panel .section-title-row p {
+  margin: 0;
+  color: #53657d;
+  font-size: 15px;
+}
+
+@keyframes slideDownPanel {
+  from {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.makeup-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+  padding: 18px 26px 0;
+}
+
+.makeup-form-grid .form-group {
+  margin: 0;
+}
+
+.makeup-form-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.makeup-form-grid label {
+  color: #1e3858;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.makeup-form-grid select,
+.makeup-form-grid input {
+  height: 52px;
+  font-size: 15px;
+}
+
+.makeup-form-grid textarea {
+  min-height: 84px;
+  font-size: 15px;
+}
+
+.slide-down-panel .form-actions {
+  margin: 0;
+  padding: 14px 26px 22px;
+}
+
+/* SEÇİLEN PAKET BİLGİ KUTUSU */
+
+.selected-package-card {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #dbe5f0;
+  border-radius: 16px;
+}
+
+.selected-package-card span {
+  display: block;
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.selected-package-card h3 {
+  margin: 0 0 10px;
+  color: #06172f;
+  font-size: 17px;
+}
+
+.selected-package-card.empty {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  color: #64748b;
+}
+
+.selected-package-card.empty span {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.selected-package-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 18px;
+}
+
+.selected-package-grid p {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+}
+
+/* DERS DURUM LİSTESİ ETİKETLERİ */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+
+.status-pill.planned {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.status-pill.completed {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-pill.cancelled {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-pill.makeup-waiting {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.status-pill.makeup-completed {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.makeup-label {
+  display: inline-block;
+  margin-left: 6px;
+  color: #a16207;
+  font-weight: 700;
+}
+
+/* ALT DERS DURUM LİSTESİ HİZALAMA */
+
+.status-detail-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.status-detail-table th,
+.status-detail-table td {
+  box-sizing: border-box;
+  padding: 16px 20px;
+  vertical-align: middle;
+}
+
+.status-detail-table th {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-detail-table td {
+  color: #53657d;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.status-detail-table th:nth-child(1),
+.status-detail-table td:nth-child(1) {
+  width: 12%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(2),
+.status-detail-table td:nth-child(2) {
+  width: 9%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(3),
+.status-detail-table td:nth-child(3) {
+  width: 15%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(4),
+.status-detail-table td:nth-child(4) {
+  width: 15%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(5),
+.status-detail-table td:nth-child(5) {
+  width: 25%;
+  padding-left: 28px;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(6),
+.status-detail-table td:nth-child(6) {
+  width: 14%;
+  text-align: center;
+}
+
+.status-detail-table th:nth-child(7),
+.status-detail-table td:nth-child(7) {
+  width: 10%;
+  text-align: center;
+}
+
+.status-detail-table td:nth-child(5) {
+  overflow-wrap: anywhere;
+}
+
+.status-detail-table td:nth-child(6) .status-pill {
+  margin: 0 auto;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 1100px) {
+  .status-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .makeup-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .weekly-schedule-wrapper {
+    overflow-x: auto;
+  }
+
+  .status-weekly-table {
+    min-width: 1150px;
+    table-layout: auto;
+  }
+
+  .status-weekly-table th:not(:first-child) {
+    width: auto;
+    min-width: 145px;
+  }
+
+  .status-lesson-card .status-card-text > span {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 700px) {
+  .status-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-table-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .status-detail-table {
+    min-width: 860px;
+  }
+}
+
+
+/* =========================================================
+   HAFTALIK PROGRAM SON GÖRÜNÜM AYARLARI
+   ========================================================= */
+
+.status-weekly-table td {
+  height: 64px;
+  padding: 8px;
+}
+
+.status-cell-stack {
+  gap: 7px;
+}
+
+.status-lesson-card {
+  padding: 9px 8px 9px 10px;
+  border-radius: 11px;
+}
+
+.status-card-text {
+  gap: 4px;
+}
+
+.status-teacher-line strong {
+  font-size: 12.5px;
+}
+
+.status-lesson-card .status-card-text > span {
+  display: block;
+  overflow: hidden;
+  color: #52657a;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-lesson-card .status-card-text > span b {
+  margin: 0 4px;
+  color: #a0aec0;
+  font-size: 8px;
+}
+
+.status-lesson-card .status-card-text > em {
+  align-self: flex-start;
+  width: fit-content;
+  margin: 1px 0 0;
+  padding: 3px 7px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  border-radius: 999px;
+}
+
+.status-lesson-card.completed .status-card-text > em {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-lesson-card.cancelled .status-card-text > em {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-lesson-card.makeup-waiting .status-card-text > em {
+  color: #854d0e;
+  background: #fef3c7;
+}
+
+.status-lesson-card.makeup-completed .status-card-text > em {
+  color: #047857;
+  background: #d1fae5;
+}
+
+/* =========================================================
+   DERS DURUM LİSTESİ - PROFESYONEL TABLO
+   ========================================================= */
+
+.status-detail-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.status-detail-table th,
+.status-detail-table td {
+  box-sizing: border-box;
+  padding: 15px 18px;
+  vertical-align: middle;
+}
+
+.status-detail-table th {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-detail-table td {
+  color: #53657d;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.status-detail-table tbody tr {
+  transition: background 0.16s ease;
+}
+
+.status-detail-table tbody tr:nth-child(even) {
+  background: #fbfdff;
+}
+
+.status-detail-table tbody tr:hover {
+  background: #f4f9fd;
+}
+
+.status-detail-table th:nth-child(1),
+.status-detail-table td:nth-child(1) {
+  width: 11%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(2),
+.status-detail-table td:nth-child(2) {
+  width: 8%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(3),
+.status-detail-table td:nth-child(3) {
+  width: 15%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(4),
+.status-detail-table td:nth-child(4) {
+  width: 15%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(5),
+.status-detail-table td:nth-child(5) {
+  width: 25%;
+  padding-left: 26px;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(6),
+.status-detail-table td:nth-child(6) {
+  width: 16%;
+  text-align: center;
+}
+
+.status-detail-table th:nth-child(7),
+.status-detail-table td:nth-child(7) {
+  width: 10%;
+  text-align: center;
+}
+
+.status-day-text {
+  color: #405874;
+  font-weight: 700;
+}
+
+.status-time-text {
+  color: #17324c;
+  font-size: 13px;
+}
+
+.status-person-text {
+  display: block;
+  overflow: hidden;
+  color: #405874;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-lesson-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.status-lesson-detail strong,
+.status-lesson-detail small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-lesson-detail strong {
+  color: #17324c;
+  font-size: 13px;
+}
+
+.status-lesson-detail small {
+  color: #8190a1;
+  font-size: 11px;
+}
+
+.status-detail-table td:nth-child(6) .status-pill {
+  margin: 0 auto;
+}
+
+.status-note-cell span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.status-note-cell.has-note {
+  color: #53657d;
+  text-align: left !important;
+}
+
+.status-note-cell.empty-note {
+  color: #a1adba;
+  text-align: center !important;
+}
+
+@media (max-width: 1180px) {
+  .status-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .status-filter-grid .cancel-button {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   SON DOKUNUŞLAR
+   Filtre select okları + Ders Durum Listesi premium görünüm
+   ========================================================= */
+
+/* Select oklarını sağ kenardan biraz sola al */
+.status-filter-grid select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 48px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%23384d66' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 18px center;
+  background-size: 15px;
+}
+
+.status-filter-grid select:hover {
+  background-color: #ffffff;
+  border-color: #c6d5e4;
+}
+
+/* Ders durum listesi kartı */
+.lesson-table-card:has(.status-detail-table) {
+  overflow: hidden;
+  border-color: #e2eaf3;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
+}
+
+.lesson-table-card:has(.status-detail-table) .table-head {
+  padding: 20px 26px;
+  background: #ffffff;
+}
+
+.lesson-table-card:has(.status-detail-table) .table-head h2 {
+  margin-bottom: 5px;
+  color: #10243a;
+  font-size: 20px;
+  letter-spacing: -0.015em;
+}
+
+.lesson-table-card:has(.status-detail-table) .table-head p {
+  color: #718399;
+  font-size: 13px;
+}
+
+.lesson-table-card:has(.status-detail-table) .lesson-count {
+  min-width: 72px;
+  padding: 9px 14px;
+  color: #4d7c0f;
+  background: #ecfccb;
+  border-radius: 12px;
+}
+
+/* Tablo kabı */
+.lesson-table-card:has(.status-detail-table)
+  .payment-table-wrapper {
+  overflow-x: auto;
+  border-top: 1px solid #e8eef5;
+}
+
+/* Ana tablo */
+.status-detail-table {
+  width: 100%;
+  min-width: 980px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Başlık satırı */
+.status-detail-table thead th {
+  height: 50px;
+  padding: 0 20px;
+  color: #40546b;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  background: #f7f9fc;
+  border-bottom: 1px solid #dfe8f1;
+}
+
+/* Veri hücreleri */
+.status-detail-table tbody td {
+  height: 76px;
+  padding: 15px 20px;
+  color: #52667d;
+  font-size: 13px;
+  line-height: 1.45;
+  vertical-align: middle;
+  background: #ffffff;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.status-detail-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.status-detail-table tbody tr:nth-child(even) td {
+  background: #fbfcfe;
+}
+
+.status-detail-table tbody tr {
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.status-detail-table tbody tr:hover td {
+  background: #f5faff;
+}
+
+.status-detail-table tbody tr:hover {
+  box-shadow: inset 3px 0 0 #38bdf8;
+}
+
+/* Sütun genişlikleri ve hizaları */
+.status-detail-table th:nth-child(1),
+.status-detail-table td:nth-child(1) {
+  width: 11%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(2),
+.status-detail-table td:nth-child(2) {
+  width: 8%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(3),
+.status-detail-table td:nth-child(3) {
+  width: 15%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(4),
+.status-detail-table td:nth-child(4) {
+  width: 15%;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(5),
+.status-detail-table td:nth-child(5) {
+  width: 25%;
+  padding-left: 28px;
+  text-align: left;
+}
+
+.status-detail-table th:nth-child(6),
+.status-detail-table td:nth-child(6) {
+  width: 16%;
+  text-align: center;
+}
+
+.status-detail-table th:nth-child(7),
+.status-detail-table td:nth-child(7) {
+  width: 10%;
+  text-align: center;
+}
+
+/* Gün */
+.status-day-text {
+  display: inline-flex;
+  min-width: 78px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  color: #38516b;
+  font-size: 12px;
+  font-weight: 800;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+}
+
+/* Saat */
+.status-time-text {
+  color: #15324d;
+  font-size: 13px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Öğretmen ve öğrenci */
+.status-person-text {
+  display: block;
+  overflow: hidden;
+  color: #3f5872;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ders bilgisi */
+.status-lesson-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-lesson-detail strong,
+.status-lesson-detail small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-lesson-detail strong {
+  color: #102f4a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.status-lesson-detail small {
+  color: #8190a2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+/* Durum rozeti */
+.status-detail-table td:nth-child(6) .status-pill {
+  min-width: 106px;
+  margin: 0 auto;
+  padding: 7px 12px;
+  font-size: 11.5px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.035);
+}
+
+/* Not */
+.status-note-cell {
+  color: #52667d;
+}
+
+.status-note-cell span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.status-note-cell.empty-note span {
+  color: #a6b2bf;
+  font-size: 16px;
+}
+
+.status-note-cell.has-note {
+  text-align: left !important;
+}
+
+/* Boş tablo */
+.status-detail-table .empty-table {
+  height: 120px;
+  color: #8b9aac !important;
+  font-size: 13px;
+  text-align: center !important;
+}
+
+/* Orta ekran */
+@media (max-width: 1180px) {
+  .status-detail-table {
+    min-width: 980px;
+  }
+}
+
+/* Mobil */
+@media (max-width: 700px) {
+  .lesson-table-card:has(.status-detail-table) .table-head {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .status-detail-table {
+    min-width: 920px;
+  }
+}
+
+/* =========================================================
+   DERS DURUM LİSTESİ - KESİN SÜTUN HİZASI
+   Önceki sütun genişliği kurallarını geçersiz kılar.
+   ========================================================= */
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table {
+  width: 100% !important;
+  min-width: 980px;
+  table-layout: fixed !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th,
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td {
+  box-sizing: border-box;
+  padding-left: 22px !important;
+  padding-right: 22px !important;
+  vertical-align: middle;
+}
+
+/*
+  Dengeli dağılım:
+  Gün %12 | Saat %10 | Öğretmen %18 | Öğrenci %18
+  Ders %20 | Durum %15 | Not %7
+*/
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(1),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(1) {
+  width: 12% !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(2),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(2) {
+  width: 10% !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(3),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(3) {
+  width: 18% !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(4),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(4) {
+  width: 18% !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(5),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(5) {
+  width: 20% !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(6),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(6) {
+  width: 15% !important;
+  text-align: center !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(7),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(7) {
+  width: 7% !important;
+  text-align: center !important;
+}
+
+/* Öğretmen, öğrenci ve ders aynı başlangıç çizgisi mantığında */
+.lesson-table-card:has(.status-detail-table)
+  .status-person-text {
+  width: 100%;
+  text-align: left;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-lesson-detail {
+  width: 100%;
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-lesson-detail strong,
+.lesson-table-card:has(.status-detail-table)
+  .status-lesson-detail small {
+  width: 100%;
+  text-align: left !important;
+}
+
+/* Durum ve not tam merkezde */
+.lesson-table-card:has(.status-detail-table)
+  td:nth-child(6)
+  .status-pill {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell {
+  text-align: center !important;
+}
+
+/* Başlık ve içerik aynı padding ile tam hizalı */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table thead th {
+  padding-left: 22px !important;
+  padding-right: 22px !important;
+}
+
+@media (max-width: 1100px) {
+  .lesson-table-card:has(.status-detail-table)
+    .status-detail-table {
+    min-width: 1040px;
+  }
+}
+
+/* =========================================================
+   DERS DURUM LİSTESİ - NOT SÜTUNU DÜZELTMESİ
+   Not alanına gerçek kullanım alanı açar.
+   ========================================================= */
+
+/*
+  Yeni dengeli dağılım:
+  Gün %11 | Saat %8 | Öğretmen %16 | Öğrenci %16
+  Ders %20 | Durum %14 | Not %15
+*/
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(1),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(1) {
+  width: 11% !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(2),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(2) {
+  width: 8% !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(3),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(3) {
+  width: 16% !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(4),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(4) {
+  width: 16% !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(5),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(5) {
+  width: 20% !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(6),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(6) {
+  width: 14% !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(7),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(7) {
+  width: 15% !important;
+}
+
+/* Not başlığı ortalı, gerçek not metni okunabilir */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table th:nth-child(7) {
+  padding-right: 18px !important;
+  padding-left: 18px !important;
+  text-align: center !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(7) {
+  padding-right: 18px !important;
+  padding-left: 18px !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell.has-note {
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell.has-note span {
+  display: -webkit-box;
+  overflow: hidden;
+  width: 100%;
+  color: #52667d;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell.empty-note {
+  text-align: center !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell.empty-note span {
+  display: block;
+  color: #a6b2bf;
+  text-align: center;
+}
+
+/* Uzun notun tamamının üzerine gelince görülebileceğini hissettir */
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell.has-note {
+  cursor: help;
+}
+
+/* =========================================================
+   DERS DURUM LİSTESİ - BAŞLIK MERKEZLEME VE SON HİZA
+   ========================================================= */
+
+/* Tüm başlıklar kendi sütunlarının tam merkezinde */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table thead th {
+  text-align: center !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+}
+
+/* Gün ve saat hücreleri */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(1),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(2) {
+  text-align: left !important;
+}
+
+/* Öğretmen, öğrenci ve ders bilgilerini hafif sağa al */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(3),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(4),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(5) {
+  padding-left: 32px !important;
+  padding-right: 16px !important;
+  text-align: left !important;
+}
+
+/* Öğretmen ve öğrenci metinleri aynı başlangıç çizgisinde */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(3)
+  .status-person-text,
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(4)
+  .status-person-text {
+  width: 100%;
+  text-align: left !important;
+}
+
+/* Ders bilgisi de aynı mantıkta */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(5)
+  .status-lesson-detail {
+  width: 100%;
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(5)
+  .status-lesson-detail strong,
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(5)
+  .status-lesson-detail small {
+  width: 100%;
+  text-align: left !important;
+}
+
+/* Durum ve not başlık/hücre merkezi */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(6),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table td:nth-child(7) {
+  text-align: center !important;
+}
+
+/* Gerçek not varsa metin okunabilir şekilde sola hizalı kalsın */
+.lesson-table-card:has(.status-detail-table)
+  .status-note-cell.has-note {
+  text-align: left !important;
+}
+
+/* =========================================================
+   DERS DURUM LİSTESİ - İLK 5 SÜTUN TAM MERKEZ HİZASI
+   Önceki sola hizalama kurallarını kesin olarak geçersiz kılar.
+   ========================================================= */
+
+/* Gün, Saat, Öğretmen, Öğrenci ve Ders başlıkları */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table thead th:nth-child(-n + 5) {
+  text-align: center !important;
+}
+
+/* İlk beş veri hücresi */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(-n + 5) {
+  text-align: center !important;
+}
+
+/* Gün etiketi hücrenin ortasında */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(1)
+  .status-day-text {
+  display: inline-flex;
+  margin-right: auto !important;
+  margin-left: auto !important;
+}
+
+/* Saat */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(2)
+  .status-time-text {
+  display: block;
+  width: 100%;
+  text-align: center !important;
+}
+
+/* Öğretmen ve öğrenci */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(3)
+  .status-person-text,
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(4)
+  .status-person-text {
+  display: block;
+  width: 100%;
+  text-align: center !important;
+}
+
+/* Ders adı ve paket bilgisi */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(5)
+  .status-lesson-detail {
+  display: flex;
+  width: 100%;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(5)
+  .status-lesson-detail strong,
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(5)
+  .status-lesson-detail small {
+  width: 100%;
+  text-align: center !important;
+}
+
+/* Önceki 32px sola dayalı hücre padding'ini dengeli hale getir */
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(3),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(4),
+.lesson-table-card:has(.status-detail-table)
+  .status-detail-table tbody td:nth-child(5) {
+  padding-right: 18px !important;
+  padding-left: 18px !important;
+}
+
+/* =========================================================
+   ÖĞRENCİ ARAMA SONUÇLARININ KARTIN ALTINDA KALMASINI ÖNLER
+   ========================================================= */
+
+.status-filter-card {
+  position: relative;
+  z-index: 500;
+  overflow: visible !important;
+}
+
+.status-filter-card .status-filter-grid {
+  position: relative;
+  z-index: 510;
+  overflow: visible !important;
+}
+
+.status-filter-card .student-filter-group {
+  position: relative;
+  z-index: 520;
+}
+
+.status-filter-card .student-search-control {
+  position: relative;
+  z-index: 521;
+}
+
+.status-filter-card .student-search-results {
+  z-index: 9999;
+}
+
+/*
+ * Filtre kartından sonra gelen telafi formu ve haftalık program
+ * kartlarının arama önerilerinin üzerine çıkmasını engeller.
+ */
+.status-filter-card ~ .lesson-table-card {
+  position: relative;
+  z-index: 1;
+}

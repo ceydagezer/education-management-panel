@@ -1,0 +1,532 @@
+/* PAYMENTS PAGE */
+
+/* ÜST ÖZET KARTLARI */
+
+.payment-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.payment-metric-card {
+  min-height: 105px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #e7edf5;
+  border-top: 4px solid transparent;
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.payment-metric-card span {
+  display: block;
+  margin-bottom: 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.payment-metric-card h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 26px;
+}
+
+.payment-metric-card.blue {
+  border-top-color: #0ea5e9;
+}
+
+.payment-metric-card.green {
+  border-top-color: #22c55e;
+}
+
+.payment-metric-card.red {
+  border-top-color: #ef4444;
+}
+
+.payment-metric-card.gray {
+  border-top-color: #94a3b8;
+}
+
+.payment-metric-card.green h3 {
+  color: #16a34a;
+}
+
+.payment-metric-card.red h3 {
+  color: #dc2626;
+}
+
+/* YENİ TAHSİLAT FORMU */
+
+.payment-form-card {
+  margin-bottom: 22px;
+  padding: 26px;
+  background: #ffffff;
+  border: 1px solid #e7edf5;
+  border-radius: 20px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.payment-form-heading {
+  margin-bottom: 20px;
+}
+
+.payment-form-heading h2 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 21px;
+}
+
+.payment-form-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* SEÇİLEN ÖĞRENCİ PAKETİ */
+
+.selected-payment-package {
+  margin-top: 20px;
+  padding: 20px;
+  background: linear-gradient(
+    135deg,
+    #f8fafc,
+    #ecfeff
+  );
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+}
+
+.selected-package-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.selected-package-heading > div > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.selected-package-heading h3 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.selected-package-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.selected-package-finance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.selected-package-finance-item {
+  min-width: 0;
+  padding: 15px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+}
+
+.selected-package-finance-item small {
+  display: block;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.selected-package-finance-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.selected-package-finance-item.remaining strong {
+  color: #dc2626;
+}
+
+/* TAHSİLAT GİRİŞ ALANLARI */
+
+.payment-entry-grid {
+  margin-top: 22px;
+}
+
+.payment-field-help {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* FORM BUTONU */
+
+.payment-form-actions {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.payment-form-actions::before,
+.payment-form-actions::after {
+  display: none;
+  content: none;
+}
+
+.payment-form-actions .save-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* FİLTRE VE LİSTEYİ İÇEREN TEK KART */
+
+.payment-list-card {
+  overflow: hidden;
+}
+
+/* Kartın üst filtre bölümü */
+
+.payment-list-top {
+  padding: 24px;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.payment-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.payment-filter-header h2 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 21px;
+}
+
+.payment-filter-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.payment-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 2fr)
+    repeat(4, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+/* Tablo başlığı ve sıralama alanı */
+
+.payment-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.payment-list-head h3 {
+  margin: 0 0 5px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.payment-list-head p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.payment-list-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.payment-sort-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-sort-box label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.payment-sort-box select {
+  width: 190px;
+  padding: 10px 38px 10px 12px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.payment-sort-box select:focus {
+  outline: none;
+  background-color: #ffffff;
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
+}
+
+/* TABLO */
+
+.payment-table-wrapper {
+  max-height: 500px;
+  overflow: auto;
+}
+
+.payment-table {
+  min-width: 1250px;
+}
+
+.payment-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+}
+
+/* DURUM ETİKETLERİ */
+
+.payment-status {
+  display: inline-block;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.payment-status.paid {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.payment-status.partial {
+  color: #ca8a04;
+  background: #fef3c7;
+}
+
+.payment-status.pending {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+/* TABLO İŞLEM BUTONLARI */
+
+.payment-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-mini-button,
+.save-mini-button,
+.cancel-mini-button {
+  padding: 9px 11px;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.edit-mini-button {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.edit-mini-button:hover {
+  background: #bae6fd;
+}
+
+.save-mini-button {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.save-mini-button:hover {
+  background: #bbf7d0;
+}
+
+.cancel-mini-button {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.cancel-mini-button:hover {
+  background: #e2e8f0;
+}
+
+/* TABLO İÇİ DÜZENLEME ALANLARI */
+
+.table-edit-input {
+  width: 135px;
+  padding: 9px 10px;
+  color: #334155;
+  font-size: 13px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.table-edit-input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 1200px) {
+  .payment-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .payment-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .selected-package-finance-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .payment-list-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .payment-list-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .selected-package-heading {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  .payment-metric-grid,
+  .payment-filter-grid,
+  .selected-package-finance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-filter-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .payment-list-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .payment-sort-box {
+    width: 100%;
+  }
+
+  .payment-sort-box select {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   AYLIK TAHSİLAT TARİHİ VE 3 GÜNLÜK TOLERANS EK STİLLERİ
+   ========================================================= */
+
+.payment-status.pending {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.payment-status.partial {
+  color: #a16207;
+  background: #fef3c7;
+}
+
+.payment-status.upcoming {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.payment-status.today {
+  color: #c2410c;
+  background: #ffedd5;
+}
+
+.payment-status.grace {
+  color: #a16207;
+  background: #fef3c7;
+  box-shadow: inset 0 0 0 1px #fde68a;
+}
+
+.payment-status.overdue {
+  color: #dc2626;
+  background: #fee2e2;
+  box-shadow: inset 0 0 0 1px #fecaca;
+}
+
+.payment-due-detail {
+  display: block;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.payment-status-detail {
+  display: block;
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.payment-table td {
+  vertical-align: middle;
+}
+
+@media (max-width: 700px) {
+  .payment-status-detail {
+    white-space: normal;
+  }
+}
