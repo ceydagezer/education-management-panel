@@ -1039,3 +1039,71 @@
     min-width: 920px;
   }
 }
+/* =========================================================
+   ÖĞRENCİ ARAMA SONUÇLARININ DİĞER KARTLARIN ALTINDA
+   KALMASINI ENGELLE
+   ========================================================= */
+
+.schedule-filter-card {
+  position: relative;
+  z-index: 100;
+  overflow: visible !important;
+}
+
+.schedule-filter-grid {
+  position: relative;
+  overflow: visible !important;
+}
+
+.schedule-student-filter-group {
+  position: relative;
+  z-index: 110;
+  overflow: visible;
+}
+
+.schedule-student-search-control {
+  position: relative;
+  z-index: 111;
+}
+
+.schedule-student-search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+
+  z-index: 9999;
+
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  background: #ffffff;
+  border: 1px solid #dce5f0;
+  border-radius: 16px;
+
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.12),
+    0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* Arama sonuçlarının üstüne çıkmaması gereken bölümler */
+
+.schedule-weekly-card,
+.schedule-list-card,
+.schedule-layout {
+  position: relative;
+  z-index: 1;
+}
+/* =========================================================
+   ÖĞRENCİ ARAMA SONUCUNDA TELEFON NUMARASINI GİZLE
+   Arama, JSX içindeki telefon alanlarıyla çalışmaya devam eder.
+   Bu kural yalnızca sonuç kartındaki alt bilgi satırını gizler.
+   ========================================================= */
+.schedule-student-result-content small {
+  display: none !important;
+}
+
+.schedule-student-result-content {
+  gap: 0;
+}
