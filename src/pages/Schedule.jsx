@@ -144,7 +144,10 @@ function Schedule({
 
   const normalizedStudentSearch = normalizeSearchText(studentSearch)
 
-  const studentSuggestions = activeStudents
+  // Yeni ders eklerken yalnızca aktif öğrenciler kullanılır.
+  // Ancak program filtresinde geçmiş/arsivli öğrencilerin dersleri de
+  // aranabilsin diye öneriler tüm öğrenci kayıtlarından oluşturulur.
+  const studentSuggestions = students
     .filter((student) => {
       if (!normalizedStudentSearch) return false
       return getStudentSearchValue(student).includes(normalizedStudentSearch)
