@@ -175,3 +175,29 @@
     font-size: 15px;
   }
 }
+
+.specialty-inline-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.specialty-inline-row > input {
+  min-width: 0;
+  flex: 1;
+}
+
+.specialty-add-button {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .specialty-inline-row {
+    flex-direction: column;
+  }
+
+  .specialty-add-button {
+    width: 100%;
+  }
+}

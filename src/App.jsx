@@ -8,9 +8,19 @@ import './App.css'
 
 import { supabase } from './lib/supabase'
 
+import {
+  getPackages,
+  getSpecialties
+} from './services/catalogService'
+
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
+
+import {
+  ErrorState,
+  LoadingState
+} from './components/AsyncState'
 
 import Students from './pages/Students'
 import Schedule from './pages/Schedule'
@@ -30,6 +40,14 @@ function App() {
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState('')
+
+  const [dataLoading, setDataLoading] =
+    useState(false)
+  const [dataError, setDataError] =
+    useState('')
+  const [catalogReloadKey, setCatalogReloadKey] =
+    useState(0)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -81,6 +99,79 @@ function App() {
   const [expenses, setExpenses] = useState([])
   const [teacherPayments, setTeacherPayments] =
     useState([])
+
+  const clearAppData = () => {
+    setSpecialties([])
+    setPackages([])
+    setTeachers([])
+    setStudents([])
+    setLessonPlans([])
+    setPayments([])
+    setOtherIncomes([])
+    setExpenses([])
+    setTeacherPayments([])
+    setDataError('')
+    setDataLoading(false)
+  }
+
+  useEffect(() => {
+    if (!session) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadCatalogData = async () => {
+      setDataLoading(true)
+      setDataError('')
+
+      try {
+        const [
+          specialtiesResult,
+          packagesResult
+        ] = await Promise.all([
+          getSpecialties(),
+          getPackages()
+        ])
+
+        if (!isMounted) {
+          return
+        }
+
+        setSpecialties(specialtiesResult)
+        setPackages(packagesResult)
+      } catch (error) {
+        console.error(
+          'Branş ve paket verileri yüklenemedi:',
+          error
+        )
+
+        if (isMounted) {
+          setDataError(
+            error instanceof Error
+              ? error.message
+              : 'Branş ve paket verileri yüklenemedi.'
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setDataLoading(false)
+        }
+      }
+    }
+
+    loadCatalogData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [session, catalogReloadKey])
+
+  const retryCatalogLoad = () => {
+    setCatalogReloadKey(
+      (current) => current + 1
+    )
+  }
 
   /*
    * =========================================================
@@ -317,8 +408,10 @@ function App() {
 
     const cleanEmail = email.trim()
 
+    setLoginError('')
+
     if (!cleanEmail || !password) {
-      alert(
+      setLoginError(
         'Lütfen e-posta ve şifre alanlarını doldurunuz.'
       )
       return
@@ -338,9 +431,9 @@ function App() {
           error.message ===
           'Invalid login credentials'
         ) {
-          alert('E-posta veya şifre hatalı.')
+          setLoginError('E-posta veya şifre hatalı.')
         } else {
-          alert(
+          setLoginError(
             `Giriş yapılamadı: ${error.message}`
           )
         }
@@ -349,13 +442,14 @@ function App() {
       }
 
       setPassword('')
+      setLoginError('')
     } catch (error) {
       console.error(
         'Giriş sırasında beklenmeyen hata:',
         error
       )
 
-      alert(
+      setLoginError(
         'Giriş sırasında beklenmeyen bir hata oluştu.'
       )
     } finally {
@@ -398,11 +492,13 @@ function App() {
       }
 
       clearAllUnsavedSources()
+      clearAppData()
 
       setSession(null)
       setActivePage('dashboard')
       setEmail('')
       setPassword('')
+      setLoginError('')
     } catch (error) {
       console.error(
         'Çıkış sırasında beklenmeyen hata:',
@@ -428,9 +524,7 @@ function App() {
   if (authLoading) {
     return (
       <div className="app-loading-screen">
-        <div className="app-loading-spinner" />
-
-        <p>Oturum kontrol ediliyor...</p>
+        <LoadingState text="Oturum kontrol ediliyor..." />
       </div>
     )
   }
@@ -450,7 +544,28 @@ function App() {
         setPassword={setPassword}
         handleLogin={handleLogin}
         loginLoading={loginLoading}
+        loginError={loginError}
       />
+    )
+  }
+
+  if (dataLoading) {
+    return (
+      <div className="app-loading-screen">
+        <LoadingState text="Branşlar ve paketler yükleniyor..." />
+      </div>
+    )
+  }
+
+  if (dataError) {
+    return (
+      <div className="app-loading-screen">
+        <ErrorState
+          title="Panel verileri yüklenemedi"
+          message={dataError}
+          onRetry={retryCatalogLoad}
+        />
+      </div>
     )
   }
 
