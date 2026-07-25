@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
+
 import './App.css'
+
+import { supabase } from './lib/supabase'
 
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
@@ -14,21 +21,34 @@ import Finance from './pages/Finance'
 import LessonStatusTracking from './pages/LessonStatusTracking'
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  /*
+   * =========================================================
+   * SUPABASE AUTH
+   * =========================================================
+   */
+
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [loginLoading, setLoginLoading] = useState(false)
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [activePage, setActivePage] = useState('dashboard')
+
+  const [activePage, setActivePage] =
+    useState('dashboard')
 
   /*
-   * KAYDEDİLMEMİŞ DEĞİŞİKLİKLER - GLOBAL ALTYAPI
-   *
-   * Tek bir boolean yerine kaynak bazlı kayıt tutulur.
-   * Böylece bir ekran temizlenirken başka bir ekranın
-   * kaydedilmemiş değişiklik bilgisi yanlışlıkla silinmez.
+   * =========================================================
+   * KAYDEDİLMEMİŞ DEĞİŞİKLİKLER
+   * =========================================================
    */
-  const [unsavedSources, setUnsavedSources] = useState({})
+
+  const [unsavedSources, setUnsavedSources] =
+    useState({})
+
   const [showUnsavedModal, setShowUnsavedModal] =
     useState(false)
+
   const [pendingAction, setPendingAction] =
     useState(null)
 
@@ -39,6 +59,95 @@ function App() {
     () => Object.values(unsavedSources),
     [unsavedSources]
   )
+
+  /*
+   * =========================================================
+   * VERİLER
+   *
+   * Örnek kayıtlar kaldırıldı.
+   * Bu state'ler sonraki adımlarda Supabase tablolarından
+   * doldurulacak.
+   * =========================================================
+   */
+
+  const [specialties, setSpecialties] = useState([])
+  const [packages, setPackages] = useState([])
+  const [teachers, setTeachers] = useState([])
+  const [students, setStudents] = useState([])
+  const [lessonPlans, setLessonPlans] = useState([])
+
+  const [payments, setPayments] = useState([])
+  const [otherIncomes, setOtherIncomes] = useState([])
+  const [expenses, setExpenses] = useState([])
+  const [teacherPayments, setTeacherPayments] =
+    useState([])
+
+  /*
+   * =========================================================
+   * SUPABASE OTURUM KONTROLÜ
+   * =========================================================
+   */
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadInitialSession = async () => {
+      try {
+        const {
+          data: { session: currentSession },
+          error
+        } = await supabase.auth.getSession()
+
+        if (error) {
+          console.error(
+            'Supabase oturumu alınamadı:',
+            error.message
+          )
+        }
+
+        if (isMounted) {
+          setSession(currentSession)
+          setAuthLoading(false)
+        }
+      } catch (error) {
+        console.error(
+          'Oturum kontrolü sırasında hata:',
+          error
+        )
+
+        if (isMounted) {
+          setSession(null)
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    loadInitialSession()
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange(
+      (_event, currentSession) => {
+        if (!isMounted) {
+          return
+        }
+
+        setSession(currentSession)
+        setAuthLoading(false)
+      }
+    )
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  /*
+   * =========================================================
+   * KAYDEDİLMEMİŞ DEĞİŞİKLİKLER API
+   * =========================================================
+   */
 
   const setUnsavedSource = (
     sourceKey,
@@ -57,8 +166,12 @@ function App() {
         return current
       }
 
-      const nextSources = { ...current }
+      const nextSources = {
+        ...current
+      }
+
       delete nextSources[sourceKey]
+
       return nextSources
     })
   }
@@ -71,282 +184,64 @@ function App() {
     setUnsavedSources({})
   }
 
+  function requestUnsavedAction(action) {
+    if (!hasUnsavedChanges) {
+      action()
+      return
+    }
+
+    setPendingAction(() => action)
+    setShowUnsavedModal(true)
+  }
+
   const createUnsavedPageApi = (
     sourceKey,
     sourceLabel
   ) => ({
     sourceKey,
     sourceLabel,
-    markDirty: () =>
+
+    markDirty: () => {
       setUnsavedSource(
         sourceKey,
         true,
         sourceLabel
-      ),
-    markClean: () =>
-      clearUnsavedSource(sourceKey),
-    requestAction: (action) =>
-      requestUnsavedAction(action),
+      )
+    },
+
+    markClean: () => {
+      clearUnsavedSource(sourceKey)
+    },
+
+    requestAction: (action) => {
+      requestUnsavedAction(action)
+    },
+
     hasUnsavedChanges:
       Boolean(unsavedSources[sourceKey])
   })
 
-  /*
-   * FİNANS VERİLERİ
-   */
+  const stayOnCurrentPage = () => {
+    setPendingAction(null)
+    setShowUnsavedModal(false)
+  }
 
-  const [payments, setPayments] = useState([])
-  const [otherIncomes, setOtherIncomes] = useState([])
-  const [expenses, setExpenses] = useState([])
-  const [teacherPayments, setTeacherPayments] = useState([])
+  const discardChangesAndContinue = () => {
+    const actionToRun = pendingAction
 
-  /*
-   * PAKETLER
-   */
+    clearAllUnsavedSources()
+    setPendingAction(null)
+    setShowUnsavedModal(false)
 
-  const [packages, setPackages] = useState([
-    {
-      id: 1,
-      name: 'Tek Bağlama Dersi',
-      instrument: 'Bağlama',
-      duration: '45 dk',
-      lessonCount: 1,
-      totalPrice: 1000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 2,
-      name: 'Aylık Bağlama Özel Ders',
-      instrument: 'Bağlama',
-      duration: '45 dk',
-      lessonCount: 4,
-      totalPrice: 4000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 3,
-      name: 'Tek Gitar Dersi',
-      instrument: 'Gitar',
-      duration: '45 dk',
-      lessonCount: 1,
-      totalPrice: 1000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 4,
-      name: 'Aylık Gitar Özel Ders',
-      instrument: 'Gitar',
-      duration: '45 dk',
-      lessonCount: 4,
-      totalPrice: 4000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 5,
-      name: 'Tek Piyano Dersi',
-      instrument: 'Piyano',
-      duration: '45 dk',
-      lessonCount: 1,
-      totalPrice: 1250,
-      unitPrice: 1250,
-      status: 'Aktif'
-    },
-    {
-      id: 6,
-      name: 'Aylık Piyano Özel Ders',
-      instrument: 'Piyano',
-      duration: '45 dk',
-      lessonCount: 4,
-      totalPrice: 5000,
-      unitPrice: 1250,
-      status: 'Aktif'
-    },
-    {
-      id: 7,
-      name: 'Tek Keman Dersi',
-      instrument: 'Keman',
-      duration: '45 dk',
-      lessonCount: 1,
-      totalPrice: 1000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 8,
-      name: 'Aylık Keman Özel Ders',
-      instrument: 'Keman',
-      duration: '45 dk',
-      lessonCount: 4,
-      totalPrice: 4000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 9,
-      name: 'Tek Yan Flüt Dersi',
-      instrument: 'Yan Flüt',
-      duration: '45 dk',
-      lessonCount: 1,
-      totalPrice: 1000,
-      unitPrice: 1000,
-      status: 'Aktif'
-    },
-    {
-      id: 10,
-      name: 'Aylık Yan Flüt Özel Ders',
-      instrument: 'Yan Flüt',
-      duration: '45 dk',
-      lessonCount: 4,
-      totalPrice: 4000,
-      unitPrice: 1000,
-      status: 'Aktif'
+    if (typeof actionToRun === 'function') {
+      actionToRun()
     }
-  ])
+  }
 
   /*
-   * BRANŞLAR
-   */
-
-  const [specialties, setSpecialties] = useState([
-    'Bağlama',
-    'Gitar',
-    'Piyano',
-    'Keman',
-    'Yan Flüt'
-  ])
-
-  /*
-   * ÖĞRETMENLER
-   */
-
-  const [teachers, setTeachers] = useState([
-    {
-      id: 1,
-      fullName: 'Meral Hoca',
-      phone: '',
-      email: '',
-      birthDate: '',
-      gender: 'Kadın',
-      branch: 'Piyano',
-      specialties: ['Piyano'],
-      commissionRate: 50,
-      isActive: true,
-      photo: '',
-      cvFileName: '',
-      notes: ''
-    },
-    {
-      id: 2,
-      fullName: 'Ali Hoca',
-      phone: '',
-      email: '',
-      birthDate: '',
-      gender: 'Erkek',
-      branch: 'Gitar',
-      specialties: ['Gitar'],
-      commissionRate: 50,
-      isActive: true,
-      photo: '',
-      cvFileName: '',
-      notes: ''
-    }
-  ])
-
-  /*
-   * ÖĞRENCİLER
-   */
-
-  const [students, setStudents] = useState([
-    {
-      id: 1,
-      tcNo: '12345678901',
-      fullName: 'Aylin Toksöz',
-      gender: 'Kadın',
-      birthDate: '2012-04-15',
-      registerDate: '2026-07-01',
-      phone: '05xx xxx xx xx',
-      email: 'aylin@example.com',
-      address: 'Çanakkale Merkez',
-
-      motherName: 'Ayşe Toksöz',
-      motherPhone: '05xx xxx xx xx',
-
-      fatherName: 'Mehmet Toksöz',
-      fatherPhone: '05xx xxx xx xx',
-
-      packageIds: [6],
-
-      enrolledPackages: [
-        {
-          studentPackageId: 'student-1-package-6',
-          packageId: 6,
-          packageName: 'Aylık Piyano Özel Ders',
-          instrument: 'Piyano',
-          lessonDuration: '45 dk',
-          lessonCount: 4,
-          monthlyFee: 5000,
-          agreedPrice: 5000,
-
-          teacherId: 1,
-          teacherName: 'Meral Hoca',
-          teacher: 'Meral Hoca'
-        }
-      ],
-
-      instrument: 'Piyano',
-      packageId: 6,
-      packageName: 'Aylık Piyano Özel Ders',
-      lessonDuration: '45 dk',
-      lessonCount: 4,
-      monthlyFee: 5000,
-      agreedPrice: 5000,
-
-      teacherId: 1,
-      teacherName: 'Meral Hoca',
-      teacher: 'Meral Hoca',
-
-      lessonPlans: [],
-      notes: 'Örnek öğrenci kaydı'
-    }
-  ])
-
-  /*
-   * DERS PLANLARI
-   */
-
-  const [lessonPlans, setLessonPlans] = useState([
-    {
-      id: 1,
-      day: 'Çarşamba',
-      time: '11:00',
-      duration: '45 dk',
-
-      studentId: 1,
-      studentName: 'Aylin Toksöz',
-
-      teacherId: 1,
-      teacherName: 'Meral Hoca',
-
-      packageId: 6,
-      packageName: 'Aylık Piyano Özel Ders',
-
-      instrument: 'Piyano',
-      location: 'Sınıf 1',
-
-      status: 'Planlandı',
-      note: '',
-
-      isMakeup: false,
-      relatedLessonId: null
-    }
-  ])
-
-  /*
+   * =========================================================
    * SAYFA YENİLEME / SEKME KAPATMA KORUMASI
+   * =========================================================
    */
 
   useEffect(() => {
@@ -373,43 +268,11 @@ function App() {
   }, [hasUnsavedChanges])
 
   /*
-   * Kaydedilmemiş veri yoksa işlem doğrudan çalışır.
-   * Varsa işlem bekletilir ve ortak uyarı penceresi açılır.
+   * =========================================================
+   * ORTAK UYARI PENCERESİ
+   * =========================================================
    */
-  function requestUnsavedAction(action) {
-    if (!hasUnsavedChanges) {
-      action()
-      return
-    }
 
-    setPendingAction(() => action)
-    setShowUnsavedModal(true)
-  }
-
-  const stayOnCurrentPage = () => {
-    setPendingAction(null)
-    setShowUnsavedModal(false)
-  }
-
-  const discardChangesAndContinue = () => {
-    const actionToRun = pendingAction
-
-    clearAllUnsavedSources()
-    setPendingAction(null)
-    setShowUnsavedModal(false)
-
-    if (typeof actionToRun === 'function') {
-      actionToRun()
-    }
-  }
-
-  /*
-   * ORTAK UYARI PENCERESİ DAVRANIŞI
-   *
-   * Escape tuşu uyarıyı kapatır ve kullanıcı mevcut
-   * sayfada kalır. Modal açıkken arka sayfanın kayması
-   * engellenir.
-   */
   useEffect(() => {
     if (!showUnsavedModal) {
       return undefined
@@ -444,19 +307,67 @@ function App() {
   }, [showUnsavedModal])
 
   /*
-   * GİRİŞ İŞLEMLERİ
+   * =========================================================
+   * GİRİŞ İŞLEMİ
+   * =========================================================
    */
 
-  const handleLogin = (event) => {
+  const handleLogin = async (event) => {
     event.preventDefault()
 
-    if (email.trim() === '' || password.trim() === '') {
-      alert('Lütfen e-posta ve şifre alanlarını doldurunuz.')
+    const cleanEmail = email.trim()
+
+    if (!cleanEmail || !password) {
+      alert(
+        'Lütfen e-posta ve şifre alanlarını doldurunuz.'
+      )
       return
     }
 
-    setIsLoggedIn(true)
+    setLoginLoading(true)
+
+    try {
+      const { error } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        })
+
+      if (error) {
+        if (
+          error.message ===
+          'Invalid login credentials'
+        ) {
+          alert('E-posta veya şifre hatalı.')
+        } else {
+          alert(
+            `Giriş yapılamadı: ${error.message}`
+          )
+        }
+
+        return
+      }
+
+      setPassword('')
+    } catch (error) {
+      console.error(
+        'Giriş sırasında beklenmeyen hata:',
+        error
+      )
+
+      alert(
+        'Giriş sırasında beklenmeyen bir hata oluştu.'
+      )
+    } finally {
+      setLoginLoading(false)
+    }
   }
+
+  /*
+   * =========================================================
+   * MENÜ GEÇİŞİ
+   * =========================================================
+   */
 
   const handleMenuClick = (page) => {
     if (page === activePage) {
@@ -468,12 +379,40 @@ function App() {
     })
   }
 
-  const performLogout = () => {
-    clearAllUnsavedSources()
-    setIsLoggedIn(false)
-    setActivePage('dashboard')
-    setEmail('')
-    setPassword('')
+  /*
+   * =========================================================
+   * ÇIKIŞ İŞLEMİ
+   * =========================================================
+   */
+
+  const performLogout = async () => {
+    try {
+      const { error } =
+        await supabase.auth.signOut()
+
+      if (error) {
+        alert(
+          `Çıkış yapılamadı: ${error.message}`
+        )
+        return
+      }
+
+      clearAllUnsavedSources()
+
+      setSession(null)
+      setActivePage('dashboard')
+      setEmail('')
+      setPassword('')
+    } catch (error) {
+      console.error(
+        'Çıkış sırasında beklenmeyen hata:',
+        error
+      )
+
+      alert(
+        'Çıkış sırasında beklenmeyen bir hata oluştu.'
+      )
+    }
   }
 
   const handleLogout = () => {
@@ -481,10 +420,28 @@ function App() {
   }
 
   /*
-   * LOGIN SAYFASI
+   * =========================================================
+   * OTURUM KONTROL EKRANI
+   * =========================================================
    */
 
-  if (!isLoggedIn) {
+  if (authLoading) {
+    return (
+      <div className="app-loading-screen">
+        <div className="app-loading-spinner" />
+
+        <p>Oturum kontrol ediliyor...</p>
+      </div>
+    )
+  }
+
+  /*
+   * =========================================================
+   * LOGIN SAYFASI
+   * =========================================================
+   */
+
+  if (!session) {
     return (
       <Login
         email={email}
@@ -492,12 +449,15 @@ function App() {
         setEmail={setEmail}
         setPassword={setPassword}
         handleLogin={handleLogin}
+        loginLoading={loginLoading}
       />
     )
   }
 
   /*
+   * =========================================================
    * PANEL
+   * =========================================================
    */
 
   return (
@@ -543,6 +503,8 @@ function App() {
           <Packages
             packages={packages}
             setPackages={setPackages}
+            specialties={specialties}
+            setSpecialties={setSpecialties}
             unsavedChanges={createUnsavedPageApi(
               'packages',
               'Paket işlemleri'
@@ -556,6 +518,10 @@ function App() {
             setTeachers={setTeachers}
             specialties={specialties}
             setSpecialties={setSpecialties}
+            students={students}
+            lessonPlans={lessonPlans}
+            payments={payments}
+            teacherPayments={teacherPayments}
             unsavedChanges={createUnsavedPageApi(
               'teachers',
               'Öğretmen işlemleri'
@@ -631,7 +597,8 @@ function App() {
           role="presentation"
           onMouseDown={(event) => {
             if (
-              event.target === event.currentTarget
+              event.target ===
+              event.currentTarget
             ) {
               stayOnCurrentPage()
             }
@@ -683,7 +650,9 @@ function App() {
               <button
                 type="button"
                 className="unsaved-leave-button"
-                onClick={discardChangesAndContinue}
+                onClick={
+                  discardChangesAndContinue
+                }
               >
                 Kaydetmeden Çık
               </button>
