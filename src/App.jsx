@@ -21,6 +21,10 @@ import {
   getStudents
 } from './services/studentService'
 
+import {
+  getLessonPlans
+} from './services/lessonService'
+
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -200,12 +204,14 @@ function App() {
             specialtiesResult,
             packagesResult,
             teachersResult,
-            studentsResult
+            studentsResult,
+            lessonPlansResult
           ] = await Promise.all([
             getSpecialties(),
             getPackages(),
             getTeachers(),
-            getStudents()
+            getStudents(),
+            getLessonPlans()
           ])
 
           if (!isMounted) {
@@ -226,6 +232,10 @@ function App() {
 
           setStudents(
             studentsResult
+          )
+
+          setLessonPlans(
+            lessonPlansResult
           )
         } catch (error) {
           console.error(
@@ -761,7 +771,7 @@ function App() {
     return (
       <div className="app-loading-screen">
         <LoadingState
-          text="Branşlar, paketler, öğretmenler ve öğrenciler yükleniyor..."
+          text="Branşlar, paketler, öğretmenler, öğrenciler ve ders programı yükleniyor..."
         />
       </div>
     )

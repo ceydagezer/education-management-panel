@@ -1,5 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
+
+import {
+  createLessonPlan,
+  deleteLessonPlan,
+  updateLessonPlanStatus
+} from '../services/lessonService'
 import '../styles/status.css'
+
+import {
+  getCompactLessonStatusLabel,
+  getLessonStatusBadgeClass,
+  getLessonStatusClass,
+  getLessonStatusLabel,
+  isActiveLesson,
+  isMakeupLesson,
+  normalizeLessonStatus
+} from '../utils/lessonHelpers'
+
+import {
+  areIdsEqual,
+  normalizeSearchText,
+  normalizeStatusText
+} from '../utils/textHelpers'
 
 function LessonStatusTracking({
   lessons = [],
@@ -94,6 +116,15 @@ function LessonStatusTracking({
   const [expandedCells, setExpandedCells] =
     useState({})
 
+  const [updatingLessonId, setUpdatingLessonId] =
+    useState(null)
+
+  const [deletingLessonId, setDeletingLessonId] =
+    useState(null)
+
+  const [isSavingMakeup, setIsSavingMakeup] =
+    useState(false)
+
   const studentSearchRef = useRef(null)
 
   /*
@@ -113,23 +144,15 @@ function LessonStatusTracking({
   const activeTeachers = teachers.filter(
     (teacher) =>
       teacher.isActive !== false &&
-      teacher.status !== 'Pasif'
+      normalizeStatusText(teacher.status) !== 'pasif'
   )
 
   const activeStudents = students.filter(
     (student) =>
       student.isActive !== false &&
-      student.status !== 'Pasif' &&
-      !student.isArchived
+      normalizeStatusText(student.status) !== 'pasif' &&
+      student.isArchived !== true
   )
-
-  const normalizeSearchText = (value) =>
-    String(value || '')
-      .toLocaleLowerCase('tr-TR')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/ı/g, 'i')
-      .trim()
 
   const getStudentFullName = (student) =>
     student?.fullName || student?.name || ''
@@ -213,51 +236,6 @@ function LessonStatusTracking({
     }
   }, [])
 
-  const normalizeStatus = (status) => {
-    if (status === 'Telafi') {
-      return 'Telafi yapılacak'
-    }
-
-    if (status === 'İptal') {
-      return 'İptal edildi'
-    }
-
-    return status || 'Planlandı'
-  }
-
-  const getStatusLabel = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    if (normalizedStatus === 'Planlandı') {
-      return 'Düzenli Ders'
-    }
-
-    return normalizedStatus
-  }
-
-  const getCompactStatusLabel = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    switch (normalizedStatus) {
-      case 'Yapıldı':
-        return 'Yapıldı'
-
-      case 'İptal edildi':
-        return 'İptal'
-
-      case 'Telafi yapılacak':
-        return 'Telafi'
-
-      case 'Telafi yapıldı':
-        return 'Telafi yapıldı'
-
-      default:
-        return ''
-    }
-  }
-
   const getTeacherName = (lesson) => {
     if (lesson.teacherName) {
       return lesson.teacherName
@@ -269,8 +247,7 @@ function LessonStatusTracking({
 
     const teacher = teachers.find(
       (item) =>
-        String(item.id) ===
-        String(lesson.teacherId)
+        areIdsEqual(item.id, lesson.teacherId)
     )
 
     return (
@@ -288,10 +265,15 @@ function LessonStatusTracking({
     const teacherName =
       lesson.teacherName || lesson.teacher
 
+    const normalizedTeacherName =
+      normalizeStatusText(teacherName)
+
     const teacher = teachers.find(
       (item) =>
-        item.fullName === teacherName ||
-        item.name === teacherName
+        normalizeStatusText(item.fullName) ===
+          normalizedTeacherName ||
+        normalizeStatusText(item.name) ===
+          normalizedTeacherName
     )
 
     return teacher?.id || ''
@@ -345,8 +327,10 @@ function LessonStatusTracking({
   const getSelectedStudent = () => {
     return students.find(
       (student) =>
-        String(student.id) ===
-        String(makeupForm.studentId)
+        areIdsEqual(
+        student.id,
+        makeupForm.studentId
+      )
     )
   }
 
@@ -365,8 +349,8 @@ function LessonStatusTracking({
         (enrolledPackage) => {
           const packageDetail = packages.find(
             (item) =>
-              String(item.id) ===
-              String(
+              areIdsEqual(
+                item.id,
                 enrolledPackage.packageId
               )
           )
@@ -415,8 +399,7 @@ function LessonStatusTracking({
       return packages.filter((item) =>
         student.packageIds.some(
           (packageId) =>
-            String(packageId) ===
-            String(item.id)
+            areIdsEqual(packageId, item.id)
         )
       )
     }
@@ -424,8 +407,7 @@ function LessonStatusTracking({
     if (student.packageId) {
       return packages.filter(
         (item) =>
-          String(item.id) ===
-          String(student.packageId)
+          areIdsEqual(item.id, student.packageId)
       )
     }
 
@@ -435,17 +417,18 @@ function LessonStatusTracking({
   const filteredLessons = lessons.filter(
     (lesson) => {
       const lessonStatus =
-        normalizeStatus(lesson.status)
+        normalizeLessonStatus(lesson.status)
 
       const teacherMatch =
         selectedTeacher === 'all' ||
-        String(getTeacherId(lesson)) ===
-          String(selectedTeacher)
+        areIdsEqual(
+          getTeacherId(lesson),
+          selectedTeacher
+        )
 
       const lessonStudent = students.find(
         (student) =>
-          String(student.id) ===
-          String(lesson.studentId)
+          areIdsEqual(student.id, lesson.studentId)
       )
 
       const lessonStudentSearchValue =
@@ -464,8 +447,10 @@ function LessonStatusTracking({
 
       const studentMatch =
         selectedStudent !== 'all'
-          ? String(lesson.studentId) ===
-            String(selectedStudent)
+          ? areIdsEqual(
+            lesson.studentId,
+            selectedStudent
+          )
           : !normalizedStudentSearch ||
             lessonStudentSearchValue.includes(
               normalizedStudentSearch
@@ -531,66 +516,9 @@ function LessonStatusTracking({
     }))
   }
 
-  const getStatusClass = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    switch (normalizedStatus) {
-      case 'Yapıldı':
-        return 'status-lesson-card completed'
-
-      case 'İptal edildi':
-        return 'status-lesson-card cancelled'
-
-      case 'Telafi yapılacak':
-        return 'status-lesson-card makeup-waiting'
-
-      case 'Telafi yapıldı':
-        return 'status-lesson-card makeup-completed'
-
-      default:
-        return 'status-lesson-card planned'
-    }
-  }
-
-  const getStatusBadgeClass = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    switch (normalizedStatus) {
-      case 'Yapıldı':
-        return 'status-pill completed'
-
-      case 'İptal edildi':
-        return 'status-pill cancelled'
-
-      case 'Telafi yapılacak':
-        return 'status-pill makeup-waiting'
-
-      case 'Telafi yapıldı':
-        return 'status-pill makeup-completed'
-
-      default:
-        return 'status-pill planned'
-    }
-  }
-
-  const isMakeupLesson = (lesson) => {
-    const normalizedStatus =
-      normalizeStatus(lesson.status)
-
-    return (
-      lesson.isMakeup ||
-      normalizedStatus ===
-        'Telafi yapılacak' ||
-      normalizedStatus ===
-        'Telafi yapıldı'
-    )
-  }
-
   const getLessonActions = (lesson) => {
     const normalizedStatus =
-      normalizeStatus(lesson.status)
+      normalizeLessonStatus(lesson.status)
 
     const makeupLesson =
       isMakeupLesson(lesson)
@@ -625,38 +553,79 @@ function LessonStatusTracking({
     ]
   }
 
-  const updateLessonStatus = (
+  const updateLessonStatus = async (
     lessonId,
     newStatus
   ) => {
-    setLessons((currentLessons) =>
-      currentLessons.map((lesson) => {
-        if (lesson.id !== lessonId) {
-          return lesson
-        }
+    if (updatingLessonId) {
+      return
+    }
 
-        if (newStatus === 'Geri al') {
-          return {
-            ...lesson,
-            status: isMakeupLesson(lesson)
-              ? 'Telafi yapılacak'
-              : 'Planlandı'
-          }
-        }
-
-        return {
-          ...lesson,
-          status: newStatus
-        }
-      })
+    const currentLesson = lessons.find(
+      (lesson) =>
+        areIdsEqual(
+          lesson.id,
+          lessonId
+        )
     )
 
-    setOpenMenuId(null)
+    if (!currentLesson) {
+      return
+    }
+
+    const statusToSave =
+      newStatus === 'Geri al'
+        ? (
+            isMakeupLesson(currentLesson)
+              ? 'Telafi yapılacak'
+              : 'Planlandı'
+          )
+        : newStatus
+
+    setUpdatingLessonId(lessonId)
+
+    try {
+      const updatedLesson =
+        await updateLessonPlanStatus(
+          lessonId,
+          statusToSave
+        )
+
+      setLessons((currentLessons) =>
+        currentLessons.map((lesson) =>
+          areIdsEqual(
+            lesson.id,
+            lessonId
+          )
+            ? updatedLesson
+            : lesson
+        )
+      )
+
+      setOpenMenuId(null)
+    } catch (error) {
+      console.error(
+        'Ders durumu güncelleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ders durumu güncellenemedi.'
+      )
+    } finally {
+      setUpdatingLessonId(null)
+    }
   }
 
-  const deleteMakeupLesson = (
+  const deleteMakeupLesson = async (
     lessonId
   ) => {
+    if (deletingLessonId) {
+      return
+    }
+
     const confirmDelete =
       window.confirm(
         'Bu telafi dersini kaldırmak istediğinize emin misiniz?'
@@ -666,14 +635,36 @@ function LessonStatusTracking({
       return
     }
 
-    setLessons((currentLessons) =>
-      currentLessons.filter(
-        (lesson) =>
-          lesson.id !== lessonId
-      )
-    )
+    setDeletingLessonId(lessonId)
 
-    setOpenMenuId(null)
+    try {
+      await deleteLessonPlan(lessonId)
+
+      setLessons((currentLessons) =>
+        currentLessons.filter(
+          (lesson) =>
+            !areIdsEqual(
+              lesson.id,
+              lessonId
+            )
+        )
+      )
+
+      setOpenMenuId(null)
+    } catch (error) {
+      console.error(
+        'Telafi dersi silme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Telafi dersi silinemedi.'
+      )
+    } finally {
+      setDeletingLessonId(null)
+    }
   }
 
   const handleStudentSearchChange = (event) => {
@@ -749,8 +740,7 @@ function LessonStatusTracking({
       const selectedPackage =
         studentPackages.find(
           (item) =>
-            String(item.id) ===
-            String(value)
+            areIdsEqual(item.id, value)
         )
 
       setMakeupForm((currentForm) => ({
@@ -781,31 +771,33 @@ function LessonStatusTracking({
       const sameTime =
         lesson.time === makeupForm.time
 
-      const sameTeacher =
-        String(getTeacherId(lesson)) ===
-        String(makeupForm.teacherId)
+      const sameTeacher = areIdsEqual(
+        getTeacherId(lesson),
+        makeupForm.teacherId
+      )
 
-      const sameStudent =
-        String(lesson.studentId) ===
-        String(makeupForm.studentId)
+      const sameStudent = areIdsEqual(
+        lesson.studentId,
+        makeupForm.studentId
+      )
 
       const isSameSlot =
         sameDay && sameTime
 
-      const isActiveLesson =
-        normalizeStatus(lesson.status) !==
-        'İptal edildi'
-
       return (
         isSameSlot &&
-        isActiveLesson &&
+        isActiveLesson(lesson) &&
         (sameTeacher || sameStudent)
       )
     })
   }
 
-  const saveMakeupLesson = (event) => {
+  const saveMakeupLesson = async (event) => {
     event.preventDefault()
+
+    if (isSavingMakeup) {
+      return
+    }
 
     if (!makeupForm.studentId) {
       alert('Öğrenci seçilmelidir.')
@@ -841,82 +833,55 @@ function LessonStatusTracking({
       return
     }
 
-    const selectedTeacherData =
-      teachers.find(
-        (teacher) =>
-          String(teacher.id) ===
-          String(makeupForm.teacherId)
+    setIsSavingMakeup(true)
+
+    try {
+      const savedLesson =
+        await createLessonPlan({
+          teacherId:
+            makeupForm.teacherId,
+          studentId:
+            makeupForm.studentId,
+          packageId:
+            makeupForm.packageId,
+          day:
+            makeupForm.day,
+          time:
+            makeupForm.time,
+          duration:
+            makeupForm.duration ||
+            '60 dk',
+          status:
+            'Telafi yapılacak',
+          note:
+            makeupForm.note.trim(),
+          isMakeup:
+            true,
+          relatedLessonId:
+            null
+        })
+
+      setLessons((currentLessons) => [
+        ...currentLessons,
+        savedLesson
+      ])
+
+      unsavedChanges?.markClean?.()
+      performCloseMakeupForm()
+    } catch (error) {
+      console.error(
+        'Telafi dersi kaydetme hatası:',
+        error
       )
 
-    const selectedStudentData =
-      students.find(
-        (student) =>
-          String(student.id) ===
-          String(makeupForm.studentId)
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Telafi dersi kaydedilemedi.'
       )
-
-    const makeupLesson = {
-      id: Date.now(),
-
-      teacherId: Number(
-        makeupForm.teacherId
-      ),
-
-      teacherName:
-        selectedTeacherData?.fullName ||
-        selectedTeacherData?.name ||
-        '',
-
-      teacher:
-        selectedTeacherData?.fullName ||
-        selectedTeacherData?.name ||
-        '',
-
-      studentId: Number(
-        makeupForm.studentId
-      ),
-
-      studentName:
-        selectedStudentData?.fullName ||
-        selectedStudentData?.name ||
-        '',
-
-      packageId: Number(
-        makeupForm.packageId
-      ),
-
-      packageName:
-        makeupForm.packageName,
-
-      instrument:
-        makeupForm.instrument,
-
-      day: makeupForm.day,
-      time: makeupForm.time,
-
-      duration:
-        makeupForm.duration ||
-        '60 dk',
-
-      status: 'Telafi yapılacak',
-
-      note: makeupForm.note.trim(),
-
-      isMakeup: true,
-      relatedLessonId: null
+    } finally {
+      setIsSavingMakeup(false)
     }
-
-    setLessons((currentLessons) => [
-      ...currentLessons,
-      makeupLesson
-    ])
-
-    /*
-     * Telafi dersi ana ders listesine başarıyla kaydedildi.
-     * Artık kaybolabilecek bir form taslağı bulunmuyor.
-     */
-    unsavedChanges?.markClean?.()
-    performCloseMakeupForm()
   }
 
   const studentPackageOptions =
@@ -1129,6 +1094,7 @@ function LessonStatusTracking({
               className="edit-section-button"
               type="button"
               onClick={closeMakeupForm}
+              disabled={isSavingMakeup}
             >
               Kapat
             </button>
@@ -1310,6 +1276,7 @@ function LessonStatusTracking({
                 type="button"
                 className="cancel-button"
                 onClick={closeMakeupForm}
+                disabled={isSavingMakeup}
               >
                 İptal
               </button>
@@ -1317,8 +1284,11 @@ function LessonStatusTracking({
               <button
                 type="submit"
                 className="save-button"
+                disabled={isSavingMakeup}
               >
-                Telafi Dersini Kaydet
+                {isSavingMakeup
+                  ? 'Kaydediliyor...'
+                  : 'Telafi Dersini Kaydet'}
               </button>
             </div>
           </form>
@@ -1419,28 +1389,31 @@ function LessonStatusTracking({
                                   )
 
                                 const compactStatus =
-                                  getCompactStatusLabel(
+                                  getCompactLessonStatusLabel(
                                     lesson.status
                                   )
 
                                 return (
                                   <div
                                     key={lesson.id}
-                                    className={`${getStatusClass(
-                                      lesson.status
+                                    className={`${getLessonStatusClass(
+                                      lesson.status,
+                                      'status-lesson-card'
                                     )} ${
-                                      lesson.isMakeup
+                                      isMakeupLesson(lesson)
                                         ? 'makeup-card'
                                         : ''
                                     } ${
-                                      openMenuId ===
-                                      lesson.id
+                                      areIdsEqual(
+                                        openMenuId,
+                                        lesson.id
+                                      )
                                         ? 'menu-open'
                                         : ''
                                     }`}
                                   >
-                                    {lesson.isMakeup &&
-                                      normalizeStatus(
+                                    {isMakeupLesson(lesson) &&
+                                      normalizeLessonStatus(
                                         lesson.status
                                       ) ===
                                         'Telafi yapılacak' && (
@@ -1456,9 +1429,20 @@ function LessonStatusTracking({
                                               lesson.id
                                             )
                                           }}
+                                          disabled={
+                                            areIdsEqual(
+                                              deletingLessonId,
+                                              lesson.id
+                                            )
+                                          }
                                           title="Telafi dersini kaldır"
                                         >
-                                          ×
+                                          {areIdsEqual(
+                                            deletingLessonId,
+                                            lesson.id
+                                          )
+                                            ? '…'
+                                            : '×'}
                                         </button>
                                       )}
 
@@ -1509,8 +1493,10 @@ function LessonStatusTracking({
                                             event.stopPropagation()
 
                                             setOpenMenuId(
-                                              openMenuId ===
+                                              areIdsEqual(
+                                                openMenuId,
                                                 lesson.id
+                                              )
                                                 ? null
                                                 : lesson.id
                                             )
@@ -1520,8 +1506,10 @@ function LessonStatusTracking({
                                           ⋯
                                         </button>
 
-                                        {openMenuId ===
-                                          lesson.id && (
+                                        {areIdsEqual(
+                                          openMenuId,
+                                          lesson.id
+                                        ) && (
                                           <div className="lesson-action-menu">
                                             {lessonActions.map(
                                               (action) => (
@@ -1536,10 +1524,19 @@ function LessonStatusTracking({
                                                       action
                                                     )
                                                   }
-                                                >
-                                                  {
-                                                    action
+                                                  disabled={
+                                                    areIdsEqual(
+                                                      updatingLessonId,
+                                                      lesson.id
+                                                    )
                                                   }
+                                                >
+                                                  {areIdsEqual(
+                                                    updatingLessonId,
+                                                    lesson.id
+                                                  )
+                                                    ? 'Kaydediliyor...'
+                                                    : action}
                                                 </button>
                                               )
                                             )}
@@ -1684,11 +1681,11 @@ function LessonStatusTracking({
 
                       <td>
                         <span
-                          className={getStatusBadgeClass(
+                          className={getLessonStatusBadgeClass(
                             lesson.status
                           )}
                         >
-                          {getStatusLabel(
+                          {getLessonStatusLabel(
                             lesson.status
                           )}
                         </span>

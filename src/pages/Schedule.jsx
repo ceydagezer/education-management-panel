@@ -1,5 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
+
+import {
+  createLessonPlan,
+  deleteLessonPlan
+} from '../services/lessonService'
 import '../styles/schedule.css'
+
+import {
+  getCompactLessonStatusLabel,
+  getLessonStatusClass,
+  isActiveLesson
+} from '../utils/lessonHelpers'
+
+import {
+  areIdsEqual,
+  normalizeSearchText,
+  normalizeStatusText
+} from '../utils/textHelpers'
 
 function Schedule({
   lessonPlans = [],
@@ -67,20 +84,22 @@ function Schedule({
   const [showStudentSuggestions, setShowStudentSuggestions] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [expandedCells, setExpandedCells] = useState({})
+  const [isSavingLesson, setIsSavingLesson] = useState(false)
+  const [deletingLessonId, setDeletingLessonId] = useState(null)
 
   const studentSearchRef = useRef(null)
 
   const activeTeachers = teachers.filter(
     (teacher) =>
       teacher.isActive !== false &&
-      teacher.status !== 'Pasif'
+      normalizeStatusText(teacher.status) !== 'pasif'
   )
 
   const activeStudents = students.filter(
     (student) =>
       student.isActive !== false &&
-      student.status !== 'Pasif' &&
-      !student.isArchived
+      normalizeStatusText(student.status) !== 'pasif' &&
+      student.isArchived !== true
   )
 
   const getTeacherNameFromRecord = (teacher) =>
@@ -119,14 +138,6 @@ function Schedule({
 
     return packageDetail?.instrument || lesson.lessonName || 'Ders'
   }
-
-  const normalizeSearchText = (value) =>
-    String(value || '')
-      .toLocaleLowerCase('tr-TR')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/ı/g, 'i')
-      .trim()
 
   const getStudentSearchValue = (student) =>
     normalizeSearchText(
@@ -351,6 +362,15 @@ function Schedule({
   const handleLessonChange = (event) => {
     const { name, value } = event.target
 
+    if (name === 'day') {
+      setLessonForm((currentForm) => ({
+        ...currentForm,
+        day: value,
+        time: ''
+      }))
+      return
+    }
+
     setLessonForm((currentForm) => ({
       ...currentForm,
       [name]: value
@@ -446,14 +466,16 @@ function Schedule({
   }
 
   const getBlockedLesson = (time) => {
-    const teacherConflict = lessonForm.teacher
+    const teacherConflict = lessonForm.teacherId
       ? lessonPlans.find(
           (lesson) =>
             lesson.day === lessonForm.day &&
             lesson.time === time &&
-            getLessonTeacherName(lesson).trim().toLocaleLowerCase('tr-TR') ===
-              lessonForm.teacher.trim().toLocaleLowerCase('tr-TR') &&
-            lesson.status !== 'İptal edildi'
+            areIdsEqual(
+              lesson.teacherId,
+              lessonForm.teacherId
+            ) &&
+            isActiveLesson(lesson)
         )
       : null
 
@@ -470,8 +492,11 @@ function Schedule({
           (lesson) =>
             lesson.day === lessonForm.day &&
             lesson.time === time &&
-            String(lesson.studentId) === String(lessonForm.studentId) &&
-            lesson.status !== 'İptal edildi'
+            areIdsEqual(
+              lesson.studentId,
+              lessonForm.studentId
+            ) &&
+            isActiveLesson(lesson)
         )
       : null
 
@@ -495,42 +520,6 @@ function Schedule({
           'tr'
         )
       )
-
-  const normalizeStatus = (status) => {
-    if (status === 'İptal') return 'İptal edildi'
-    if (status === 'Telafi') return 'Telafi yapılacak'
-    return status || 'Planlandı'
-  }
-
-  const getScheduleCardClass = (lesson) => {
-    switch (normalizeStatus(lesson.status)) {
-      case 'Yapıldı':
-        return 'schedule-lesson-card completed'
-      case 'İptal edildi':
-        return 'schedule-lesson-card cancelled'
-      case 'Telafi yapılacak':
-        return 'schedule-lesson-card makeup-waiting'
-      case 'Telafi yapıldı':
-        return 'schedule-lesson-card makeup-completed'
-      default:
-        return 'schedule-lesson-card planned'
-    }
-  }
-
-  const getCompactStatusLabel = (status) => {
-    switch (normalizeStatus(status)) {
-      case 'Yapıldı':
-        return 'Yapıldı'
-      case 'İptal edildi':
-        return 'İptal'
-      case 'Telafi yapılacak':
-        return 'Telafi'
-      case 'Telafi yapıldı':
-        return 'Telafi yapıldı'
-      default:
-        return ''
-    }
-  }
 
   const clearFilters = () => {
     setTeacherFilter('all')
@@ -565,8 +554,12 @@ function Schedule({
     }))
   }
 
-  const handleLessonSubmit = (event) => {
+  const handleLessonSubmit = async (event) => {
     event.preventDefault()
+
+    if (isSavingLesson) {
+      return
+    }
 
     if (!lessonForm.studentId) {
       alert('Öğrenci seçiniz.')
@@ -578,7 +571,7 @@ function Schedule({
       return
     }
 
-    if (!lessonForm.teacher.trim()) {
+    if (!lessonForm.teacherId) {
       alert(
         'Bu pakete atanmış öğretmen bulunamadı. Öğrenci detayından paket öğretmenini seçiniz.'
       )
@@ -599,13 +592,17 @@ function Schedule({
       (lesson) =>
         lesson.day === lessonForm.day &&
         lesson.time === lessonForm.time &&
-        getLessonTeacherName(lesson).trim().toLocaleLowerCase('tr-TR') ===
-          lessonForm.teacher.trim().toLocaleLowerCase('tr-TR') &&
-        normalizeStatus(lesson.status) !== 'İptal edildi'
+        areIdsEqual(
+          lesson.teacherId,
+          lessonForm.teacherId
+        ) &&
+        isActiveLesson(lesson)
     )
 
     if (hasTeacherConflict) {
-      alert('Bu öğretmenin seçilen gün ve saatte başka bir dersi bulunmaktadır.')
+      alert(
+        'Bu öğretmenin seçilen gün ve saatte başka bir dersi bulunmaktadır.'
+      )
       return
     }
 
@@ -613,59 +610,106 @@ function Schedule({
       (lesson) =>
         lesson.day === lessonForm.day &&
         lesson.time === lessonForm.time &&
-        String(lesson.studentId) === String(lessonForm.studentId) &&
-        normalizeStatus(lesson.status) !== 'İptal edildi'
+        areIdsEqual(
+          lesson.studentId,
+          lessonForm.studentId
+        ) &&
+        isActiveLesson(lesson)
     )
 
     if (hasStudentConflict) {
-      alert('Bu öğrencinin seçilen gün ve saatte başka bir dersi bulunmaktadır.')
+      alert(
+        'Bu öğrencinin seçilen gün ve saatte başka bir dersi bulunmaktadır.'
+      )
       return
     }
 
-    const teacherRecord = activeTeachers.find(
-      (teacher) =>
-        String(teacher.id) === String(lessonForm.teacherId) ||
-        getTeacherNameFromRecord(teacher) === lessonForm.teacher
-    )
+    setIsSavingLesson(true)
 
-    const newLesson = {
-      id: Date.now(),
-      studentId: lessonForm.studentId,
-      studentName: lessonForm.studentName,
-      packageId: lessonForm.packageId,
-      packageName: lessonForm.packageName,
-      instrument: lessonForm.instrument,
-      duration: lessonForm.duration || '60 dk',
-      teacherId: lessonForm.teacherId || teacherRecord?.id || '',
-      teacher: lessonForm.teacher,
-      teacherName: lessonForm.teacher,
-      day: lessonForm.day,
-      time: lessonForm.time,
-      status: 'Planlandı',
-      note: '',
-      isMakeup: false,
-      relatedLessonId: null
+    try {
+      const savedLesson =
+        await createLessonPlan({
+          studentId: lessonForm.studentId,
+          packageId: lessonForm.packageId,
+          teacherId: lessonForm.teacherId,
+          day: lessonForm.day,
+          time: lessonForm.time,
+          duration:
+            lessonForm.duration || '60 dk',
+          status: 'Planlandı',
+          note: '',
+          isMakeup: false,
+          relatedLessonId: null
+        })
+
+      setLessonPlans((currentLessons) => [
+        ...currentLessons,
+        savedLesson
+      ])
+
+      setLessonForm({
+        ...emptyLessonForm,
+        day: lessonForm.day
+      })
+    } catch (error) {
+      console.error(
+        'Ders planı kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ders planı kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingLesson(false)
     }
-
-    setLessonPlans((currentLessons) => [...currentLessons, newLesson])
-
-    setLessonForm({
-      ...emptyLessonForm,
-      day: lessonForm.day
-    })
   }
 
-  const deleteLesson = (lessonId) => {
+  const deleteLesson = async (lessonId) => {
+    if (deletingLessonId) {
+      return
+    }
+
     const isConfirmed = window.confirm(
       'Bu ders planını silmek istediğinize emin misiniz?'
     )
 
-    if (!isConfirmed) return
+    if (!isConfirmed) {
+      return
+    }
 
-    setLessonPlans((currentLessons) =>
-      currentLessons.filter((lesson) => lesson.id !== lessonId)
-    )
-    setOpenMenuId(null)
+    setDeletingLessonId(lessonId)
+
+    try {
+      await deleteLessonPlan(lessonId)
+
+      setLessonPlans((currentLessons) =>
+        currentLessons.filter(
+          (lesson) =>
+            !areIdsEqual(
+              lesson.id,
+              lessonId
+            )
+        )
+      )
+
+      setOpenMenuId(null)
+    } catch (error) {
+      console.error(
+        'Ders planı silme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ders planı silinemedi.'
+      )
+    } finally {
+      setDeletingLessonId(null)
+    }
   }
 
   return (
@@ -788,8 +832,14 @@ function Schedule({
             </div>
           </div>
 
-          <button className="save-button schedule-save-button" type="submit">
-            Ders Planını Kaydet
+          <button
+            className="save-button schedule-save-button"
+            type="submit"
+            disabled={isSavingLesson}
+          >
+            {isSavingLesson
+              ? 'Kaydediliyor...'
+              : 'Ders Planını Kaydet'}
           </button>
         </form>
 
@@ -1038,15 +1088,18 @@ function Schedule({
                         {cellLessons.length > 0 ? (
                           <div className="schedule-cell-stack">
                             {visibleLessons.map((lesson) => {
-                              const compactStatus = getCompactStatusLabel(
+                              const compactStatus = getCompactLessonStatusLabel(
                                 lesson.status
                               )
 
                               return (
                                 <div
                                   key={lesson.id}
-                                  className={`${getScheduleCardClass(lesson)} ${
-                                    openMenuId === lesson.id ? 'menu-open' : ''
+                                  className={`${getLessonStatusClass(
+                                    lesson.status,
+                                    'schedule-lesson-card'
+                                  )} ${
+                                    areIdsEqual(openMenuId, lesson.id) ? 'menu-open' : ''
                                   }`}
                                 >
                                   <div className="schedule-card-top">
@@ -1079,7 +1132,7 @@ function Schedule({
                                         onClick={(event) => {
                                           event.stopPropagation()
                                           setOpenMenuId(
-                                            openMenuId === lesson.id
+                                            areIdsEqual(openMenuId, lesson.id)
                                               ? null
                                               : lesson.id
                                           )
@@ -1089,14 +1142,25 @@ function Schedule({
                                         ⋯
                                       </button>
 
-                                      {openMenuId === lesson.id && (
+                                      {areIdsEqual(openMenuId, lesson.id) && (
                                         <div className="schedule-lesson-action-menu">
                                           <button
                                             type="button"
                                             className="danger"
                                             onClick={() => deleteLesson(lesson.id)}
+                                            disabled={
+                                              areIdsEqual(
+                                                deletingLessonId,
+                                                lesson.id
+                                              )
+                                            }
                                           >
-                                            Dersi Sil
+                                            {areIdsEqual(
+                                              deletingLessonId,
+                                              lesson.id
+                                            )
+                                              ? 'Siliniyor...'
+                                              : 'Dersi Sil'}
                                           </button>
                                         </div>
                                       )}
@@ -1196,8 +1260,19 @@ function Schedule({
                         className="schedule-table-delete-button"
                         type="button"
                         onClick={() => deleteLesson(lesson.id)}
+                        disabled={
+                          areIdsEqual(
+                            deletingLessonId,
+                            lesson.id
+                          )
+                        }
                       >
-                        Sil
+                        {areIdsEqual(
+                          deletingLessonId,
+                          lesson.id
+                        )
+                          ? 'Siliniyor...'
+                          : 'Sil'}
                       </button>
                     </td>
                   </tr>
