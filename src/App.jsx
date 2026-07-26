@@ -13,6 +13,10 @@ import {
   getSpecialties
 } from './services/catalogService'
 
+import {
+  getTeachers
+} from './services/teacherService'
+
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -37,20 +41,34 @@ function App() {
    * =========================================================
    */
 
-  const [session, setSession] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [loginLoading, setLoginLoading] = useState(false)
-  const [loginError, setLoginError] = useState('')
+  const [session, setSession] =
+    useState(null)
+
+  const [authLoading, setAuthLoading] =
+    useState(true)
+
+  const [loginLoading, setLoginLoading] =
+    useState(false)
+
+  const [loginError, setLoginError] =
+    useState('')
 
   const [dataLoading, setDataLoading] =
     useState(false)
+
   const [dataError, setDataError] =
     useState('')
-  const [catalogReloadKey, setCatalogReloadKey] =
-    useState(0)
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [
+    catalogReloadKey,
+    setCatalogReloadKey
+  ] = useState(0)
+
+  const [email, setEmail] =
+    useState('')
+
+  const [password, setPassword] =
+    useState('')
 
   const [activePage, setActivePage] =
     useState('dashboard')
@@ -61,44 +79,85 @@ function App() {
    * =========================================================
    */
 
-  const [unsavedSources, setUnsavedSources] =
-    useState({})
+  const [
+    unsavedSources,
+    setUnsavedSources
+  ] = useState({})
 
-  const [showUnsavedModal, setShowUnsavedModal] =
-    useState(false)
+  const [
+    showUnsavedModal,
+    setShowUnsavedModal
+  ] = useState(false)
 
-  const [pendingAction, setPendingAction] =
-    useState(null)
+  const [
+    pendingAction,
+    setPendingAction
+  ] = useState(null)
 
   const hasUnsavedChanges =
-    Object.keys(unsavedSources).length > 0
+    Object.keys(
+      unsavedSources
+    ).length > 0
 
-  const unsavedSourceLabels = useMemo(
-    () => Object.values(unsavedSources),
-    [unsavedSources]
-  )
+  const unsavedSourceLabels =
+    useMemo(
+      () =>
+        Object.values(
+          unsavedSources
+        ),
+      [unsavedSources]
+    )
 
   /*
    * =========================================================
    * VERİLER
-   *
-   * Örnek kayıtlar kaldırıldı.
-   * Bu state'ler sonraki adımlarda Supabase tablolarından
-   * doldurulacak.
    * =========================================================
    */
 
-  const [specialties, setSpecialties] = useState([])
-  const [packages, setPackages] = useState([])
-  const [teachers, setTeachers] = useState([])
-  const [students, setStudents] = useState([])
-  const [lessonPlans, setLessonPlans] = useState([])
+  const [
+    specialties,
+    setSpecialties
+  ] = useState([])
 
-  const [payments, setPayments] = useState([])
-  const [otherIncomes, setOtherIncomes] = useState([])
-  const [expenses, setExpenses] = useState([])
-  const [teacherPayments, setTeacherPayments] =
-    useState([])
+  const [
+    packages,
+    setPackages
+  ] = useState([])
+
+  const [
+    teachers,
+    setTeachers
+  ] = useState([])
+
+  const [
+    students,
+    setStudents
+  ] = useState([])
+
+  const [
+    lessonPlans,
+    setLessonPlans
+  ] = useState([])
+
+  const [
+    payments,
+    setPayments
+  ] = useState([])
+
+  const [
+    otherIncomes,
+    setOtherIncomes
+  ] = useState([])
+
+  const [
+    expenses,
+    setExpenses
+  ] = useState([])
+
+  const [
+    teacherPayments,
+    setTeacherPayments
+  ] = useState([])
 
   const clearAppData = () => {
     setSpecialties([])
@@ -114,6 +173,12 @@ function App() {
     setDataLoading(false)
   }
 
+  /*
+   * =========================================================
+   * SUPABASE PANEL VERİLERİNİ YÜKLE
+   * =========================================================
+   */
+
   useEffect(() => {
     if (!session) {
       return undefined
@@ -121,57 +186,74 @@ function App() {
 
     let isMounted = true
 
-    const loadCatalogData = async () => {
-      setDataLoading(true)
-      setDataError('')
+    const loadPanelData =
+      async () => {
+        setDataLoading(true)
+        setDataError('')
 
-      try {
-        const [
-          specialtiesResult,
-          packagesResult
-        ] = await Promise.all([
-          getSpecialties(),
-          getPackages()
-        ])
+        try {
+          const [
+            specialtiesResult,
+            packagesResult,
+            teachersResult
+          ] = await Promise.all([
+            getSpecialties(),
+            getPackages(),
+            getTeachers()
+          ])
 
-        if (!isMounted) {
-          return
-        }
+          if (!isMounted) {
+            return
+          }
 
-        setSpecialties(specialtiesResult)
-        setPackages(packagesResult)
-      } catch (error) {
-        console.error(
-          'Branş ve paket verileri yüklenemedi:',
-          error
-        )
-
-        if (isMounted) {
-          setDataError(
-            error instanceof Error
-              ? error.message
-              : 'Branş ve paket verileri yüklenemedi.'
+          setSpecialties(
+            specialtiesResult
           )
-        }
-      } finally {
-        if (isMounted) {
-          setDataLoading(false)
+
+          setPackages(
+            packagesResult
+          )
+
+          setTeachers(
+            teachersResult
+          )
+        } catch (error) {
+          console.error(
+            'Branş, paket ve öğretmen verileri yüklenemedi:',
+            error
+          )
+
+          if (isMounted) {
+            setDataError(
+              error instanceof Error
+                ? error.message
+                : 'Branş, paket ve öğretmen verileri yüklenemedi.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setDataLoading(false)
+          }
         }
       }
-    }
 
-    loadCatalogData()
+    loadPanelData()
 
     return () => {
       isMounted = false
     }
-  }, [session, catalogReloadKey])
+  }, [
+    session,
+    catalogReloadKey
+  ])
 
-  const retryCatalogLoad = () => {
-    setCatalogReloadKey(
-      (current) => current + 1
-    )
-  }
+  const retryPanelDataLoad =
+    () => {
+      setCatalogReloadKey(
+        (current) =>
+          current + 1
+      )
+    }
 
   /*
    * =========================================================
@@ -182,51 +264,72 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
-    const loadInitialSession = async () => {
-      try {
-        const {
-          data: { session: currentSession },
-          error
-        } = await supabase.auth.getSession()
+    const loadInitialSession =
+      async () => {
+        try {
+          const {
+            data: {
+              session:
+                currentSession
+            },
+            error
+          } =
+            await supabase.auth.getSession()
 
-        if (error) {
+          if (error) {
+            console.error(
+              'Supabase oturumu alınamadı:',
+              error.message
+            )
+          }
+
+          if (isMounted) {
+            setSession(
+              currentSession
+            )
+
+            setAuthLoading(
+              false
+            )
+          }
+        } catch (error) {
           console.error(
-            'Supabase oturumu alınamadı:',
-            error.message
+            'Oturum kontrolü sırasında hata:',
+            error
           )
-        }
 
-        if (isMounted) {
-          setSession(currentSession)
-          setAuthLoading(false)
-        }
-      } catch (error) {
-        console.error(
-          'Oturum kontrolü sırasında hata:',
-          error
-        )
-
-        if (isMounted) {
-          setSession(null)
-          setAuthLoading(false)
+          if (isMounted) {
+            setSession(null)
+            setAuthLoading(
+              false
+            )
+          }
         }
       }
-    }
 
     loadInitialSession()
 
     const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange(
-      (_event, currentSession) => {
-        if (!isMounted) {
-          return
-        }
-
-        setSession(currentSession)
-        setAuthLoading(false)
+      data: {
+        subscription
       }
-    )
+    } =
+      supabase.auth.onAuthStateChange(
+        (
+          _event,
+          currentSession
+        ) => {
+          if (!isMounted) {
+            return
+          }
+
+          setSession(
+            currentSession
+          )
+
+          setAuthLoading(false)
+        }
+      )
 
     return () => {
       isMounted = false
@@ -245,44 +348,67 @@ function App() {
     isDirty,
     sourceLabel = 'Bu ekran'
   ) => {
-    setUnsavedSources((current) => {
-      if (isDirty) {
-        return {
-          ...current,
-          [sourceKey]: sourceLabel
+    setUnsavedSources(
+      (current) => {
+        if (isDirty) {
+          return {
+            ...current,
+            [sourceKey]:
+              sourceLabel
+          }
         }
+
+        if (
+          !(
+            sourceKey in
+            current
+          )
+        ) {
+          return current
+        }
+
+        const nextSources = {
+          ...current
+        }
+
+        delete nextSources[
+          sourceKey
+        ]
+
+        return nextSources
       }
-
-      if (!(sourceKey in current)) {
-        return current
-      }
-
-      const nextSources = {
-        ...current
-      }
-
-      delete nextSources[sourceKey]
-
-      return nextSources
-    })
+    )
   }
 
-  const clearUnsavedSource = (sourceKey) => {
-    setUnsavedSource(sourceKey, false)
+  const clearUnsavedSource = (
+    sourceKey
+  ) => {
+    setUnsavedSource(
+      sourceKey,
+      false
+    )
   }
 
-  const clearAllUnsavedSources = () => {
-    setUnsavedSources({})
-  }
+  const clearAllUnsavedSources =
+    () => {
+      setUnsavedSources({})
+    }
 
-  function requestUnsavedAction(action) {
+  function requestUnsavedAction(
+    action
+  ) {
     if (!hasUnsavedChanges) {
       action()
       return
     }
 
-    setPendingAction(() => action)
-    setShowUnsavedModal(true)
+    setPendingAction(
+      () => action
+    )
+
+    setShowUnsavedModal(
+      true
+    )
   }
 
   const createUnsavedPageApi = (
@@ -301,33 +427,56 @@ function App() {
     },
 
     markClean: () => {
-      clearUnsavedSource(sourceKey)
+      clearUnsavedSource(
+        sourceKey
+      )
     },
 
-    requestAction: (action) => {
-      requestUnsavedAction(action)
+    requestAction: (
+      action
+    ) => {
+      requestUnsavedAction(
+        action
+      )
     },
 
     hasUnsavedChanges:
-      Boolean(unsavedSources[sourceKey])
+      Boolean(
+        unsavedSources[
+          sourceKey
+        ]
+      )
   })
 
-  const stayOnCurrentPage = () => {
-    setPendingAction(null)
-    setShowUnsavedModal(false)
-  }
+  const stayOnCurrentPage =
+    () => {
+      setPendingAction(null)
 
-  const discardChangesAndContinue = () => {
-    const actionToRun = pendingAction
-
-    clearAllUnsavedSources()
-    setPendingAction(null)
-    setShowUnsavedModal(false)
-
-    if (typeof actionToRun === 'function') {
-      actionToRun()
+      setShowUnsavedModal(
+        false
+      )
     }
-  }
+
+  const discardChangesAndContinue =
+    () => {
+      const actionToRun =
+        pendingAction
+
+      clearAllUnsavedSources()
+
+      setPendingAction(null)
+
+      setShowUnsavedModal(
+        false
+      )
+
+      if (
+        typeof actionToRun ===
+        'function'
+      ) {
+        actionToRun()
+      }
+    }
 
   /*
    * =========================================================
@@ -336,14 +485,17 @@ function App() {
    */
 
   useEffect(() => {
-    if (!hasUnsavedChanges) {
+    if (
+      !hasUnsavedChanges
+    ) {
       return undefined
     }
 
-    const handleBeforeUnload = (event) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
+    const handleBeforeUnload =
+      (event) => {
+        event.preventDefault()
+        event.returnValue = ''
+      }
 
     window.addEventListener(
       'beforeunload',
@@ -365,21 +517,32 @@ function App() {
    */
 
   useEffect(() => {
-    if (!showUnsavedModal) {
+    if (
+      !showUnsavedModal
+    ) {
       return undefined
     }
 
     const previousOverflow =
-      document.body.style.overflow
+      document.body.style
+        .overflow
 
-    document.body.style.overflow = 'hidden'
+    document.body.style.overflow =
+      'hidden'
 
-    const handleModalKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setPendingAction(null)
-        setShowUnsavedModal(false)
+    const handleModalKeyDown =
+      (event) => {
+        if (
+          event.key ===
+          'Escape'
+        ) {
+          setPendingAction(null)
+
+          setShowUnsavedModal(
+            false
+          )
+        }
       }
-    }
 
     document.addEventListener(
       'keydown',
@@ -403,59 +566,70 @@ function App() {
    * =========================================================
    */
 
-  const handleLogin = async (event) => {
-    event.preventDefault()
+  const handleLogin =
+    async (event) => {
+      event.preventDefault()
 
-    const cleanEmail = email.trim()
+      const cleanEmail =
+        email.trim()
 
-    setLoginError('')
+      setLoginError('')
 
-    if (!cleanEmail || !password) {
-      setLoginError(
-        'Lütfen e-posta ve şifre alanlarını doldurunuz.'
-      )
-      return
-    }
-
-    setLoginLoading(true)
-
-    try {
-      const { error } =
-        await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password
-        })
-
-      if (error) {
-        if (
-          error.message ===
-          'Invalid login credentials'
-        ) {
-          setLoginError('E-posta veya şifre hatalı.')
-        } else {
-          setLoginError(
-            `Giriş yapılamadı: ${error.message}`
-          )
-        }
+      if (
+        !cleanEmail ||
+        !password
+      ) {
+        setLoginError(
+          'Lütfen e-posta ve şifre alanlarını doldurunuz.'
+        )
 
         return
       }
 
-      setPassword('')
-      setLoginError('')
-    } catch (error) {
-      console.error(
-        'Giriş sırasında beklenmeyen hata:',
-        error
-      )
+      setLoginLoading(true)
 
-      setLoginError(
-        'Giriş sırasında beklenmeyen bir hata oluştu.'
-      )
-    } finally {
-      setLoginLoading(false)
+      try {
+        const { error } =
+          await supabase.auth.signInWithPassword(
+            {
+              email:
+                cleanEmail,
+              password
+            }
+          )
+
+        if (error) {
+          if (
+            error.message ===
+            'Invalid login credentials'
+          ) {
+            setLoginError(
+              'E-posta veya şifre hatalı.'
+            )
+          } else {
+            setLoginError(
+              `Giriş yapılamadı: ${error.message}`
+            )
+          }
+
+          return
+        }
+
+        setPassword('')
+        setLoginError('')
+      } catch (error) {
+        console.error(
+          'Giriş sırasında beklenmeyen hata:',
+          error
+        )
+
+        setLoginError(
+          'Giriş sırasında beklenmeyen bir hata oluştu.'
+        )
+      } finally {
+        setLoginLoading(false)
+      }
     }
-  }
 
   /*
    * =========================================================
@@ -463,14 +637,20 @@ function App() {
    * =========================================================
    */
 
-  const handleMenuClick = (page) => {
-    if (page === activePage) {
+  const handleMenuClick = (
+    page
+  ) => {
+    if (
+      page === activePage
+    ) {
       return
     }
 
-    requestUnsavedAction(() => {
-      setActivePage(page)
-    })
+    requestUnsavedAction(
+      () => {
+        setActivePage(page)
+      }
+    )
   }
 
   /*
@@ -479,40 +659,48 @@ function App() {
    * =========================================================
    */
 
-  const performLogout = async () => {
-    try {
-      const { error } =
-        await supabase.auth.signOut()
+  const performLogout =
+    async () => {
+      try {
+        const { error } =
+          await supabase.auth.signOut()
 
-      if (error) {
-        alert(
-          `Çıkış yapılamadı: ${error.message}`
+        if (error) {
+          alert(
+            `Çıkış yapılamadı: ${error.message}`
+          )
+
+          return
+        }
+
+        clearAllUnsavedSources()
+        clearAppData()
+
+        setSession(null)
+
+        setActivePage(
+          'dashboard'
         )
-        return
+
+        setEmail('')
+        setPassword('')
+        setLoginError('')
+      } catch (error) {
+        console.error(
+          'Çıkış sırasında beklenmeyen hata:',
+          error
+        )
+
+        alert(
+          'Çıkış sırasında beklenmeyen bir hata oluştu.'
+        )
       }
-
-      clearAllUnsavedSources()
-      clearAppData()
-
-      setSession(null)
-      setActivePage('dashboard')
-      setEmail('')
-      setPassword('')
-      setLoginError('')
-    } catch (error) {
-      console.error(
-        'Çıkış sırasında beklenmeyen hata:',
-        error
-      )
-
-      alert(
-        'Çıkış sırasında beklenmeyen bir hata oluştu.'
-      )
     }
-  }
 
   const handleLogout = () => {
-    requestUnsavedAction(performLogout)
+    requestUnsavedAction(
+      performLogout
+    )
   }
 
   /*
@@ -524,7 +712,9 @@ function App() {
   if (authLoading) {
     return (
       <div className="app-loading-screen">
-        <LoadingState text="Oturum kontrol ediliyor..." />
+        <LoadingState
+          text="Oturum kontrol ediliyor..."
+        />
       </div>
     )
   }
@@ -541,10 +731,18 @@ function App() {
         email={email}
         password={password}
         setEmail={setEmail}
-        setPassword={setPassword}
-        handleLogin={handleLogin}
-        loginLoading={loginLoading}
-        loginError={loginError}
+        setPassword={
+          setPassword
+        }
+        handleLogin={
+          handleLogin
+        }
+        loginLoading={
+          loginLoading
+        }
+        loginError={
+          loginError
+        }
       />
     )
   }
@@ -552,7 +750,9 @@ function App() {
   if (dataLoading) {
     return (
       <div className="app-loading-screen">
-        <LoadingState text="Branşlar ve paketler yükleniyor..." />
+        <LoadingState
+          text="Branşlar, paketler ve öğretmenler yükleniyor..."
+        />
       </div>
     )
   }
@@ -563,7 +763,9 @@ function App() {
         <ErrorState
           title="Panel verileri yüklenemedi"
           message={dataError}
-          onRetry={retryCatalogLoad}
+          onRetry={
+            retryPanelDataLoad
+          }
         />
       </div>
     )
@@ -578,35 +780,75 @@ function App() {
   return (
     <div className="app">
       <Sidebar
-        activePage={activePage}
-        handleMenuClick={handleMenuClick}
-        handleLogout={handleLogout}
+        activePage={
+          activePage
+        }
+        handleMenuClick={
+          handleMenuClick
+        }
+        handleLogout={
+          handleLogout
+        }
       />
 
       <main className="dashboard">
-        {activePage === 'dashboard' && (
+        {activePage ===
+          'dashboard' && (
           <Dashboard
-            students={students}
-            teachers={teachers}
-            packages={packages}
-            lessonPlans={lessonPlans}
-            payments={payments}
-            otherIncomes={otherIncomes}
-            teacherPayments={teacherPayments}
-            onNavigate={handleMenuClick}
+            students={
+              students
+            }
+            teachers={
+              teachers
+            }
+            packages={
+              packages
+            }
+            lessonPlans={
+              lessonPlans
+            }
+            payments={
+              payments
+            }
+            otherIncomes={
+              otherIncomes
+            }
+            teacherPayments={
+              teacherPayments
+            }
+            onNavigate={
+              handleMenuClick
+            }
           />
         )}
 
-        {activePage === 'students' && (
+        {activePage ===
+          'students' && (
           <Students
-            students={students}
-            setStudents={setStudents}
-            lessonPlans={lessonPlans}
-            setLessonPlans={setLessonPlans}
-            packages={packages}
-            teachers={teachers}
-            payments={payments}
-            setPayments={setPayments}
+            students={
+              students
+            }
+            setStudents={
+              setStudents
+            }
+            lessonPlans={
+              lessonPlans
+            }
+            setLessonPlans={
+              setLessonPlans
+            }
+            packages={
+              packages
+            }
+            teachers={
+              teachers
+            }
+            payments={
+              payments
+            }
+            setPayments={
+              setPayments
+            }
             unsavedChanges={createUnsavedPageApi(
               'students',
               'Öğrenci işlemleri'
@@ -614,12 +856,21 @@ function App() {
           />
         )}
 
-        {activePage === 'packages' && (
+        {activePage ===
+          'packages' && (
           <Packages
-            packages={packages}
-            setPackages={setPackages}
-            specialties={specialties}
-            setSpecialties={setSpecialties}
+            packages={
+              packages
+            }
+            setPackages={
+              setPackages
+            }
+            specialties={
+              specialties
+            }
+            setSpecialties={
+              setSpecialties
+            }
             unsavedChanges={createUnsavedPageApi(
               'packages',
               'Paket işlemleri'
@@ -627,16 +878,33 @@ function App() {
           />
         )}
 
-        {activePage === 'teachers' && (
+        {activePage ===
+          'teachers' && (
           <Teachers
-            teachers={teachers}
-            setTeachers={setTeachers}
-            specialties={specialties}
-            setSpecialties={setSpecialties}
-            students={students}
-            lessonPlans={lessonPlans}
-            payments={payments}
-            teacherPayments={teacherPayments}
+            teachers={
+              teachers
+            }
+            setTeachers={
+              setTeachers
+            }
+            specialties={
+              specialties
+            }
+            setSpecialties={
+              setSpecialties
+            }
+            students={
+              students
+            }
+            lessonPlans={
+              lessonPlans
+            }
+            payments={
+              payments
+            }
+            teacherPayments={
+              teacherPayments
+            }
             unsavedChanges={createUnsavedPageApi(
               'teachers',
               'Öğretmen işlemleri'
@@ -644,13 +912,24 @@ function App() {
           />
         )}
 
-        {activePage === 'schedule' && (
+        {activePage ===
+          'schedule' && (
           <Schedule
-            lessonPlans={lessonPlans}
-            setLessonPlans={setLessonPlans}
-            students={students}
-            teachers={teachers}
-            packages={packages}
+            lessonPlans={
+              lessonPlans
+            }
+            setLessonPlans={
+              setLessonPlans
+            }
+            students={
+              students
+            }
+            teachers={
+              teachers
+            }
+            packages={
+              packages
+            }
             unsavedChanges={createUnsavedPageApi(
               'schedule',
               'Ders programı işlemleri'
@@ -658,13 +937,24 @@ function App() {
           />
         )}
 
-        {activePage === 'lesson-status' && (
+        {activePage ===
+          'lesson-status' && (
           <LessonStatusTracking
-            lessons={lessonPlans}
-            setLessons={setLessonPlans}
-            teachers={teachers}
-            students={students}
-            packages={packages}
+            lessons={
+              lessonPlans
+            }
+            setLessons={
+              setLessonPlans
+            }
+            teachers={
+              teachers
+            }
+            students={
+              students
+            }
+            packages={
+              packages
+            }
             unsavedChanges={createUnsavedPageApi(
               'lesson-status',
               'Ders durumu işlemleri'
@@ -672,12 +962,21 @@ function App() {
           />
         )}
 
-        {activePage === 'payments' && (
+        {activePage ===
+          'payments' && (
           <Payments
-            students={students}
-            setStudents={setStudents}
-            payments={payments}
-            setPayments={setPayments}
+            students={
+              students
+            }
+            setStudents={
+              setStudents
+            }
+            payments={
+              payments
+            }
+            setPayments={
+              setPayments
+            }
             unsavedChanges={createUnsavedPageApi(
               'payments',
               'Tahsilat işlemleri'
@@ -685,19 +984,42 @@ function App() {
           />
         )}
 
-        {activePage === 'finance' && (
+        {activePage ===
+          'finance' && (
           <Finance
-            students={students}
-            payments={payments}
-            teachers={teachers}
-            packages={packages}
-            lessonPlans={lessonPlans}
-            otherIncomes={otherIncomes}
-            setOtherIncomes={setOtherIncomes}
-            expenses={expenses}
-            setExpenses={setExpenses}
-            teacherPayments={teacherPayments}
-            setTeacherPayments={setTeacherPayments}
+            students={
+              students
+            }
+            payments={
+              payments
+            }
+            teachers={
+              teachers
+            }
+            packages={
+              packages
+            }
+            lessonPlans={
+              lessonPlans
+            }
+            otherIncomes={
+              otherIncomes
+            }
+            setOtherIncomes={
+              setOtherIncomes
+            }
+            expenses={
+              expenses
+            }
+            setExpenses={
+              setExpenses
+            }
+            teacherPayments={
+              teacherPayments
+            }
+            setTeacherPayments={
+              setTeacherPayments
+            }
             unsavedChanges={createUnsavedPageApi(
               'finance',
               'Finans işlemleri'
@@ -710,7 +1032,9 @@ function App() {
         <div
           className="unsaved-changes-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event
+          ) => {
             if (
               event.target ===
               event.currentTarget
@@ -732,20 +1056,32 @@ function App() {
 
             <div className="unsaved-changes-content">
               <h2 id="unsaved-changes-title">
-                Kaydedilmemiş değişiklikler var
+                Kaydedilmemiş
+                değişiklikler var
               </h2>
 
               <p id="unsaved-changes-description">
-                Bu sayfadan ayrılırsanız yaptığınız
-                değişiklikler kaybolacaktır.
+                Bu sayfadan
+                ayrılırsanız yaptığınız
+                değişiklikler
+                kaybolacaktır.
               </p>
 
-              {unsavedSourceLabels.length > 0 && (
+              {unsavedSourceLabels.length >
+                0 && (
                 <div className="unsaved-source-list">
                   {unsavedSourceLabels.map(
-                    (sourceLabel) => (
-                      <span key={sourceLabel}>
-                        {sourceLabel}
+                    (
+                      sourceLabel
+                    ) => (
+                      <span
+                        key={
+                          sourceLabel
+                        }
+                      >
+                        {
+                          sourceLabel
+                        }
                       </span>
                     )
                   )}
@@ -757,7 +1093,9 @@ function App() {
               <button
                 type="button"
                 className="unsaved-stay-button"
-                onClick={stayOnCurrentPage}
+                onClick={
+                  stayOnCurrentPage
+                }
               >
                 Sayfada Kal
               </button>

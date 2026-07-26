@@ -1,28 +1,38 @@
 import { useRef, useState } from 'react'
+
+import {
+  LoadingButton
+} from '../components/AsyncState'
+
+import {
+  createSpecialty
+} from '../services/catalogService'
+
+import {
+  createTeacher,
+  reactivateTeacher,
+  setTeacherPassive,
+  updateTeacher
+} from '../services/teacherService'
 import ExcelJS from 'exceljs'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
 import '../styles/teachers.css'
 
+import {
+  formatDate,
+  getTodayKey
+} from '../utils/dateHelpers'
+
+import {
+  areIdsEqual,
+  normalizeSearchText,
+  normalizeStatusText
+} from '../utils/textHelpers'
+
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024
 const MAX_CV_SIZE = 10 * 1024 * 1024
 const ALLOWED_CV_EXTENSIONS = ['pdf', 'doc', 'docx']
-
-const formatDate = (dateValue) => {
-  if (!dateValue) {
-    return '-'
-  }
-
-  const date = new Date(
-    `${String(dateValue).slice(0, 10)}T00:00:00`
-  )
-
-  if (Number.isNaN(date.getTime())) {
-    return String(dateValue)
-  }
-
-  return date.toLocaleDateString('tr-TR')
-}
 
 const formatDateTime = (date = new Date()) =>
   date.toLocaleString('tr-TR', {
@@ -46,16 +56,6 @@ const sanitizeFileName = (value) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'ogretmen'
 
-const getTodayKey = () => {
-  const date = new Date()
-
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0')
-  ].join('-')
-}
-
 const configurePdfMakeFonts = () => {
   const virtualFonts =
     pdfFonts?.pdfMake?.vfs ||
@@ -75,6 +75,33 @@ const getPdfImage = (value) =>
     ? value
     : null
 
+const getSpecialtyId = (specialty) =>
+  typeof specialty === 'string'
+    ? specialty
+    : specialty?.id ?? specialty?.name ?? ''
+
+const getSpecialtyName = (specialty) =>
+  typeof specialty === 'string'
+    ? specialty
+    : specialty?.name ?? ''
+
+const getSpecialtyNames = (specialties = []) =>
+  (Array.isArray(specialties) ? specialties : [])
+    .map(getSpecialtyName)
+    .filter(Boolean)
+
+const getSpecialtyText = (teacher) => {
+  const names = getSpecialtyNames(
+    teacher?.specialties
+  )
+
+  if (names.length > 0) {
+    return names.join(', ')
+  }
+
+  return teacher?.branch || '-'
+}
+
 function Teachers({
   teachers = [],
   setTeachers,
@@ -91,8 +118,14 @@ function Teachers({
     specialties: [],
     isActive: true,
     photo: '',
+    photoFile: null,
+    photoPath: '',
+    removePhoto: false,
     cvFile: null,
     cvFileName: '',
+    cvFilePath: '',
+    cvUrl: '',
+    removeCv: false,
     commissionRate: 50,
     paymentDay: '',
     notes: ''
@@ -106,6 +139,11 @@ function Teachers({
   const [teacherStatusFilter, setTeacherStatusFilter] = useState('active')
   const [isExportingExcel, setIsExportingExcel] = useState(false)
   const [creatingTeacherPdfId, setCreatingTeacherPdfId] = useState(null)
+
+  const [isSavingTeacher, setIsSavingTeacher] = useState(false)
+  const [isSavingSpecialty, setIsSavingSpecialty] = useState(false)
+  const [changingTeacherStatusId, setChangingTeacherStatusId] = useState(null)
+  const [actionError, setActionError] = useState('')
 
   const photoInputRef = useRef(null)
   const cvInputRef = useRef(null)
@@ -132,6 +170,7 @@ function Teachers({
   const handleTeacherChange = (event) => {
     const { name, value } = event.target
 
+    setActionError('')
     unsavedChanges?.markDirty?.()
 
     setTeacherForm((current) => ({
@@ -141,29 +180,42 @@ function Teachers({
   }
 
   const handleSpecialtyToggle = (specialty) => {
+    setActionError('')
     unsavedChanges?.markDirty?.()
+
+    const specialtyId = String(
+      getSpecialtyId(specialty)
+    )
 
     setTeacherForm((current) => {
       const alreadySelected =
-        current.specialties.includes(specialty)
+        current.specialties.some(
+          (item) =>
+            String(item) === specialtyId
+        )
 
       return {
         ...current,
         specialties: alreadySelected
           ? current.specialties.filter(
-              (item) => item !== specialty
+              (item) =>
+                String(item) !== specialtyId
             )
-          : [...current.specialties, specialty]
+          : [
+              ...current.specialties,
+              specialtyId
+            ]
       }
     })
   }
 
   const handleNewSpecialtyChange = (event) => {
+    setActionError('')
     unsavedChanges?.markDirty?.()
     setNewSpecialty(event.target.value)
   }
 
-  const handleAddSpecialty = () => {
+  const handleAddSpecialty = async () => {
     const value = newSpecialty.trim()
 
     if (!value) {
@@ -171,27 +223,71 @@ function Teachers({
       return
     }
 
-    const alreadyExists = specialties.some(
+    const normalizedValue =
+      normalizeSearchText(value)
+
+    const existingSpecialty = specialties.find(
       (item) =>
-        item.toLocaleLowerCase('tr-TR') ===
-        value.toLocaleLowerCase('tr-TR')
+        normalizeSearchText(
+          getSpecialtyName(item)
+        ) === normalizedValue
     )
 
-    if (alreadyExists) {
-      alert('Bu uzmanlık zaten listede bulunuyor.')
+    if (existingSpecialty) {
+      const existingId = String(
+        getSpecialtyId(existingSpecialty)
+      )
+
+      setTeacherForm((current) => ({
+        ...current,
+        specialties: current.specialties.includes(existingId)
+          ? current.specialties
+          : [
+              ...current.specialties,
+              existingId
+            ]
+      }))
+
+      setNewSpecialty('')
       return
     }
 
-    unsavedChanges?.markDirty?.()
+    setIsSavingSpecialty(true)
+    setActionError('')
 
-    setSpecialties((current) => [...current, value])
+    try {
+      const savedSpecialty =
+        await createSpecialty(value)
 
-    setTeacherForm((current) => ({
-      ...current,
-      specialties: [...current.specialties, value]
-    }))
+      setSpecialties((current) => [
+        ...current,
+        savedSpecialty
+      ])
 
-    setNewSpecialty('')
+      setTeacherForm((current) => ({
+        ...current,
+        specialties: [
+          ...current.specialties,
+          String(savedSpecialty.id)
+        ]
+      }))
+
+      setNewSpecialty('')
+      unsavedChanges?.markDirty?.()
+    } catch (error) {
+      console.error(
+        'Uzmanlık ekleme hatası:',
+        error
+      )
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Uzmanlık eklenemedi.'
+      )
+    } finally {
+      setIsSavingSpecialty(false)
+    }
   }
 
   const handlePhotoChange = (event) => {
@@ -220,7 +316,9 @@ function Teachers({
     reader.onloadend = () => {
       setTeacherForm((current) => ({
         ...current,
-        photo: String(reader.result || '')
+        photo: String(reader.result || ''),
+        photoFile: file,
+        removePhoto: false
       }))
     }
 
@@ -232,7 +330,9 @@ function Teachers({
 
     setTeacherForm((current) => ({
       ...current,
-      photo: ''
+      photo: '',
+      photoFile: null,
+      removePhoto: true
     }))
 
     if (photoInputRef.current) {
@@ -272,7 +372,8 @@ function Teachers({
     setTeacherForm((current) => ({
       ...current,
       cvFile: file,
-      cvFileName: file.name
+      cvFileName: file.name,
+      removeCv: false
     }))
   }
 
@@ -318,7 +419,10 @@ function Teachers({
     setTeacherForm((current) => ({
       ...current,
       cvFile: null,
-      cvFileName: ''
+      cvFileName: '',
+      cvFilePath: '',
+      cvUrl: '',
+      removeCv: true
     }))
 
     if (cvInputRef.current) {
@@ -329,6 +433,7 @@ function Teachers({
   const performOpenAddForm = () => {
     unsavedChanges?.markClean?.()
 
+    setActionError('')
     setTeacherForm(createEmptyForm())
     setNewSpecialty('')
     setEditingTeacherId(null)
@@ -343,6 +448,7 @@ function Teachers({
   const performOpenEditForm = (teacher) => {
     unsavedChanges?.markClean?.()
 
+    setActionError('')
     setTeacherForm({
       fullName: teacher.fullName || '',
       phone: teacher.phone || '',
@@ -350,8 +456,15 @@ function Teachers({
       birthDate: teacher.birthDate || '',
       gender: teacher.gender || '',
       specialties:
-        teacher.specialties ||
-        (teacher.branch ? [teacher.branch] : []),
+        Array.isArray(teacher.specialties) &&
+        teacher.specialties.length > 0
+          ? teacher.specialties
+              .map(getSpecialtyId)
+              .filter(Boolean)
+              .map(String)
+          : teacher.branch
+            ? [String(teacher.branch)]
+            : [],
       isActive:
         teacher.isActive !== undefined
           ? teacher.isActive
@@ -360,8 +473,20 @@ function Teachers({
         teacher.photo ||
         teacher.profilePhotoUrl ||
         '',
-      cvFile: teacher.cvFile || null,
-      cvFileName: teacher.cvFileName || '',
+      photoFile: null,
+      photoPath:
+        teacher.photoPath ||
+        teacher.profilePhotoPath ||
+        '',
+      removePhoto: false,
+      cvFile: null,
+      cvFileName:
+        teacher.cvFileName || '',
+      cvFilePath:
+        teacher.cvFilePath || '',
+      cvUrl:
+        teacher.cvUrl || '',
+      removeCv: false,
       commissionRate:
         teacher.commissionRate !== undefined
           ? teacher.commissionRate
@@ -388,6 +513,7 @@ function Teachers({
   const performCloseForm = () => {
     unsavedChanges?.markClean?.()
 
+    setActionError('')
     setTeacherForm(createEmptyForm())
     setNewSpecialty('')
     setEditingTeacherId(null)
@@ -396,10 +522,17 @@ function Teachers({
   }
 
   const closeForm = () => {
+    if (
+      isSavingTeacher ||
+      isSavingSpecialty
+    ) {
+      return
+    }
+
     runProtectedAction(performCloseForm)
   }
 
-  const saveTeacher = (event) => {
+  const saveTeacher = async (event) => {
     event.preventDefault()
 
     if (!teacherForm.fullName.trim()) {
@@ -437,7 +570,7 @@ function Teachers({
     )
 
     if (
-      Number.isNaN(commissionRate) ||
+      !Number.isFinite(commissionRate) ||
       commissionRate < 0 ||
       commissionRate > 100
     ) {
@@ -447,7 +580,9 @@ function Teachers({
       return
     }
 
-    const paymentDay = Number(teacherForm.paymentDay)
+    const paymentDay = Number(
+      teacherForm.paymentDay
+    )
 
     if (
       !Number.isInteger(paymentDay) ||
@@ -458,70 +593,64 @@ function Teachers({
       return
     }
 
-    const existingTeacher = editingTeacherId
-      ? teachers.find(
-          (teacher) =>
-            teacher.id === editingTeacherId
-        )
-      : null
+    setIsSavingTeacher(true)
+    setActionError('')
 
-    const teacherData = {
-      ...(existingTeacher || {}),
-      id: editingTeacherId || Date.now(),
-      fullName: teacherForm.fullName.trim(),
-      phone: teacherForm.phone.trim(),
-      email: teacherForm.email.trim(),
-      birthDate: teacherForm.birthDate,
-      gender: teacherForm.gender,
-      specialties: teacherForm.specialties,
-      branch: teacherForm.specialties[0] || '',
-      isActive: teacherForm.isActive,
-      status: teacherForm.isActive
-        ? 'Aktif'
-        : 'Pasif',
-      photo: teacherForm.photo,
-      profilePhotoUrl: teacherForm.photo,
-      cvFile:
-        teacherForm.cvFile ||
-        existingTeacher?.cvFile ||
-        null,
-      cvFileName:
-        teacherForm.cvFileName ||
-        existingTeacher?.cvFileName ||
-        '',
-      commissionRate,
-      paymentDay,
-      teacherPaymentDay: paymentDay,
-      notes: teacherForm.notes.trim()
-    }
+    try {
+      const savedTeacher =
+        editingTeacherId
+          ? await updateTeacher(
+              editingTeacherId,
+              teacherForm
+            )
+          : await createTeacher(
+              teacherForm
+            )
 
-    if (editingTeacherId) {
-      setTeachers((current) =>
-        current.map((teacher) =>
-          teacher.id === editingTeacherId
-            ? teacherData
-            : teacher
-        )
+      setTeachers((current) => {
+        if (editingTeacherId) {
+          return current.map((teacher) =>
+            areIdsEqual(
+              teacher.id,
+              editingTeacherId
+            )
+              ? savedTeacher
+              : teacher
+          )
+        }
+
+        return [
+          savedTeacher,
+          ...current
+        ]
+      })
+
+      unsavedChanges?.markClean?.()
+      performCloseForm()
+    } catch (error) {
+      console.error(
+        'Öğretmen kaydetme hatası:',
+        error
       )
-    } else {
-      setTeachers((current) => [
-        ...current,
-        teacherData
-      ])
-    }
 
-    /*
-     * Kayıt başarıyla tamamlandığı için form artık temizdir.
-     * Koruma penceresi açılmadan form doğrudan kapatılır.
-     */
-    unsavedChanges?.markClean?.()
-    performCloseForm()
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Öğretmen kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingTeacher(false)
+    }
   }
 
-  const changeTeacherStatus = (teacher) => {
+  const changeTeacherStatus = async (teacher) => {
     const isCurrentlyActive =
       teacher.isActive !== false &&
-      teacher.status !== 'Pasif'
+      normalizeStatusText(
+        teacher.status
+      ) !== 'pasif'
+
+    setActionError('')
 
     if (isCurrentlyActive) {
       const passiveReason = window.prompt(
@@ -546,23 +675,44 @@ function Teachers({
         return
       }
 
-      const passiveDate = new Date()
-        .toISOString()
-        .slice(0, 10)
-
-      setTeachers((current) =>
-        current.map((item) =>
-          item.id === teacher.id
-            ? {
-                ...item,
-                isActive: false,
-                status: 'Pasif',
-                passiveDate,
-                passiveReason: passiveReason.trim()
-              }
-            : item
-        )
+      setChangingTeacherStatusId(
+        teacher.id
       )
+
+      try {
+        const updatedTeacher =
+          await setTeacherPassive(
+            teacher.id,
+            passiveReason,
+            getTodayKey()
+          )
+
+        setTeachers((current) =>
+          current.map((item) =>
+            areIdsEqual(
+              item.id,
+              teacher.id
+            )
+              ? updatedTeacher
+              : item
+          )
+        )
+      } catch (error) {
+        console.error(
+          'Öğretmen pasife alma hatası:',
+          error
+        )
+
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : 'Öğretmen pasife alınamadı.'
+        )
+      } finally {
+        setChangingTeacherStatusId(
+          null
+        )
+      }
 
       return
     }
@@ -575,25 +725,55 @@ function Teachers({
       return
     }
 
-    setTeachers((current) =>
-      current.map((item) =>
-        item.id === teacher.id
-          ? {
-              ...item,
-              isActive: true,
-              status: 'Aktif',
-              reactivatedAt: new Date()
-                .toISOString()
-                .slice(0, 10),
-              passiveDate: '',
-              passiveReason: ''
-            }
-          : item
-      )
+    setChangingTeacherStatusId(
+      teacher.id
     )
+
+    try {
+      const updatedTeacher =
+        await reactivateTeacher(
+          teacher.id,
+          getTodayKey()
+        )
+
+      setTeachers((current) =>
+        current.map((item) =>
+          areIdsEqual(
+            item.id,
+            teacher.id
+          )
+            ? updatedTeacher
+            : item
+        )
+      )
+    } catch (error) {
+      console.error(
+        'Öğretmen aktifleştirme hatası:',
+        error
+      )
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Öğretmen aktifleştirilemedi.'
+      )
+    } finally {
+      setChangingTeacherStatusId(
+        null
+      )
+    }
   }
 
   const openCvFile = (teacher) => {
+    if (teacher.cvUrl) {
+      window.open(
+        teacher.cvUrl,
+        '_blank',
+        'noopener,noreferrer'
+      )
+      return
+    }
+
     if (!teacher.cvFile) {
       return
     }
@@ -620,7 +800,9 @@ function Teachers({
 
   const isTeacherActive = (teacher) =>
     teacher.isActive !== false &&
-    teacher.status !== 'Pasif'
+    normalizeStatusText(
+      teacher.status
+    ) !== 'pasif'
 
   const activeTeacherCount = teachers.filter(
     isTeacherActive
@@ -782,9 +964,8 @@ function Teachers({
           email: teacher.email || '',
           birthDate: formatDate(teacher.birthDate),
           gender: teacher.gender || '',
-          specialties: teacher.specialties?.length
-            ? teacher.specialties.join(', ')
-            : teacher.branch || '',
+          specialties:
+            getSpecialtyText(teacher),
           commissionRate: Number(teacher.commissionRate || 0),
           paymentDay: paymentDay
             ? `Her ayın ${paymentDay}. günü`
@@ -898,9 +1079,8 @@ function Teachers({
       const paymentDay = getTeacherPaymentDay(teacher)
       const isActive = isTeacherActive(teacher)
       const statusText = isActive ? 'Aktif' : 'Pasif'
-      const specialtyText = teacher.specialties?.length
-        ? teacher.specialties.join(', ')
-        : teacher.branch || '-'
+      const specialtyText =
+        getSpecialtyText(teacher)
       const cvText =
         teacher.cvFileName ||
         (teacher.cvFile ? 'CV dosyası mevcut' : 'CV bulunmuyor')
@@ -1298,11 +1478,21 @@ function Teachers({
             className="manage-button"
             type="button"
             onClick={openAddForm}
+            disabled={isSavingTeacher}
           >
             + Öğretmen Ekle
           </button>
         </div>
       </section>
+
+      {actionError && (
+        <div
+          className="finance-empty-warning"
+          role="alert"
+        >
+          {actionError}
+        </div>
+      )}
 
       {showForm && (
         <section className="student-form-card teacher-form-card">
@@ -1317,6 +1507,10 @@ function Teachers({
               className="edit-section-button"
               type="button"
               onClick={closeForm}
+              disabled={
+                isSavingTeacher ||
+                isSavingSpecialty
+              }
             >
               Kapat
             </button>
@@ -1367,6 +1561,7 @@ function Teachers({
                     type="file"
                     accept="image/*"
                     onChange={handlePhotoChange}
+                    disabled={isSavingTeacher}
                   />
                 </label>
 
@@ -1562,31 +1757,41 @@ function Teachers({
                     </label>
 
                     <div className="specialty-grid">
-                      {specialties.map((specialty) => (
-                        <label
-                          className={`specialty-item ${
-                            teacherForm.specialties.includes(
-                              specialty
-                            )
-                              ? 'selected'
-                              : ''
-                          }`}
-                          key={specialty}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={teacherForm.specialties.includes(
-                              specialty
-                            )}
-                            onChange={() =>
-                              handleSpecialtyToggle(
-                                specialty
-                              )
-                            }
-                          />
-                          {specialty}
-                        </label>
-                      ))}
+                      {specialties.map((specialty) => {
+                        const specialtyId = String(
+                          getSpecialtyId(specialty)
+                        )
+                        const specialtyName =
+                          getSpecialtyName(specialty)
+                        const isSelected =
+                          teacherForm.specialties.some(
+                            (item) =>
+                              String(item) ===
+                              specialtyId
+                          )
+
+                        return (
+                          <label
+                            className={`specialty-item ${
+                              isSelected
+                                ? 'selected'
+                                : ''
+                            }`}
+                            key={specialtyId}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                handleSpecialtyToggle(
+                                  specialty
+                                )
+                              }
+                            />
+                            {specialtyName}
+                          </label>
+                        )
+                      })}
                     </div>
 
                     <div className="specialty-add-row specialty-add-row-bottom">
@@ -1598,12 +1803,15 @@ function Teachers({
                         placeholder="Yeni uzmanlık ekle, örn: Solfej"
                       />
 
-                      <button
+                      <LoadingButton
                         type="button"
+                        loading={isSavingSpecialty}
+                        loadingText="Ekleniyor..."
+                        disabled={isSavingTeacher}
                         onClick={handleAddSpecialty}
                       >
                         + Ekle
-                      </button>
+                      </LoadingButton>
                     </div>
                   </div>
 
@@ -1736,6 +1944,7 @@ function Teachers({
                   type="file"
                   accept=".pdf,.doc,.docx"
                   onChange={handleCvChange}
+                  disabled={isSavingTeacher}
                 />
               </label>
             </div>
@@ -1745,18 +1954,29 @@ function Teachers({
                 className="cancel-button"
                 type="button"
                 onClick={closeForm}
+                disabled={
+                  isSavingTeacher ||
+                  isSavingSpecialty
+                }
               >
                 İptal
               </button>
 
-              <button
+              <LoadingButton
                 className="save-button"
                 type="submit"
+                loading={isSavingTeacher}
+                loadingText={
+                  editingTeacherId
+                    ? 'Güncelleniyor...'
+                    : 'Kaydediliyor...'
+                }
+                disabled={isSavingSpecialty}
               >
                 {editingTeacherId
                   ? 'Güncelle'
                   : 'Kaydet'}
-              </button>
+              </LoadingButton>
             </div>
           </form>
         </section>
@@ -1886,13 +2106,12 @@ function Teachers({
                       </td>
 
                       <td>
-                        {teacher.specialties?.length
-                          ? teacher.specialties.join(', ')
-                          : teacher.branch || '-'}
+                        {getSpecialtyText(teacher)}
                       </td>
 
                       <td>
-                        {teacher.cvFile ? (
+                        {teacher.cvUrl ||
+                        teacher.cvFile ? (
                           <button
                             className="detail-button"
                             type="button"
@@ -1951,10 +2170,16 @@ function Teachers({
                               createTeacherPdf(teacher)
                             }
                             disabled={
-                              creatingTeacherPdfId === teacher.id
+                              areIdsEqual(
+                                creatingTeacherPdfId,
+                                teacher.id
+                              )
                             }
                           >
-                            {creatingTeacherPdfId === teacher.id
+                            {areIdsEqual(
+                              creatingTeacherPdfId,
+                              teacher.id
+                            )
                               ? 'Hazırlanıyor...'
                               : 'PDF'}
                           </button>
@@ -1962,6 +2187,10 @@ function Teachers({
                           <button
                             className="detail-button"
                             type="button"
+                            disabled={areIdsEqual(
+                              changingTeacherStatusId,
+                              teacher.id
+                            )}
                             onClick={() =>
                               openEditForm(teacher)
                             }
@@ -1969,13 +2198,19 @@ function Teachers({
                             Düzenle
                           </button>
 
-                          <button
+                          <LoadingButton
                             className={
                               isTeacherActive(teacher)
                                 ? 'teacher-passive-button'
                                 : 'teacher-reactivate-button'
                             }
                             type="button"
+                            loading={areIdsEqual(
+                              changingTeacherStatusId,
+                              teacher.id
+                            )}
+                            loadingText="İşleniyor..."
+                            disabled={isSavingTeacher}
                             onClick={() =>
                               changeTeacherStatus(
                                 teacher
@@ -1985,7 +2220,7 @@ function Teachers({
                             {isTeacherActive(teacher)
                               ? 'Pasife Al'
                               : 'Aktifleştir'}
-                          </button>
+                          </LoadingButton>
                         </div>
                       </td>
                     </tr>
