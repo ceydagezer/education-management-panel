@@ -1,19 +1,39 @@
 import { useRef, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
+
+import {
+  LoadingButton
+} from '../components/AsyncState'
+
+import {
+  createStudent,
+  reactivateStudent,
+  setStudentPassive,
+  updateStudent
+} from '../services/studentService'
+
 import '../styles/students.css'
 
-const formatPrice = (value) =>
-  Number(value || 0).toLocaleString('tr-TR', {
-    maximumFractionDigits: 2
-  })
+import {
+  addMonthsToDate,
+  addYearsToDate,
+  formatDate,
+  formatPrice,
+  getDateKey,
+  getTodayKey
+} from '../utils/dateHelpers'
 
-const formatDate = (value) => {
-  if (!value) return '-'
-  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString('tr-TR')
-}
+import {
+  getPaymentAmount,
+  getPaymentDate,
+  getPaymentPeriod,
+  isActivePayment
+} from '../utils/paymentSchedule'
+
+import {
+  areIdsEqual,
+  normalizeStatusText
+} from '../utils/textHelpers'
 
 const createStudentPackageId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -27,45 +47,6 @@ const createStudentPackageId = () => {
 
 const ARCHIVE_AFTER_MONTHS = 6
 const RETENTION_REVIEW_YEARS = 2
-
-const getDateKey = (value = new Date()) => {
-  const date = value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0')
-  ].join('-')
-}
-
-const addMonthsToDate = (dateValue, monthCount) => {
-  if (!dateValue) return ''
-
-  const date = new Date(`${String(dateValue).slice(0, 10)}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) return ''
-
-  const originalDay = date.getDate()
-  date.setDate(1)
-  date.setMonth(date.getMonth() + monthCount)
-
-  const lastDayOfTargetMonth = new Date(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    0
-  ).getDate()
-
-  date.setDate(Math.min(originalDay, lastDayOfTargetMonth))
-
-  return getDateKey(date)
-}
-
-const addYearsToDate = (dateValue, yearCount) =>
-  addMonthsToDate(dateValue, yearCount * 12)
 
 function Students({
   students = [],
@@ -151,6 +132,9 @@ function Students({
 
   const [statusFilter, setStatusFilter] = useState('active')
   const [isCreatingPdf, setIsCreatingPdf] = useState(false)
+  const [isSavingStudent, setIsSavingStudent] = useState(false)
+  const [changingStudentStatus, setChangingStudentStatus] = useState(false)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   /*
    * ÖĞRENCİ EKRANI KAYDEDİLMEMİŞ DEĞİŞİKLİK TAKİBİ
@@ -293,11 +277,6 @@ function Students({
     discardTargetDrafts()
   }
 
-  const normalizeStatusText = (value) =>
-    String(value || '')
-      .trim()
-      .toLocaleLowerCase('tr-TR')
-
   const activeTeachers = teachers.filter(
     (teacher) =>
       teacher.isActive !== false &&
@@ -306,8 +285,6 @@ function Students({
 
   const getTeacherName = (teacher) =>
     teacher?.fullName || teacher?.name || ''
-
-  const getTodayKey = () => getDateKey(new Date())
 
   const isStudentAnonymized = (student) =>
     student?.isAnonymized === true ||
@@ -437,7 +414,7 @@ function Students({
   const getStudentLessons = (student) =>
     lessonPlans.filter(
       (lesson) =>
-        String(lesson.studentId) === String(student.id) ||
+        areIdsEqual(lesson.studentId, student.id) ||
         normalizeStatusText(lesson.studentName) ===
           normalizeStatusText(student.fullName)
     )
@@ -445,9 +422,19 @@ function Students({
   const getStudentPayments = (student) =>
     payments.filter(
       (payment) =>
-        String(payment.studentId) === String(student.id) ||
-        normalizeStatusText(payment.studentName) ===
-          normalizeStatusText(student.fullName)
+        isActivePayment(payment) &&
+        (
+          areIdsEqual(
+            payment.studentId,
+            student.id
+          ) ||
+          normalizeStatusText(
+            payment.studentName
+          ) ===
+            normalizeStatusText(
+              student.fullName
+            )
+        )
     )
 
   const getDeletionBlockers = (student) => {
@@ -851,13 +838,13 @@ function Students({
   }
 
   const getPackageById = (packageId) =>
-    packages.find(
-      (item) => String(item.id) === String(packageId)
+    packages.find((item) =>
+      areIdsEqual(item.id, packageId)
     )
 
   const getTeacherById = (teacherId) =>
-    teachers.find(
-      (item) => String(item.id) === String(teacherId)
+    teachers.find((item) =>
+      areIdsEqual(item.id, teacherId)
     )
 
   const updatePackageDraftField = (
@@ -920,9 +907,14 @@ function Students({
       return false
     }
 
+    const agreedPrice = Number(
+      draft.agreedPrice
+    )
+
     if (
       draft.agreedPrice === '' ||
-      Number(draft.agreedPrice) <= 0
+      !Number.isFinite(agreedPrice) ||
+      agreedPrice <= 0
     ) {
       alert('Geçerli bir paket ücreti giriniz.')
       return false
@@ -1344,43 +1336,49 @@ function Students({
     return true
   }
 
-  const handleStudentSubmit = (event) => {
+  const handleStudentSubmit = async (event) => {
     event.preventDefault()
 
-    if (!validateStudentData(studentForm, true)) return
+    if (isSavingStudent) {
+      return
+    }
 
-    const newStudent = syncLegacyFields(
-      {
-        id: Date.now(),
-        ...studentForm,
-        tcNo: studentForm.tcNo.trim(),
-        fullName: studentForm.fullName.trim(),
-        registerDate: studentForm.registerDate.trim(),
-        phone: studentForm.phone.trim(),
-        lessonPlans: [],
-        isActive: true,
-        status: 'Aktif',
-        passiveDate: '',
-        passiveReason: '',
-        isArchived: false,
-        archivedAt: '',
-        archiveReason: '',
-        retentionReviewDate: '',
-        retentionStatus: 'Aktif Kayıt',
-        isAnonymized: false,
-        anonymizedAt: '',
-        reactivatedAt: ''
-      },
-      normalizeStudentPackages(studentForm)
-    )
+    if (!validateStudentData(studentForm, true)) {
+      return
+    }
 
-    setStudents((current) => [...current, newStudent])
-    setStudentForm(emptyStudentForm)
-    setPackageDraft(emptyPackageDraft)
-    setPackageEditingId(null)
-    setPackageEditorOpen(false)
-    clearAllDirtyFlags()
-    setStudentView('list')
+    setIsSavingStudent(true)
+
+    try {
+      const savedStudent =
+        await createStudent(studentForm)
+
+      setStudents((current) => [
+        savedStudent,
+        ...current
+      ])
+
+      setStudentForm(emptyStudentForm)
+      setPackageDraft(emptyPackageDraft)
+      setPackageEditingId(null)
+      setPackageEditorOpen(false)
+
+      clearAllDirtyFlags()
+      setStudentView('list')
+    } catch (error) {
+      console.error(
+        'Öğrenci kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingStudent(false)
+    }
   }
 
   const performShowStudentDetail = (student) => {
@@ -1454,7 +1452,11 @@ function Students({
     )
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
+    if (!selectedStudent || isSavingEdit) {
+      return
+    }
+
     if (
       !validateStudentData(
         editForm,
@@ -1464,36 +1466,52 @@ function Students({
       return
     }
 
-    const updatedStudent = syncLegacyFields(
-      {
-        ...editForm,
-        tcNo: String(editForm.tcNo || '').trim(),
-        fullName: String(editForm.fullName || '').trim(),
-        registerDate: String(editForm.registerDate || '').trim(),
-        phone: String(editForm.phone || '').trim()
-      },
-      normalizeStudentPackages(editForm)
-    )
+    setIsSavingEdit(true)
 
-    setStudents((current) =>
-      current.map((student) =>
-        student.id === selectedStudent.id ? updatedStudent : student
+    try {
+      const savedStudent =
+        await updateStudent(
+          selectedStudent.id,
+          editForm
+        )
+
+      setStudents((current) =>
+        current.map((student) =>
+          areIdsEqual(
+            student.id,
+            selectedStudent.id
+          )
+            ? savedStudent
+            : student
+        )
       )
-    )
 
-    setSelectedStudent(updatedStudent)
-    setEditForm(updatedStudent)
-    setEditingSection(null)
-    setEditPackageDraft(emptyPackageDraft)
-    setEditPackageEditingId(null)
-    setEditPackageEditorOpen(false)
+      setSelectedStudent(savedStudent)
+      setEditForm(savedStudent)
+      setEditingSection(null)
+      setEditPackageDraft(emptyPackageDraft)
+      setEditPackageEditingId(null)
+      setEditPackageEditorOpen(false)
 
-    updateDirtyFlags({
-      editForm: false,
-      editPackageDraft: false
-    })
+      updateDirtyFlags({
+        editForm: false,
+        editPackageDraft: false
+      })
+    } catch (error) {
+      console.error(
+        'Öğrenci güncelleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci güncellenemedi.'
+      )
+    } finally {
+      setIsSavingEdit(false)
+    }
   }
-
 
   const returnToStudentList = () => {
     runProtectedPageAction(() => {
@@ -1541,7 +1559,7 @@ function Students({
   const saveStudentLifecycleUpdate = (updatedStudent) => {
     setStudents((current) =>
       current.map((student) =>
-        student.id === updatedStudent.id
+        areIdsEqual(student.id, updatedStudent.id)
           ? updatedStudent
           : student
       )
@@ -1551,8 +1569,10 @@ function Students({
     setEditingSection(null)
   }
 
-  const handleToggleStudentStatus = () => {
-    if (!selectedStudent) return
+  const handleToggleStudentStatus = async () => {
+    if (!selectedStudent || changingStudentStatus) {
+      return
+    }
 
     if (isStudentActive(selectedStudent)) {
       const reason = window.prompt(
@@ -1560,24 +1580,41 @@ function Students({
         'Geçici olarak ara verdi'
       )
 
-      if (reason === null) return
-
-      const updatedStudent = {
-        ...selectedStudent,
-        isActive: false,
-        status: 'Pasif',
-        passiveDate: getTodayKey(),
-        passiveReason:
-          reason.trim() || 'Belirtilmedi',
-        isArchived: false,
-        archivedAt: '',
-        archiveReason: '',
-        retentionReviewDate: '',
-        retentionStatus:
-          'Saklama Süresi Devam Ediyor'
+      if (reason === null) {
+        return
       }
 
-      saveStudentLifecycleUpdate(updatedStudent)
+      const cleanReason =
+        reason.trim() || 'Belirtilmedi'
+
+      setChangingStudentStatus(true)
+
+      try {
+        const updatedStudent =
+          await setStudentPassive(
+            selectedStudent.id,
+            cleanReason,
+            getTodayKey()
+          )
+
+        saveStudentLifecycleUpdate(
+          updatedStudent
+        )
+      } catch (error) {
+        console.error(
+          'Öğrenci pasife alma hatası:',
+          error
+        )
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : 'Öğrenci pasife alınamadı.'
+        )
+      } finally {
+        setChangingStudentStatus(false)
+      }
+
       return
     }
 
@@ -1585,18 +1622,36 @@ function Students({
       `${selectedStudent.fullName} adlı öğrenciyi yeniden aktifleştirmek istediğinize emin misiniz?`
     )
 
-    if (!confirmActivation) return
-
-    const updatedStudent = {
-      ...selectedStudent,
-      isActive: true,
-      status: 'Aktif',
-      isArchived: false,
-      retentionStatus: 'Aktif Kayıt',
-      reactivatedAt: getTodayKey()
+    if (!confirmActivation) {
+      return
     }
 
-    saveStudentLifecycleUpdate(updatedStudent)
+    setChangingStudentStatus(true)
+
+    try {
+      const updatedStudent =
+        await reactivateStudent(
+          selectedStudent.id,
+          getTodayKey()
+        )
+
+      saveStudentLifecycleUpdate(
+        updatedStudent
+      )
+    } catch (error) {
+      console.error(
+        'Öğrenci aktifleştirme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci aktifleştirilemedi.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
   const handleArchiveStudent = () => {
@@ -1738,7 +1793,7 @@ function Students({
 
     setStudents((current) =>
       current.map((student) =>
-        student.id === selectedStudent.id
+        areIdsEqual(student.id, selectedStudent.id)
           ? updatedStudent
           : student
       )
@@ -1747,8 +1802,10 @@ function Students({
     if (typeof setLessonPlans === 'function') {
       setLessonPlans((current) =>
         current.map((lesson) =>
-          String(lesson.studentId) ===
-          String(selectedStudent.id)
+          areIdsEqual(
+          lesson.studentId,
+          selectedStudent.id
+        )
             ? {
                 ...lesson,
                 studentName: anonymousName
@@ -1761,8 +1818,10 @@ function Students({
     if (typeof setPayments === 'function') {
       setPayments((current) =>
         current.map((payment) =>
-          String(payment.studentId) ===
-          String(selectedStudent.id)
+          areIdsEqual(
+          payment.studentId,
+          selectedStudent.id
+        )
             ? {
                 ...payment,
                 studentName: anonymousName
@@ -1800,7 +1859,10 @@ function Students({
     setStudents((current) =>
       current.filter(
         (student) =>
-          student.id !== selectedStudent.id
+          !areIdsEqual(
+            student.id,
+            selectedStudent.id
+          )
       )
     )
 
@@ -2212,44 +2274,6 @@ function Students({
         return text || '-'
       }
 
-      const getPaymentAmountForPdf = (payment) =>
-        Number(
-          payment?.amount ??
-            payment?.transactionAmount ??
-            payment?.paidAmount ??
-            0
-        )
-
-      const getPaymentDateForPdf = (payment) =>
-        payment?.paymentDate ||
-        payment?.collectionDate ||
-        payment?.date ||
-        ''
-
-      const getPaymentPeriodForPdf = (payment) => {
-        const value =
-          payment?.paymentPeriod ||
-          payment?.period ||
-          payment?.dueDate ||
-          getPaymentDateForPdf(payment)
-
-        const period = String(value || '').slice(0, 7)
-
-        if (!/^\d{4}-\d{2}$/.test(period)) {
-          return '-'
-        }
-
-        const [year, month] = period.split('-').map(Number)
-
-        return new Date(year, month - 1, 1).toLocaleDateString(
-          'tr-TR',
-          {
-            month: 'long',
-            year: 'numeric'
-          }
-        )
-      }
-
       const studentPackages = normalizeStudentPackages(
         selectedStudent
       )
@@ -2290,7 +2314,7 @@ function Students({
 
       const totalCollected = studentPayments.reduce(
         (total, payment) =>
-          total + getPaymentAmountForPdf(payment),
+          total + getPaymentAmount(payment),
         0
       )
 
@@ -2508,15 +2532,36 @@ function Students({
       ])
 
       const paymentRows = studentPayments.map((payment) => [
-        tableBodyCell(formatDate(getPaymentDateForPdf(payment)), {
+        tableBodyCell(formatDate(getPaymentDate(payment)), {
           alignment: 'center'
         }),
         tableBodyCell(payment.packageName),
-        tableBodyCell(getPaymentPeriodForPdf(payment)),
+        tableBodyCell(
+          (() => {
+            const period = getPaymentPeriod(payment)
+
+            if (!/^\d{4}-\d{2}$/.test(period)) {
+              return '-'
+            }
+
+            const [year, month] = period
+              .split('-')
+              .map(Number)
+
+            return new Date(
+              year,
+              month - 1,
+              1
+            ).toLocaleDateString('tr-TR', {
+              month: 'long',
+              year: 'numeric'
+            })
+          })()
+        ),
         tableBodyCell(payment.paymentMethod),
         tableBodyCell(payment.referenceNumber),
         tableBodyCell(
-          `₺${formatPrice(getPaymentAmountForPdf(payment))}`,
+          `₺${formatPrice(getPaymentAmount(payment))}`,
           {
             alignment: 'right',
             bold: true,
@@ -3010,16 +3055,20 @@ function Students({
             className="cancel-button"
             type="button"
             onClick={cancelEdit}
+            disabled={isSavingEdit}
           >
             İptal
           </button>
-          <button
+
+          <LoadingButton
             className="save-button"
             type="button"
+            loading={isSavingEdit}
+            loadingText="Kaydediliyor..."
             onClick={saveEdit}
           >
             Kaydet
-          </button>
+          </LoadingButton>
         </div>
       )
     }
@@ -3446,7 +3495,9 @@ function Students({
           className="manage-button"
           type="button"
           onClick={returnToStudentList}
-        >
+        
+            disabled={isSavingStudent}
+          >
           Listeye Dön
         </button>
       </section>
@@ -3688,9 +3739,14 @@ function Students({
           >
             İptal
           </button>
-          <button type="submit" className="save-button">
+          <LoadingButton
+            type="submit"
+            className="save-button"
+            loading={isSavingStudent}
+            loadingText="Kaydediliyor..."
+          >
             Öğrenciyi Kaydet
-          </button>
+          </LoadingButton>
         </div>
       </form>
     </div>

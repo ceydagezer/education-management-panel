@@ -17,6 +17,10 @@ import {
   getTeachers
 } from './services/teacherService'
 
+import {
+  getStudents
+} from './services/studentService'
+
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -195,11 +199,13 @@ function App() {
           const [
             specialtiesResult,
             packagesResult,
-            teachersResult
+            teachersResult,
+            studentsResult
           ] = await Promise.all([
             getSpecialties(),
             getPackages(),
-            getTeachers()
+            getTeachers(),
+            getStudents()
           ])
 
           if (!isMounted) {
@@ -217,9 +223,13 @@ function App() {
           setTeachers(
             teachersResult
           )
+
+          setStudents(
+            studentsResult
+          )
         } catch (error) {
           console.error(
-            'Branş, paket ve öğretmen verileri yüklenemedi:',
+            'Panel verileri yüklenemedi:',
             error
           )
 
@@ -227,7 +237,7 @@ function App() {
             setDataError(
               error instanceof Error
                 ? error.message
-                : 'Branş, paket ve öğretmen verileri yüklenemedi.'
+                : 'Panel verileri yüklenemedi.'
             )
           }
         } finally {
@@ -751,7 +761,7 @@ function App() {
     return (
       <div className="app-loading-screen">
         <LoadingState
-          text="Branşlar, paketler ve öğretmenler yükleniyor..."
+          text="Branşlar, paketler, öğretmenler ve öğrenciler yükleniyor..."
         />
       </div>
     )
