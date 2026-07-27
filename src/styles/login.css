@@ -97,3 +97,20 @@
   color: var(--muted);
   font-size: 14px;
 }
+
+.login-error {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.login-form button:disabled,
+.login-form input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}

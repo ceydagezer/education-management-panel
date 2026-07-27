@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
 import '../styles/finance.css'
 
@@ -81,7 +81,29 @@ function Finance({
 }) {
   const today = getTodayKey()
 
-  const [activeTab, setActiveTab] = useState('overview')
+  const financeTabs = [
+    'overview',
+    'incomes',
+    'expenses',
+    'teacher-payments'
+  ]
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedTab = localStorage.getItem(
+      'arti-akademi-finance-active-tab'
+    )
+
+    return financeTabs.includes(savedTab)
+      ? savedTab
+      : 'overview'
+  })
+  useEffect(() => {
+    localStorage.setItem(
+      'arti-akademi-finance-active-tab',
+      activeTab
+    )
+  }, [activeTab])
+
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showTeacherPaymentForm, setShowTeacherPaymentForm] = useState(false)
@@ -1642,7 +1664,7 @@ function Finance({
       </div>
 
       <div className="finance-table-wrapper">
-        <table className="lesson-table finance-table">
+        <table className="lesson-table finance-table finance-income-table">
           <thead>
             <tr>
               <th>Tarih</th>
@@ -1910,7 +1932,7 @@ function Finance({
       </div>
 
       <div className="finance-table-wrapper">
-        <table className="lesson-table finance-table">
+        <table className="lesson-table finance-table finance-expense-table">
           <thead>
             <tr>
               <th>Tarih</th>
@@ -2357,7 +2379,7 @@ function Finance({
         </div>
 
         <div className="finance-table-wrapper">
-          <table className="lesson-table finance-table">
+          <table className="lesson-table finance-table finance-teacher-earnings-table">
             <thead>
               <tr>
                 <th>Öğretmen</th>
@@ -2426,7 +2448,7 @@ function Finance({
           </div>
 
           <div className="finance-table-wrapper">
-            <table className="lesson-table finance-table">
+            <table className="lesson-table finance-table finance-teacher-history-table">
               <thead>
                 <tr>
                   <th>Tarih</th>

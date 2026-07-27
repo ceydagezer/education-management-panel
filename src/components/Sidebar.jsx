@@ -1,3 +1,17 @@
+const menuItems = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'students', label: 'Öğrenciler' },
+  { id: 'teachers', label: 'Öğretmenler' },
+  { id: 'schedule', label: 'Ders Programı' },
+  {
+    id: 'lesson-status',
+    label: 'Ders Durum Takibi'
+  },
+  { id: 'packages', label: 'Paketler' },
+  { id: 'payments', label: 'Tahsilatlar' },
+  { id: 'finance', label: 'Finans' }
+]
+
 function Sidebar({
   activePage,
   handleMenuClick,
@@ -15,117 +29,22 @@ function Sidebar({
       </div>
 
       <nav className="sidebar-nav">
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'dashboard'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('dashboard')
-          }
-        >
-          Dashboard
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'students'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('students')
-          }
-        >
-          Öğrenciler
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'teachers'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('teachers')
-          }
-        >
-          Öğretmenler
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'schedule'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('schedule')
-          }
-        >
-          Ders Programı
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'lesson-status'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('lesson-status')
-          }
-        >
-          Ders Durum Takibi
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'packages'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('packages')
-          }
-        >
-          Paketler
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'payments'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('payments')
-          }
-        >
-          Tahsilatlar
-        </button>
-
-        <button
-          type="button"
-          className={`nav-item ${
-            activePage === 'finance'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            handleMenuClick('finance')
-          }
-        >
-          Gelir / Gider
-        </button>
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`nav-item ${
+              activePage === item.id
+                ? 'active'
+                : ''
+            }`}
+            onClick={() =>
+              handleMenuClick(item.id)
+            }
+          >
+            {item.label}
+          </button>
+        ))}
       </nav>
 
       <button

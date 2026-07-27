@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
 @import './styles/base.css';
 @import './styles/login.css';
 @import './styles/layout.css';
@@ -8,6 +10,134 @@
 @import './styles/schedule.css';
 @import './styles/payments.css';
 @import './styles/finance.css';
+
+/* =========================================================
+   GENEL YAZI TİPİ VE OKUNABİLİRLİK
+   ========================================================= */
+
+:root {
+  font-family:
+    'DM Sans',
+    'Segoe UI',
+    Arial,
+    sans-serif;
+
+  color: #1e293b;
+  background: #f5f8fc;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-family:
+    'DM Sans',
+    'Segoe UI',
+    Arial,
+    sans-serif;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  margin: 0;
+
+  color: #1e293b;
+  background: #f5f8fc;
+
+  font-family:
+    'DM Sans',
+    'Segoe UI',
+    Arial,
+    sans-serif;
+
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  font-family:
+    'DM Sans',
+    'Segoe UI',
+    Arial,
+    sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+button {
+  letter-spacing: -0.005em;
+}
+
+input,
+select,
+textarea {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #0f172a;
+
+  font-family:
+    'DM Sans',
+    'Segoe UI',
+    Arial,
+    sans-serif;
+
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+p {
+  line-height: 1.65;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+td {
+  font-weight: 500;
+}
 
 /* =========================================================
    KAYDEDİLMEMİŞ DEĞİŞİKLİKLER UYARI PENCERESİ
@@ -25,6 +155,7 @@
   padding: 24px;
 
   background: rgba(15, 23, 42, 0.46);
+
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
 }
@@ -54,7 +185,9 @@
   }
 }
 
-/* Uyarı ikonu */
+/* =========================================================
+   UYARI İKONU
+   ========================================================= */
 
 .unsaved-changes-icon {
   display: flex;
@@ -67,22 +200,25 @@
 
   color: #a16207;
   font-size: 24px;
-  font-weight: 900;
+  font-weight: 700;
 
   background: #fef3c7;
   border: 1px solid #fde68a;
   border-radius: 15px;
 }
 
-/* Metin alanı */
+/* =========================================================
+   METİN ALANI
+   ========================================================= */
 
 .unsaved-changes-content h2 {
   margin: 0 0 8px;
 
   color: #0f172a;
   font-size: 21px;
+  font-weight: 700;
   line-height: 1.3;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 .unsaved-changes-content p {
@@ -90,10 +226,13 @@
 
   color: #64748b;
   font-size: 14px;
-  line-height: 1.6;
+  font-weight: 400;
+  line-height: 1.65;
 }
 
-/* Değişiklik bulunan ekranların etiketleri */
+/* =========================================================
+   DEĞİŞİKLİK BULUNAN EKRANLARIN ETİKETLERİ
+   ========================================================= */
 
 .unsaved-source-list {
   display: flex;
@@ -111,14 +250,16 @@
 
   color: #92400e;
   font-size: 11.5px;
-  font-weight: 800;
+  font-weight: 700;
 
   background: #fffbeb;
   border: 1px solid #fde68a;
   border-radius: 999px;
 }
 
-/* Alt işlem düğmeleri */
+/* =========================================================
+   ALT İŞLEM DÜĞMELERİ
+   ========================================================= */
 
 .unsaved-changes-actions {
   display: flex;
@@ -136,7 +277,7 @@
 
   font-family: inherit;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 
   border: 0;
   border-radius: 11px;
@@ -181,7 +322,50 @@
   transform: translateY(0);
 }
 
-/* Mobil görünüm */
+/* =========================================================
+   UYGULAMA YÜKLENİYOR EKRANI
+   ========================================================= */
+
+.app-loading-screen {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+
+  color: #64748b;
+  background: #f5f8fc;
+}
+
+.app-loading-screen p {
+  margin: 0;
+
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-loading-spinner {
+  width: 38px;
+  height: 38px;
+
+  border: 4px solid #dbeafe;
+  border-top-color: #0ea5e9;
+  border-radius: 50%;
+
+  animation: appLoadingSpin 0.75s linear infinite;
+}
+
+@keyframes appLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   MOBİL GÖRÜNÜM
+   ========================================================= */
 
 @media (max-width: 520px) {
   .unsaved-changes-backdrop {
@@ -208,38 +392,5 @@
   .unsaved-stay-button,
   .unsaved-leave-button {
     width: 100%;
-  }
-}
-
-.app-loading-screen {
-  display: flex;
-  min-height: 100vh;
-  min-height: 100dvh;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
-  color: #64748b;
-  background: #f5f8fc;
-}
-
-.app-loading-screen p {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.app-loading-spinner {
-  width: 38px;
-  height: 38px;
-  border: 4px solid #dbeafe;
-  border-top-color: #0ea5e9;
-  border-radius: 50%;
-  animation: appLoadingSpin 0.75s linear infinite;
-}
-
-@keyframes appLoadingSpin {
-  to {
-    transform: rotate(360deg);
   }
 }

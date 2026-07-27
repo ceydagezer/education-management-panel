@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   LoadingButton
@@ -29,6 +29,11 @@ import {
   normalizeSearchText,
   normalizeStatusText
 } from '../utils/textHelpers'
+
+const TEACHER_DRAFT_DISCARD_EVENT =
+  'arti-akademi-discard-drafts'
+
+let teacherFormDraftCache = null
 
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024
 const MAX_CV_SIZE = 10 * 1024 * 1024
@@ -131,10 +136,42 @@ function Teachers({
     notes: ''
   })
 
-  const [showForm, setShowForm] = useState(false)
-  const [editingTeacherId, setEditingTeacherId] = useState(null)
-  const [teacherForm, setTeacherForm] = useState(createEmptyForm())
-  const [newSpecialty, setNewSpecialty] = useState('')
+  const [showForm, setShowForm] = useState(
+    () =>
+      Boolean(
+        teacherFormDraftCache?.showForm
+      )
+  )
+
+  const [
+    editingTeacherId,
+    setEditingTeacherId
+  ] = useState(
+    () =>
+      teacherFormDraftCache
+        ?.editingTeacherId ??
+      null
+  )
+
+  const [
+    teacherForm,
+    setTeacherForm
+  ] = useState(
+    () =>
+      teacherFormDraftCache
+        ?.teacherForm ??
+      createEmptyForm()
+  )
+
+  const [
+    newSpecialty,
+    setNewSpecialty
+  ] = useState(
+    () =>
+      teacherFormDraftCache
+        ?.newSpecialty ??
+      ''
+  )
   const [isCvDragActive, setIsCvDragActive] = useState(false)
   const [teacherStatusFilter, setTeacherStatusFilter] = useState('active')
   const [isExportingExcel, setIsExportingExcel] = useState(false)
@@ -147,6 +184,51 @@ function Teachers({
 
   const photoInputRef = useRef(null)
   const cvInputRef = useRef(null)
+
+  /*
+   * Form açıkken girilen veriler geçici bellekte tutulur.
+   * Böylece ortak uyarı penceresi açılıp kapandığında veya
+   * bileşen yeniden oluşturulduğunda form kaybolmaz.
+   */
+  useEffect(() => {
+    if (!showForm) {
+      return
+    }
+
+    teacherFormDraftCache = {
+      showForm,
+      editingTeacherId,
+      teacherForm,
+      newSpecialty
+    }
+  }, [
+    showForm,
+    editingTeacherId,
+    teacherForm,
+    newSpecialty
+  ])
+
+  /*
+   * Kullanıcı "Kaydetmeden Çık" seçtiğinde App.jsx
+   * bu olayı yayınlar ve öğretmen taslağı temizlenir.
+   */
+  useEffect(() => {
+    const clearTeacherDraft = () => {
+      teacherFormDraftCache = null
+    }
+
+    window.addEventListener(
+      TEACHER_DRAFT_DISCARD_EVENT,
+      clearTeacherDraft
+    )
+
+    return () => {
+      window.removeEventListener(
+        TEACHER_DRAFT_DISCARD_EVENT,
+        clearTeacherDraft
+      )
+    }
+  }, [])
 
   /*
    * Kaydedilmemiş değişiklik yoksa işlem doğrudan
@@ -431,6 +513,7 @@ function Teachers({
   }
 
   const performOpenAddForm = () => {
+    teacherFormDraftCache = null
     unsavedChanges?.markClean?.()
 
     setActionError('')
@@ -446,6 +529,7 @@ function Teachers({
   }
 
   const performOpenEditForm = (teacher) => {
+    teacherFormDraftCache = null
     unsavedChanges?.markClean?.()
 
     setActionError('')
@@ -511,6 +595,7 @@ function Teachers({
   }
 
   const performCloseForm = () => {
+    teacherFormDraftCache = null
     unsavedChanges?.markClean?.()
 
     setActionError('')

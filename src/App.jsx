@@ -88,8 +88,35 @@ function App() {
   const [password, setPassword] =
     useState('')
 
+  const validPages = [
+    'dashboard',
+    'students',
+    'packages',
+    'teachers',
+    'schedule',
+    'lesson-status',
+    'payments',
+    'finance'
+  ]
+
   const [activePage, setActivePage] =
-    useState('dashboard')
+    useState(() => {
+      const savedPage =
+        localStorage.getItem(
+          'arti-akademi-active-page'
+        )
+
+      return validPages.includes(savedPage)
+        ? savedPage
+        : 'dashboard'
+    })
+
+  useEffect(() => {
+    localStorage.setItem(
+      'arti-akademi-active-page',
+      activePage
+    )
+  }, [activePage])
 
   /*
    * =========================================================
@@ -516,6 +543,12 @@ function App() {
       const actionToRun =
         pendingAction
 
+      window.dispatchEvent(
+        new CustomEvent(
+          'arti-akademi-discard-drafts'
+        )
+      )
+
       clearAllUnsavedSources()
 
       setPendingAction(null)
@@ -731,6 +764,10 @@ function App() {
         clearAppData()
 
         setSession(null)
+
+        localStorage.removeItem(
+          'arti-akademi-active-page'
+        )
 
         setActivePage(
           'dashboard'

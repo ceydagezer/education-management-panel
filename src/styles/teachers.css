@@ -832,7 +832,8 @@
 
 .teacher-status-filter-bar
   + .payment-table-wrapper {
-  overflow-x: visible;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .teacher-list-table {
@@ -874,7 +875,7 @@
 
 .teacher-list-table th:nth-child(3),
 .teacher-list-table td:nth-child(3) {
-  width: 12%;
+  width: 11%;
   text-align: left;
 }
 
@@ -905,6 +906,7 @@
 
 .teacher-list-table .teacher-table-user {
   min-width: 0;
+  justify-content: flex-start;
 }
 
 .teacher-list-table .teacher-table-user strong {
@@ -982,9 +984,8 @@
   }
 }
 
-
 /* =========================================================
-   ÖĞRETMEN LİSTESİ - TELEFON VE E-POSTA AYRI SÜTUNLAR
+   ÖĞRETMEN LİSTESİ - DENGELİ SÜTUN YAPISI
    ========================================================= */
 
 .teacher-status-filter-bar
@@ -1000,74 +1001,108 @@
 
 .teacher-list-table th,
 .teacher-list-table td {
+  box-sizing: border-box;
   vertical-align: middle;
 }
 
 .teacher-list-table th {
-  padding: 13px 9px;
+  padding: 14px 14px;
+  color: #334155;
   font-size: 11px;
   text-align: center;
   white-space: nowrap;
 }
 
 .teacher-list-table td {
-  padding: 16px 9px;
+  padding: 16px 14px;
   font-size: 12px;
   text-align: center;
 }
 
-.teacher-list-table th:nth-child(1),
+/* Öğretmen */
+.teacher-list-table th:nth-child(1) {
+  width: 15%;
+  padding-right: 14px;
+  padding-left: 14px;
+  text-align: center;
+}
+
 .teacher-list-table td:nth-child(1) {
-  width: 14%;
+  width: 15%;
+  padding-right: 14px;
+  padding-left: 28px;
   text-align: left;
 }
 
+/* Telefon */
 .teacher-list-table th:nth-child(2),
 .teacher-list-table td:nth-child(2) {
   width: 10%;
+  padding-right: 16px;
   text-align: center;
 }
 
+/* E-posta */
 .teacher-list-table th:nth-child(3),
 .teacher-list-table td:nth-child(3) {
-  width: 13%;
+  width: 14%;
+  padding-right: 16px;
+  padding-left: 16px;
   text-align: center;
 }
 
+/* Uzmanlıklar */
 .teacher-list-table th:nth-child(4),
 .teacher-list-table td:nth-child(4) {
-  width: 11%;
+  width: 12%;
   text-align: left;
 }
 
+/* CV / Belge */
 .teacher-list-table th:nth-child(5),
 .teacher-list-table td:nth-child(5) {
   width: 8%;
   text-align: center;
 }
 
+/* Hakediş */
 .teacher-list-table th:nth-child(6),
 .teacher-list-table td:nth-child(6) {
   width: 7%;
   text-align: center;
 }
 
+/* Ödeme Günü */
 .teacher-list-table th:nth-child(7),
 .teacher-list-table td:nth-child(7) {
   width: 10%;
   text-align: center;
 }
 
+/* Durum */
 .teacher-list-table th:nth-child(8),
 .teacher-list-table td:nth-child(8) {
-  width: 7%;
+  width: 8%;
   text-align: center;
 }
 
+/* İşlem */
 .teacher-list-table th:nth-child(9),
 .teacher-list-table td:nth-child(9) {
-  width: 20%;
+  width: 14%;
   text-align: center;
+}
+
+.teacher-list-table .teacher-table-user {
+  min-width: 0;
+}
+
+.teacher-list-table .teacher-table-user strong {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .teacher-phone-cell,
@@ -1078,10 +1113,15 @@
   white-space: nowrap;
 }
 
+.teacher-email-cell {
+  text-align: center !important;
+}
+
 .teacher-list-table td:nth-child(8)
   .teacher-status-cell {
   align-items: center;
   justify-content: center;
+  min-width: 0;
   margin: 0 auto;
   text-align: center;
 }
@@ -1095,20 +1135,24 @@
   flex-wrap: nowrap;
 }
 
+.teacher-list-table .teacher-pdf-button,
+.teacher-list-table .detail-button,
+.teacher-list-table .teacher-passive-button,
+.teacher-list-table .teacher-reactivate-button {
+  padding: 7px 8px;
+  font-size: 11px;
+}
+
 @media (max-width: 1180px) {
   .teacher-status-filter-bar
     + .payment-table-wrapper {
-    overflow-x: auto;
+    overflow-x: hidden;
   }
 
   .teacher-list-table {
-    min-width: 1120px;
-    table-layout: auto;
-  }
-
-  .teacher-list-table th:nth-child(n),
-  .teacher-list-table td:nth-child(n) {
-    width: auto;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
   }
 
   .teacher-list-table th,

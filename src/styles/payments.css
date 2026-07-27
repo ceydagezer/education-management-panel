@@ -315,6 +315,20 @@
   background: #f8fafc;
 }
 
+/* Dekont No sütunu: 7. sütun */
+.payment-table th:nth-child(7),
+.payment-table td:nth-child(7) {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* İşlem sütunu: 9. sütun */
+.payment-table th:nth-child(9),
+.payment-table td:nth-child(9) {
+  text-align: center;
+  vertical-align: middle;
+}
+
 /* DURUM ETİKETLERİ */
 
 .payment-status {
@@ -345,8 +359,14 @@
 
 .payment-action-row {
   display: flex;
+  width: 100%;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+}
+
+.payment-action-row button {
+  margin: 0;
 }
 
 .edit-mini-button,
@@ -528,5 +548,275 @@
 @media (max-width: 700px) {
   .payment-status-detail {
     white-space: normal;
+  }
+}
+
+/* =========================================================
+   AYLIK ÖDEME ÖZETİ TABLO HİZALAMASI
+   Yalnızca "Bu Ay Alınan Ödemeler" tablosuna uygulanır.
+   ========================================================= */
+
+.payment-table-wrapper:has(
+  .monthly-payment-table
+) {
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.lesson-table.payment-table.monthly-payment-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.lesson-table.payment-table.monthly-payment-table
+  thead th,
+.lesson-table.payment-table.monthly-payment-table
+  tbody td {
+  box-sizing: border-box;
+  vertical-align: middle;
+  text-align: center !important;
+}
+
+/* Öğrenci */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(1),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(1) {
+  width: 12%;
+}
+
+/* Paket */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(2),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(2) {
+  width: 16%;
+}
+
+/* Dönem */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(3),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(3) {
+  width: 13%;
+}
+
+/* Son Tahsilat */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(4),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(4) {
+  width: 13%;
+}
+
+/* Beklenen */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(5),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(5) {
+  width: 11%;
+}
+
+/* Bu Ay Alınan */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(6),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(6) {
+  width: 13%;
+}
+
+/* Kalan */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(7),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(7) {
+  width: 10%;
+}
+
+/* Durum */
+.lesson-table.payment-table.monthly-payment-table
+  th:nth-child(8),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(8) {
+  width: 12%;
+}
+
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(1),
+.lesson-table.payment-table.monthly-payment-table
+  td:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-table.payment-table.monthly-payment-table
+  .payment-status {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.lesson-table.payment-table.monthly-payment-table
+  .payment-status-detail {
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .payment-table-wrapper:has(
+    .monthly-payment-table
+  ) {
+    overflow-x: auto;
+  }
+
+  .lesson-table.payment-table.monthly-payment-table {
+    min-width: 850px;
+  }
+}
+
+/* =========================================================
+   TAHSİLAT HAREKETLERİ TABLO HİZALAMASI
+   Yalnızca "Tahsilat Listesi" tablosuna uygulanır.
+   ========================================================= */
+
+.payment-table-wrapper:has(
+  .payment-movements-table
+) {
+  width: 100%;
+  max-height: 500px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lesson-table.payment-table.payment-movements-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.lesson-table.payment-table.payment-movements-table
+  thead th,
+.lesson-table.payment-table.payment-movements-table
+  tbody td {
+  box-sizing: border-box;
+  vertical-align: middle;
+  text-align: center !important;
+}
+
+/* Öğrenci */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(1),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(1) {
+  width: 10%;
+}
+
+/* Paket */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(2),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(2) {
+  width: 13%;
+}
+
+/* Dönem */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(3),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(3) {
+  width: 11%;
+}
+
+/* Alınan Tutar */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(4),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(4) {
+  width: 10%;
+}
+
+/* Tahsilat Tarihi */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(5),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(5) {
+  width: 12%;
+}
+
+/* Ödeme Yöntemi */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(6),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(6) {
+  width: 12%;
+}
+
+/* Dekont No */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(7),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(7) {
+  width: 9%;
+}
+
+/* Ödeme Durumu */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(8),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(8) {
+  width: 12%;
+}
+
+/* İşlem */
+.lesson-table.payment-table.payment-movements-table
+  th:nth-child(9),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(9) {
+  width: 11%;
+}
+
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(1),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(2),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(3),
+.lesson-table.payment-table.payment-movements-table
+  td:nth-child(6) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-table.payment-table.payment-movements-table
+  .payment-action-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.lesson-table.payment-table.payment-movements-table
+  .payment-status {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.lesson-table.payment-table.payment-movements-table
+  .payment-status-detail {
+  text-align: center;
+}
+
+@media (max-width: 1050px) {
+  .payment-table-wrapper:has(
+    .payment-movements-table
+  ) {
+    overflow-x: auto;
+  }
+
+  .lesson-table.payment-table.payment-movements-table {
+    min-width: 1050px;
   }
 }

@@ -1446,7 +1446,7 @@ function Payments({
         </div>
 
         <div className="payment-table-wrapper">
-          <table className="lesson-table payment-table">
+          <table className="lesson-table payment-table monthly-payment-table">
             <thead>
               <tr>
                 <th>Öğrenci</th>
@@ -1647,7 +1647,7 @@ function Payments({
         </div>
 
         <div className="payment-table-wrapper">
-          <table className="lesson-table payment-table">
+          <table className="lesson-table payment-table payment-movements-table">
             <thead>
               <tr>
                 <th>Öğrenci</th>
