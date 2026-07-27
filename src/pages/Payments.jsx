@@ -1,259 +1,36 @@
 import { useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
 
-const UPCOMING_DAYS = 7
-const GRACE_DAYS = 3
+import {
+  createPayment,
+  deletePayment as deletePaymentFromDb,
+  updatePayment,
+  updateStudentPackageNextPaymentDate
+} from '../services/paymentService'
 
-const toDateKey = (value) => String(value || '').slice(0, 10)
+import {
+  createDueDate,
+  formatDate,
+  formatPeriod,
+  formatPrice,
+  getDateKey,
+  getTodayKey
+} from '../utils/dateHelpers'
 
-const getTodayKey = () => {
-  const now = new Date()
+import {
+  findCurrentDueRecord,
+  getCollectedAmountForPeriod,
+  getDueStatus,
+  getPaymentAmount,
+  getPaymentDate,
+  getPaymentPeriod,
+  getPaymentStudentPackageId,
+  isActivePayment
+} from '../utils/paymentSchedule'
 
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0')
-  ].join('-')
-}
-
-const dateKeyToUtc = (dateKey) => {
-  const [year, month, day] = String(dateKey || '')
-    .split('-')
-    .map(Number)
-
-  if (!year || !month || !day) {
-    return null
-  }
-
-  return Date.UTC(year, month - 1, day)
-}
-
-const getDayDifference = (fromDateKey, toDateKeyValue) => {
-  const fromUtc = dateKeyToUtc(fromDateKey)
-  const toUtc = dateKeyToUtc(toDateKeyValue)
-
-  if (fromUtc === null || toUtc === null) {
-    return null
-  }
-
-  return Math.round((toUtc - fromUtc) / 86400000)
-}
-
-const getDaysInMonth = (year, monthIndex) =>
-  new Date(year, monthIndex + 1, 0).getDate()
-
-const createDueDate = (year, monthIndex, paymentDay) => {
-  const safeDay = Math.min(
-    Number(paymentDay || 1),
-    getDaysInMonth(year, monthIndex)
-  )
-
-  return [
-    year,
-    String(monthIndex + 1).padStart(2, '0'),
-    String(safeDay).padStart(2, '0')
-  ].join('-')
-}
-
-const addOneMonth = (dateKey, paymentDay) => {
-  const [year, month] = String(dateKey || '')
-    .split('-')
-    .map(Number)
-
-  if (!year || !month) {
-    return ''
-  }
-
-  const nextMonthDate = new Date(year, month, 1)
-
-  return createDueDate(
-    nextMonthDate.getFullYear(),
-    nextMonthDate.getMonth(),
-    paymentDay
-  )
-}
-
-const formatPrice = (value) =>
-  Number(value || 0).toLocaleString('tr-TR', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  })
-
-const formatDate = (dateValue) => {
-  const dateKey = toDateKey(dateValue)
-
-  if (!dateKey) {
-    return '-'
-  }
-
-  const date = new Date(`${dateKey}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) {
-    return dateKey
-  }
-
-  return date.toLocaleDateString('tr-TR')
-}
-
-const formatPeriod = (periodValue) => {
-  const [year, month] = String(periodValue || '')
-    .split('-')
-    .map(Number)
-
-  if (!year || !month) {
-    return '-'
-  }
-
-  return new Date(year, month - 1, 1).toLocaleDateString(
-    'tr-TR',
-    {
-      month: 'long',
-      year: 'numeric'
-    }
-  )
-}
-
-const getPaymentAmount = (payment) =>
-  Number(
-    payment?.amount ??
-      payment?.transactionAmount ??
-      payment?.paidAmount ??
-      0
-  )
-
-const getPaymentDate = (payment) =>
-  toDateKey(
-    payment?.paymentDate ??
-      payment?.collectionDate ??
-      payment?.date ??
-      ''
-  )
-
-const getPaymentPeriod = (payment) => {
-  const explicitPeriod =
-    payment?.paymentPeriod || payment?.period
-
-  if (explicitPeriod) {
-    return String(explicitPeriod).slice(0, 7)
-  }
-
-  const duePeriod = toDateKey(payment?.dueDate).slice(0, 7)
-
-  if (duePeriod) {
-    return duePeriod
-  }
-
-  return getPaymentDate(payment).slice(0, 7)
-}
-
-const getPaymentStudentPackageId = (payment) => {
-  if (payment?.studentPackageId) {
-    return String(payment.studentPackageId)
-  }
-
-  return `${payment?.studentId}-${payment?.packageId}`
-}
-
-const getDueStatus = ({
-  dueDate,
-  expectedAmount,
-  collectedAmount,
-  todayKey
-}) => {
-  const expected = Number(expectedAmount || 0)
-  const collected = Number(collectedAmount || 0)
-  const remaining = Math.max(0, expected - collected)
-
-  if (expected > 0 && remaining <= 0) {
-    return {
-      label: 'Ödendi',
-      className: 'paid',
-      filterValue: 'Ödendi',
-      detail: 'Bu dönemin ödemesi tamamlandı.',
-      daysUntilDue: null,
-      daysLate: 0
-    }
-  }
-
-  if (!dueDate) {
-    return {
-      label: collected > 0 ? 'Kısmi Ödendi' : 'Tarih Eksik',
-      className: collected > 0 ? 'partial' : 'pending',
-      filterValue: collected > 0 ? 'Kısmi Ödendi' : 'Tarih Eksik',
-      detail: 'Ödeme tarihi tanımlanmalıdır.',
-      daysUntilDue: null,
-      daysLate: 0
-    }
-  }
-
-  const daysUntilDue = getDayDifference(todayKey, dueDate)
-
-  if (daysUntilDue === null) {
-    return {
-      label: 'Tarih Eksik',
-      className: 'pending',
-      filterValue: 'Tarih Eksik',
-      detail: 'Ödeme tarihi geçerli değildir.',
-      daysUntilDue: null,
-      daysLate: 0
-    }
-  }
-
-  if (daysUntilDue > UPCOMING_DAYS) {
-    return {
-      label: collected > 0 ? 'Kısmi Ödendi' : 'Bekliyor',
-      className: collected > 0 ? 'partial' : 'pending',
-      filterValue: collected > 0 ? 'Kısmi Ödendi' : 'Bekliyor',
-      detail: `${daysUntilDue} gün sonra ödeme günü.`,
-      daysUntilDue,
-      daysLate: 0
-    }
-  }
-
-  if (daysUntilDue > 0) {
-    return {
-      label: collected > 0 ? 'Kısmi · Yaklaşıyor' : 'Yaklaşıyor',
-      className: 'upcoming',
-      filterValue: 'Yaklaşıyor',
-      detail: `${daysUntilDue} gün kaldı.`,
-      daysUntilDue,
-      daysLate: 0
-    }
-  }
-
-  if (daysUntilDue === 0) {
-    return {
-      label: collected > 0 ? 'Kısmi · Bugün' : 'Bugün',
-      className: 'today',
-      filterValue: 'Bugün',
-      detail: 'Ödeme günü bugün.',
-      daysUntilDue: 0,
-      daysLate: 0
-    }
-  }
-
-  const daysLate = Math.abs(daysUntilDue)
-
-  if (daysLate <= GRACE_DAYS) {
-    return {
-      label: `${daysLate} Gün Gecikti`,
-      className: 'grace',
-      filterValue: 'Tolerans Süresinde',
-      detail: `Tolerans süresinde · ${GRACE_DAYS - daysLate} gün kaldı.`,
-      daysUntilDue,
-      daysLate
-    }
-  }
-
-  return {
-    label: collected > 0 ? 'Kısmi · Gecikti' : 'Gecikti',
-    className: 'overdue',
-    filterValue: 'Gecikti',
-    detail: `${daysLate} gün gecikti.`,
-    daysUntilDue,
-    daysLate
-  }
-}
+import {
+  matchesSearchQuery
+} from '../utils/textHelpers'
 
 function Payments({
   students = [],
@@ -289,6 +66,15 @@ function Payments({
   const [editingPaymentId, setEditingPaymentId] =
     useState(null)
   const [editForm, setEditForm] = useState(null)
+
+  const [isSavingPayment, setIsSavingPayment] =
+    useState(false)
+
+  const [updatingPaymentId, setUpdatingPaymentId] =
+    useState(null)
+
+  const [deletingPaymentId, setDeletingPaymentId] =
+    useState(null)
 
   /*
    * Aynı sayfada iki farklı taslak bulunabilir:
@@ -382,7 +168,7 @@ function Payments({
             packageItem.assignmentId ??
             `${student.id}-${packageId}-${index}`
 
-          const firstPaymentDate = toDateKey(
+          const firstPaymentDate = getDateKey(
             packageItem.firstPaymentDate ??
               packageItem.nextPaymentDate ??
               packageItem.dueDate ??
@@ -416,6 +202,11 @@ function Payments({
               packageItem.instrument ??
               packageItem.branch ??
               '',
+            teacherId:
+              packageItem.teacherId ??
+              packageItem.defaultTeacherId ??
+              packageItem.teacher?.id ??
+              '',
             teacher: teacherName,
             teacherName,
             lessonDuration:
@@ -440,7 +231,7 @@ function Payments({
             ),
             paymentDay,
             firstPaymentDate,
-            nextPaymentDate: toDateKey(
+            nextPaymentDate: getDateKey(
               packageItem.nextPaymentDate ??
                 firstPaymentDate
             )
@@ -450,7 +241,7 @@ function Payments({
     }
 
     if (student?.packageId) {
-      const firstPaymentDate = toDateKey(
+      const firstPaymentDate = getDateKey(
         student.firstPaymentDate ??
           student.nextPaymentDate ??
           ''
@@ -472,6 +263,10 @@ function Payments({
           packageName:
             student.packageName || 'Tanımsız Paket',
           instrument: student.instrument || '',
+          teacherId:
+            student.teacherId ??
+            student.defaultTeacherId ??
+            '',
           teacher: teacherName,
           teacherName,
           lessonDuration:
@@ -496,7 +291,7 @@ function Payments({
                 : 1)
           ),
           firstPaymentDate,
-          nextPaymentDate: toDateKey(
+          nextPaymentDate: getDateKey(
             student.nextPaymentDate ?? firstPaymentDate
           )
         }
@@ -519,91 +314,6 @@ function Payments({
       ),
     [students]
   )
-
-  const getCollectedAmountForPeriod = (
-    studentPackageId,
-    period,
-    paymentList = payments,
-    excludedPaymentId = null
-  ) =>
-    paymentList
-      .filter(
-        (payment) =>
-          getPaymentStudentPackageId(payment) ===
-            String(studentPackageId) &&
-          getPaymentPeriod(payment) === String(period) &&
-          payment.id !== excludedPaymentId
-      )
-      .reduce(
-        (total, payment) =>
-          total + getPaymentAmount(payment),
-        0
-      )
-
-  const findCurrentDueRecord = (
-    packageRecord,
-    paymentList = payments
-  ) => {
-    const expectedAmount = Number(
-      packageRecord.monthlyFee ??
-        packageRecord.agreedPrice ??
-        0
-    )
-
-    const firstPaymentDate = toDateKey(
-      packageRecord.firstPaymentDate ??
-        packageRecord.nextPaymentDate ??
-        ''
-    )
-
-    if (!firstPaymentDate) {
-      return {
-        dueDate: '',
-        period: '',
-        expectedAmount,
-        collectedAmount: 0,
-        remainingAmount: expectedAmount
-      }
-    }
-
-    let dueDate = firstPaymentDate
-
-    for (let index = 0; index < 120; index += 1) {
-      const period = dueDate.slice(0, 7)
-      const collectedAmount =
-        getCollectedAmountForPeriod(
-          packageRecord.studentPackageId,
-          period,
-          paymentList
-        )
-
-      if (collectedAmount < expectedAmount) {
-        return {
-          dueDate,
-          period,
-          expectedAmount,
-          collectedAmount,
-          remainingAmount: Math.max(
-            0,
-            expectedAmount - collectedAmount
-          )
-        }
-      }
-
-      dueDate = addOneMonth(
-        dueDate,
-        packageRecord.paymentDay
-      )
-    }
-
-    return {
-      dueDate,
-      period: dueDate.slice(0, 7),
-      expectedAmount,
-      collectedAmount: 0,
-      remainingAmount: expectedAmount
-    }
-  }
 
   const packageFinancialRecords = useMemo(
     () =>
@@ -668,7 +378,7 @@ function Payments({
     selectedRemainingDebt - enteredAmount
   )
 
-  const updateStoredNextPaymentDate = (
+  const updateStoredNextPaymentDate = async (
     studentPackageId,
     updatedPayments
   ) => {
@@ -685,6 +395,11 @@ function Payments({
     const nextDueRecord = findCurrentDueRecord(
       currentPackage,
       updatedPayments
+    )
+
+    await updateStudentPackageNextPaymentDate(
+      studentPackageId,
+      nextDueRecord.dueDate
     )
 
     setStudents((currentStudents) =>
@@ -837,7 +552,11 @@ function Payments({
       return false
     }
 
-    if (!paymentForm.amount || enteredAmount <= 0) {
+    if (
+      !paymentForm.amount ||
+      !Number.isFinite(enteredAmount) ||
+      enteredAmount <= 0
+    ) {
       alert('Alınan tutar 0’dan büyük olmalıdır.')
       return false
     }
@@ -864,60 +583,78 @@ function Payments({
     return true
   }
 
-  const handlePaymentSubmit = (event) => {
+  const handlePaymentSubmit = async (event) => {
     event.preventDefault()
+
+    if (isSavingPayment) {
+      return
+    }
 
     if (!validatePaymentForm()) {
       return
     }
 
-    const newPayment = {
-      id: Date.now(),
-      studentId: String(selectedStudent.id),
-      studentName: selectedStudent.fullName,
-      studentPackageId: String(
-        selectedStudentPackage.studentPackageId
-      ),
-      packageId: String(
-        selectedStudentPackage.packageId
-      ),
-      packageName:
-        selectedStudentPackage.packageName,
-      instrument:
-        selectedStudentPackage.instrument || '',
-      teacher:
-        selectedStudentPackage.teacher || '',
-      packagePrice: selectedPackagePrice,
-      amount: enteredAmount,
-      paymentPeriod: selectedPackageRecord.period,
-      dueDate: selectedPackageRecord.dueDate,
-      paymentDate: paymentForm.paymentDate,
-      paymentMethod: paymentForm.paymentMethod,
-      referenceNumber:
-        paymentForm.referenceNumber.trim(),
-      note: paymentForm.note.trim(),
-      createdAt: new Date().toISOString()
+    setIsSavingPayment(true)
+
+    try {
+      const savedPayment =
+        await createPayment({
+          studentId:
+            selectedStudent.id,
+          studentPackageId:
+            selectedStudentPackage.studentPackageId,
+          packageId:
+            selectedStudentPackage.packageId,
+          teacherId:
+            selectedStudentPackage.teacherId || null,
+          amount:
+            enteredAmount,
+          paymentPeriod:
+            selectedPackageRecord.period,
+          dueDate:
+            selectedPackageRecord.dueDate,
+          paymentDate:
+            paymentForm.paymentDate,
+          paymentMethod:
+            paymentForm.paymentMethod,
+          referenceNumber:
+            paymentForm.referenceNumber,
+          note:
+            paymentForm.note
+        })
+
+      const updatedPayments = [
+        ...payments,
+        savedPayment
+      ]
+
+      setPayments(updatedPayments)
+
+      await updateStoredNextPaymentDate(
+        selectedStudentPackage.studentPackageId,
+        updatedPayments
+      )
+
+      setPaymentForm({
+        ...emptyPaymentForm,
+        paymentDate: today
+      })
+
+      updatePaymentFormDirty(false)
+    } catch (error) {
+      console.error(
+        'Tahsilat kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Tahsilat kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingPayment(false)
     }
-
-    const updatedPayments = [...payments, newPayment]
-
-    setPayments(updatedPayments)
-    updateStoredNextPaymentDate(
-      selectedStudentPackage.studentPackageId,
-      updatedPayments
-    )
-
-    setPaymentForm({
-      ...emptyPaymentForm,
-      paymentDate: today
-    })
-
-    /*
-     * Yeni tahsilat başarıyla kaydedildi.
-     * Tablo içi başka bir düzenleme taslağı varsa
-     * global uyarı açık kalmaya devam eder.
-     */
-    updatePaymentFormDirty(false)
   }
 
   const handleFilterChange = (event) => {
@@ -946,7 +683,7 @@ function Payments({
   }
 
   const startEditPayment = (payment) => {
-    if (editingPaymentId === payment.id) {
+    if (String(editingPaymentId) === String(payment.id)) {
       return
     }
 
@@ -978,13 +715,24 @@ function Payments({
     }))
   }
 
-  const saveEditPayment = (payment) => {
+  const saveEditPayment = async (payment) => {
+    if (
+      String(updatingPaymentId) ===
+      String(payment.id)
+    ) {
+      return
+    }
+
     const amount = Number(editForm.amount)
     const studentPackageId =
       getPaymentStudentPackageId(payment)
     const period = getPaymentPeriod(payment)
 
-    if (!editForm.amount || amount <= 0) {
+    if (
+      !editForm.amount ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       alert('Alınan tutar 0’dan büyük olmalıdır.')
       return
     }
@@ -1034,38 +782,65 @@ function Payments({
       return
     }
 
-    const updatedPayment = {
-      ...payment,
-      amount,
-      transactionAmount: undefined,
-      paidAmount: undefined,
-      paymentDate: editForm.paymentDate,
-      collectionDate: undefined,
-      paymentMethod: editForm.paymentMethod,
-      referenceNumber:
-        editForm.referenceNumber.trim(),
-      note: editForm.note.trim(),
-      updatedAt: new Date().toISOString()
+    setUpdatingPaymentId(payment.id)
+
+    try {
+      const savedPayment =
+        await updatePayment(
+          payment.id,
+          {
+            amount,
+            paymentDate:
+              editForm.paymentDate,
+            paymentMethod:
+              editForm.paymentMethod,
+            referenceNumber:
+              editForm.referenceNumber,
+            note:
+              editForm.note
+          }
+        )
+
+      const updatedPayments = payments.map(
+        (item) =>
+          String(item.id) ===
+          String(payment.id)
+            ? savedPayment
+            : item
+      )
+
+      setPayments(updatedPayments)
+
+      await updateStoredNextPaymentDate(
+        studentPackageId,
+        updatedPayments
+      )
+
+      performCancelEditPayment()
+    } catch (error) {
+      console.error(
+        'Tahsilat güncelleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Tahsilat güncellenemedi.'
+      )
+    } finally {
+      setUpdatingPaymentId(null)
     }
-
-    const updatedPayments = payments.map((item) =>
-      item.id === payment.id ? updatedPayment : item
-    )
-
-    setPayments(updatedPayments)
-    updateStoredNextPaymentDate(
-      studentPackageId,
-      updatedPayments
-    )
-
-    /*
-     * Düzenleme başarıyla kaydedildiği için
-     * uyarı göstermeden düzenleme satırı kapatılır.
-     */
-    performCancelEditPayment()
   }
 
-  const deletePayment = (payment) => {
+  const deletePayment = async (payment) => {
+    if (
+      String(deletingPaymentId) ===
+      String(payment.id)
+    ) {
+      return
+    }
+
     const confirmed = window.confirm(
       'Bu tahsilat kaydını silmek istediğinize emin misiniz?'
     )
@@ -1074,15 +849,39 @@ function Payments({
       return
     }
 
-    const updatedPayments = payments.filter(
-      (item) => item.id !== payment.id
-    )
+    setDeletingPaymentId(payment.id)
 
-    setPayments(updatedPayments)
-    updateStoredNextPaymentDate(
-      getPaymentStudentPackageId(payment),
-      updatedPayments
-    )
+    try {
+      await deletePaymentFromDb(
+        payment.id
+      )
+
+      const updatedPayments = payments.filter(
+        (item) =>
+          String(item.id) !==
+          String(payment.id)
+      )
+
+      setPayments(updatedPayments)
+
+      await updateStoredNextPaymentDate(
+        getPaymentStudentPackageId(payment),
+        updatedPayments
+      )
+    } catch (error) {
+      console.error(
+        'Tahsilat silme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Tahsilat silinemedi.'
+      )
+    } finally {
+      setDeletingPaymentId(null)
+    }
   }
 
   const getFinancialRecordForPayment = (payment) => {
@@ -1108,10 +907,11 @@ function Payments({
     const collectedAmount =
       getCollectedAmountForPeriod(
         studentPackageId,
-        period
+        period,
+        payments
       )
     const dueDate =
-      toDateKey(payment.dueDate) ||
+      getDateKey(payment.dueDate) ||
       createDueDate(
         Number(period.slice(0, 4)),
         Number(period.slice(5, 7)) - 1,
@@ -1163,9 +963,9 @@ function Payments({
 
   const filteredPayments = payments
     .filter((payment) => {
-      const searchText = filters.searchText
-        .trim()
-        .toLocaleLowerCase('tr-TR')
+      if (!isActivePayment(payment)) {
+        return false
+      }
       const paymentDate = getPaymentDate(payment)
       const record = getFinancialRecordForPayment(
         payment
@@ -1173,20 +973,17 @@ function Payments({
       const status =
         getCollectionStatus(record).filterValue
 
-      const searchableText = [
-        payment.studentName,
-        payment.packageName,
-        payment.teacher,
-        payment.referenceNumber,
-        formatPeriod(getPaymentPeriod(payment))
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLocaleLowerCase('tr-TR')
-
       return (
-        (searchText === '' ||
-          searchableText.includes(searchText)) &&
+        matchesSearchQuery(
+          [
+            payment.studentName,
+            payment.packageName,
+            payment.teacher,
+            payment.referenceNumber,
+            formatPeriod(getPaymentPeriod(payment))
+          ],
+          filters.searchText
+        ) &&
         (filters.status === '' ||
           status === filters.status) &&
         (filters.paymentMethod === '' ||
@@ -1259,6 +1056,10 @@ function Payments({
     const groupedRecords = new Map()
 
     payments.forEach((payment) => {
+      if (!isActivePayment(payment)) {
+        return
+      }
+
       const paymentDate = getPaymentDate(payment)
 
       if (
@@ -1614,9 +1415,14 @@ function Payments({
             <button
               type="submit"
               className="save-button"
-              disabled={!selectedPackageRecord}
+              disabled={
+                !selectedPackageRecord ||
+                isSavingPayment
+              }
             >
-              Tahsilatı Kaydet
+              {isSavingPayment
+                ? 'Kaydediliyor...'
+                : 'Tahsilatı Kaydet'}
             </button>
           </div>
         </form>
@@ -1886,8 +1692,8 @@ function Payments({
                         )}
                       </td>
                       <td>
-                        {editingPaymentId ===
-                        payment.id ? (
+                        {String(editingPaymentId) ===
+                        String(payment.id) ? (
                           <input
                             className="table-edit-input"
                             type="number"
@@ -1904,8 +1710,8 @@ function Payments({
                         )}
                       </td>
                       <td>
-                        {editingPaymentId ===
-                        payment.id ? (
+                        {String(editingPaymentId) ===
+                        String(payment.id) ? (
                           <input
                             className="table-edit-input"
                             type="date"
@@ -1920,8 +1726,8 @@ function Payments({
                         )}
                       </td>
                       <td>
-                        {editingPaymentId ===
-                        payment.id ? (
+                        {String(editingPaymentId) ===
+                        String(payment.id) ? (
                           <select
                             className="table-edit-input"
                             name="paymentMethod"
@@ -1959,8 +1765,8 @@ function Payments({
                         </span>
                       </td>
                       <td>
-                        {editingPaymentId ===
-                        payment.id ? (
+                        {String(editingPaymentId) ===
+                        String(payment.id) ? (
                           <div className="payment-action-row">
                             <button
                               type="button"
@@ -1968,8 +1774,15 @@ function Payments({
                               onClick={() =>
                                 saveEditPayment(payment)
                               }
+                              disabled={
+                                String(updatingPaymentId) ===
+                                String(payment.id)
+                              }
                             >
-                              Kaydet
+                              {String(updatingPaymentId) ===
+                              String(payment.id)
+                                ? 'Kaydediliyor...'
+                                : 'Kaydet'}
                             </button>
                             <button
                               type="button"
@@ -1996,8 +1809,15 @@ function Payments({
                               onClick={() =>
                                 deletePayment(payment)
                               }
+                              disabled={
+                                String(deletingPaymentId) ===
+                                String(payment.id)
+                              }
                             >
-                              Sil
+                              {String(deletingPaymentId) ===
+                              String(payment.id)
+                                ? 'Siliniyor...'
+                                : 'Sil'}
                             </button>
                           </div>
                         )}

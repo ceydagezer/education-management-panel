@@ -25,6 +25,10 @@ import {
   getLessonPlans
 } from './services/lessonService'
 
+import {
+  getPayments
+} from './services/paymentService'
+
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -205,13 +209,15 @@ function App() {
             packagesResult,
             teachersResult,
             studentsResult,
-            lessonPlansResult
+            lessonPlansResult,
+            paymentsResult
           ] = await Promise.all([
             getSpecialties(),
             getPackages(),
             getTeachers(),
             getStudents(),
-            getLessonPlans()
+            getLessonPlans(),
+            getPayments()
           ])
 
           if (!isMounted) {
@@ -236,6 +242,10 @@ function App() {
 
           setLessonPlans(
             lessonPlansResult
+          )
+
+          setPayments(
+            paymentsResult
           )
         } catch (error) {
           console.error(
@@ -771,7 +781,7 @@ function App() {
     return (
       <div className="app-loading-screen">
         <LoadingState
-          text="Branşlar, paketler, öğretmenler, öğrenciler ve ders programı yükleniyor..."
+          text="Branşlar, paketler, öğretmenler, öğrenciler, ders programı ve tahsilatlar yükleniyor..."
         />
       </div>
     )
