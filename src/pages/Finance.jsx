@@ -2,6 +2,36 @@ import { useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
 import '../styles/finance.css'
 
+import {
+  cancelExpense as cancelExpenseFromDb,
+  cancelOtherIncome,
+  createExpense,
+  createOtherIncome,
+  createTeacherPayment
+} from '../services/financeService'
+
+import {
+  formatDate,
+  formatPrice,
+  getTodayKey
+} from '../utils/dateHelpers'
+
+import {
+  getPaymentAmount,
+  getPaymentDate,
+  isActivePayment
+} from '../utils/paymentSchedule'
+
+import {
+  isCompletedLesson,
+  normalizeLessonStatus
+} from '../utils/lessonHelpers'
+
+import {
+  matchesSearchQuery,
+  normalizeStatusText as normalizeText
+} from '../utils/textHelpers'
+
 const incomeCategories = [
   'Kayıt Ücreti',
   'Materyal / Enstrüman Satışı',
@@ -49,7 +79,7 @@ function Finance({
   setTeacherPayments = () => {},
   unsavedChanges
 }) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayKey()
 
   const [activeTab, setActiveTab] = useState('overview')
   const [showIncomeForm, setShowIncomeForm] = useState(false)
@@ -61,6 +91,21 @@ function Finance({
   const [incomeSearch, setIncomeSearch] = useState('')
   const [expenseSearch, setExpenseSearch] = useState('')
   const [teacherSearch, setTeacherSearch] = useState('')
+
+  const [isSavingIncome, setIsSavingIncome] =
+    useState(false)
+
+  const [isSavingExpense, setIsSavingExpense] =
+    useState(false)
+
+  const [isSavingTeacherPayment, setIsSavingTeacherPayment] =
+    useState(false)
+
+  const [cancellingIncomeId, setCancellingIncomeId] =
+    useState(null)
+
+  const [cancellingExpenseId, setCancellingExpenseId] =
+    useState(null)
 
   const [incomeForm, setIncomeForm] = useState({
     title: '',
@@ -173,49 +218,28 @@ function Finance({
     action()
   }
 
-  const formatPrice = (value) =>
-    Number(value || 0).toLocaleString('tr-TR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    })
-
-  const formatDate = (dateValue) => {
-    if (!dateValue) return '-'
-
-    const date = new Date(`${dateValue}T00:00:00`)
-    return Number.isNaN(date.getTime())
-      ? dateValue
-      : date.toLocaleDateString('tr-TR')
-  }
-
-  const normalizeText = (value) =>
-    String(value || '')
-      .trim()
-      .toLocaleLowerCase('tr-TR')
-
-  const normalizeLessonStatus = (status) => {
-    if (status === 'Telafi') return 'Telafi yapılacak'
-    if (status === 'İptal') return 'İptal edildi'
-    return status || 'Planlandı'
-  }
-
-  const isCompletedLesson = (lesson) => {
-    const status = normalizeLessonStatus(lesson?.status)
-
-    return (
-      status === 'Yapıldı' ||
-      status === 'Telafi yapıldı'
-    )
-  }
-
   const getTeacherName = (teacher) =>
     teacher?.fullName ?? teacher?.name ?? ''
 
   const getTeacherBranch = (teacher) => {
-    if (teacher?.branch) return teacher.branch
-    if (Array.isArray(teacher?.specialties)) {
-      return teacher.specialties.join(', ')
+    if (teacher?.branch) {
+      return teacher.branch
     }
+
+    if (Array.isArray(teacher?.specialties)) {
+      const specialtyNames = teacher.specialties
+        .map((specialty) =>
+          typeof specialty === 'string'
+            ? specialty
+            : specialty?.name
+        )
+        .filter(Boolean)
+
+      return specialtyNames.length > 0
+        ? specialtyNames.join(', ')
+        : '-'
+    }
+
     return '-'
   }
 
@@ -607,8 +631,9 @@ function Finance({
 
       const paymentRecords = teacherPayments.filter(
         (payment) =>
+          normalizeText(payment.status) !== 'iptal' &&
           String(payment.teacherId) ===
-          String(teacher.id)
+            String(teacher.id)
       )
 
       const totalPaid = paymentRecords.reduce(
@@ -638,20 +663,11 @@ function Finance({
     teacherPayments
   ])
 
-  const getPaymentAmount = (payment) =>
-    Number(
-      payment.amount ??
-        payment.transactionAmount ??
-        payment.paidAmount ??
-        0
-    )
-
-  const getPaymentDate = (payment) =>
-    payment.paymentDate ?? payment.collectionDate ?? ''
-
   const automaticStudentIncomes = useMemo(
     () =>
-      payments.map((payment) => ({
+      payments
+        .filter(isActivePayment)
+        .map((payment) => ({
         id: `student-payment-${payment.id}`,
         sourceId: payment.id,
         sourceType: 'student-payment',
@@ -664,8 +680,8 @@ function Finance({
         relatedParty: payment.studentName || '-',
         documentNumber: payment.referenceNumber || '',
         sourceLabel: 'Otomatik Kayıt',
-        status: 'Aktif'
-      })),
+          status: 'Aktif'
+        })),
     [payments]
   )
 
@@ -689,53 +705,45 @@ function Finance({
       new Date(secondItem.date) - new Date(firstItem.date)
   )
 
-  const filteredIncomeRecords = allIncomeRecords.filter((income) => {
-    const search = normalizeText(incomeSearch)
-    if (!search) return true
+  const filteredIncomeRecords = allIncomeRecords.filter(
+    (income) =>
+      matchesSearchQuery(
+        [
+          income.title,
+          income.category,
+          income.description,
+          income.relatedParty,
+          income.paymentMethod,
+          income.documentNumber
+        ],
+        incomeSearch
+      )
+  )
 
-    return normalizeText(
-      [
-        income.title,
-        income.category,
-        income.description,
-        income.relatedParty,
-        income.paymentMethod,
-        income.documentNumber
-      ]
-        .filter(Boolean)
-        .join(' ')
-    ).includes(search)
-  })
-
-  const filteredExpenseRecords = activeExpenses.filter((expense) => {
-    const search = normalizeText(expenseSearch)
-    if (!search) return true
-
-    return normalizeText(
-      [
-        expense.title,
-        expense.category,
-        expense.payee,
-        expense.paymentMethod,
-        expense.documentNumber,
-        expense.note
-      ]
-        .filter(Boolean)
-        .join(' ')
-    ).includes(search)
-  })
+  const filteredExpenseRecords = activeExpenses.filter(
+    (expense) =>
+      matchesSearchQuery(
+        [
+          expense.title,
+          expense.category,
+          expense.payee,
+          expense.paymentMethod,
+          expense.documentNumber,
+          expense.note
+        ],
+        expenseSearch
+      )
+  )
 
   const filteredTeacherSummaries = teacherSummaries.filter(
-    (summary) => {
-      const search = normalizeText(teacherSearch)
-      if (!search) return true
-
-      return normalizeText(
-        `${getTeacherName(summary.teacher)} ${getTeacherBranch(
-          summary.teacher
-        )}`
-      ).includes(search)
-    }
+    (summary) =>
+      matchesSearchQuery(
+        [
+          getTeacherName(summary.teacher),
+          getTeacherBranch(summary.teacher)
+        ],
+        teacherSearch
+      )
   )
 
   const totalStudentIncome = automaticStudentIncomes.reduce(
@@ -760,10 +768,16 @@ function Finance({
     0
   )
 
-  const totalTeacherPaid = teacherPayments.reduce(
-    (total, payment) => total + Number(payment.amount || 0),
-    0
-  )
+  const totalTeacherPaid = teacherPayments
+    .filter(
+      (payment) =>
+        normalizeText(payment.status) !== 'iptal'
+    )
+    .reduce(
+      (total, payment) =>
+        total + Number(payment.amount || 0),
+      0
+    )
 
   const totalTeacherRemaining = teacherSummaries.reduce(
     (total, summary) => total + summary.remainingPayment,
@@ -1017,8 +1031,12 @@ function Finance({
     })
   }
 
-  const saveIncome = (event) => {
+  const saveIncome = async (event) => {
     event.preventDefault()
+
+    if (isSavingIncome) {
+      return
+    }
 
     if (!incomeForm.title.trim()) {
       alert('Gelir başlığı zorunludur.')
@@ -1030,7 +1048,9 @@ function Finance({
       return
     }
 
-    if (Number(incomeForm.amount) <= 0) {
+    const incomeAmount = Number(incomeForm.amount)
+
+    if (!Number.isFinite(incomeAmount) || incomeAmount <= 0) {
       alert('Gelir tutarı 0’dan büyük olmalıdır.')
       return
     }
@@ -1040,26 +1060,46 @@ function Finance({
       return
     }
 
-    setOtherIncomes((current) => [
-      ...current,
-      {
-        id: Date.now(),
+    setIsSavingIncome(true)
+
+    try {
+      const savedIncome = await createOtherIncome({
         ...incomeForm,
         title: incomeForm.title.trim(),
-        amount: Number(incomeForm.amount),
+        amount: incomeAmount,
         relatedParty: incomeForm.relatedParty.trim(),
         documentNumber: incomeForm.documentNumber.trim(),
-        note: incomeForm.note.trim(),
-        status: 'Aktif',
-        createdAt: new Date().toISOString()
-      }
-    ])
+        note: incomeForm.note.trim()
+      })
 
-    performCloseIncomeForm()
+      setOtherIncomes((current) => [
+        ...current,
+        savedIncome
+      ])
+
+      performCloseIncomeForm()
+    } catch (error) {
+      console.error(
+        'Ek gelir kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ek gelir kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingIncome(false)
+    }
   }
 
-  const saveExpense = (event) => {
+  const saveExpense = async (event) => {
     event.preventDefault()
+
+    if (isSavingExpense) {
+      return
+    }
 
     if (!expenseForm.title.trim()) {
       alert('Gider başlığı zorunludur.')
@@ -1071,7 +1111,9 @@ function Finance({
       return
     }
 
-    if (Number(expenseForm.amount) <= 0) {
+    const expenseAmount = Number(expenseForm.amount)
+
+    if (!Number.isFinite(expenseAmount) || expenseAmount <= 0) {
       alert('Gider tutarı 0’dan büyük olmalıdır.')
       return
     }
@@ -1081,26 +1123,46 @@ function Finance({
       return
     }
 
-    setExpenses((current) => [
-      ...current,
-      {
-        id: Date.now(),
+    setIsSavingExpense(true)
+
+    try {
+      const savedExpense = await createExpense({
         ...expenseForm,
         title: expenseForm.title.trim(),
-        amount: Number(expenseForm.amount),
+        amount: expenseAmount,
         payee: expenseForm.payee.trim(),
         documentNumber: expenseForm.documentNumber.trim(),
-        note: expenseForm.note.trim(),
-        status: 'Aktif',
-        createdAt: new Date().toISOString()
-      }
-    ])
+        note: expenseForm.note.trim()
+      })
 
-    performCloseExpenseForm()
+      setExpenses((current) => [
+        ...current,
+        savedExpense
+      ])
+
+      performCloseExpenseForm()
+    } catch (error) {
+      console.error(
+        'Gider kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Gider kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingExpense(false)
+    }
   }
 
-  const saveTeacherPayment = (event) => {
+  const saveTeacherPayment = async (event) => {
     event.preventDefault()
+
+    if (isSavingTeacherPayment) {
+      return
+    }
 
     if (!teacherPaymentForm.teacherId) {
       alert('Öğretmen seçiniz.')
@@ -1109,7 +1171,7 @@ function Finance({
 
     const amount = Number(teacherPaymentForm.amount)
 
-    if (amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       alert('Ödeme tutarı 0’dan büyük olmalıdır.')
       return
     }
@@ -1148,59 +1210,121 @@ function Finance({
       return
     }
 
-    setTeacherPayments((current) => [
-      ...current,
-      {
-        id: Date.now(),
+    setIsSavingTeacherPayment(true)
+
+    try {
+      const savedPayment = await createTeacherPayment({
         teacherId: teacher.id,
-        teacherName: getTeacherName(teacher),
         amount,
         paymentDate: teacherPaymentForm.paymentDate,
         paymentMethod: teacherPaymentForm.paymentMethod,
         referenceNumber:
           teacherPaymentForm.referenceNumber.trim(),
-        note: teacherPaymentForm.note.trim(),
-        createdAt: new Date().toISOString()
-      }
-    ])
+        note: teacherPaymentForm.note.trim()
+      })
 
-    performCloseTeacherPaymentForm()
+      setTeacherPayments((current) => [
+        ...current,
+        savedPayment
+      ])
+
+      performCloseTeacherPaymentForm()
+    } catch (error) {
+      console.error(
+        'Öğretmen ödemesi kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğretmen ödemesi kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingTeacherPayment(false)
+    }
   }
 
-  const cancelIncome = (incomeId) => {
+  const cancelIncome = async (incomeId) => {
+    if (
+      String(cancellingIncomeId) ===
+      String(incomeId)
+    ) {
+      return
+    }
+
     if (!window.confirm('Bu ek gelir kaydını iptal etmek istediğinize emin misiniz?')) {
       return
     }
 
-    setOtherIncomes((current) =>
-      current.map((income) =>
-        income.id === incomeId
-          ? {
-              ...income,
-              status: 'İptal',
-              cancelledAt: new Date().toISOString()
-            }
-          : income
+    setCancellingIncomeId(incomeId)
+
+    try {
+      const cancelledIncome =
+        await cancelOtherIncome(incomeId)
+
+      setOtherIncomes((current) =>
+        current.map((income) =>
+          String(income.id) === String(incomeId)
+            ? cancelledIncome
+            : income
+        )
       )
-    )
+    } catch (error) {
+      console.error(
+        'Ek gelir iptal etme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ek gelir iptal edilemedi.'
+      )
+    } finally {
+      setCancellingIncomeId(null)
+    }
   }
 
-  const cancelExpense = (expenseId) => {
+  const cancelExpense = async (expenseId) => {
+    if (
+      String(cancellingExpenseId) ===
+      String(expenseId)
+    ) {
+      return
+    }
+
     if (!window.confirm('Bu gider kaydını iptal etmek istediğinize emin misiniz?')) {
       return
     }
 
-    setExpenses((current) =>
-      current.map((expense) =>
-        expense.id === expenseId
-          ? {
-              ...expense,
-              status: 'İptal',
-              cancelledAt: new Date().toISOString()
-            }
-          : expense
+    setCancellingExpenseId(expenseId)
+
+    try {
+      const cancelledExpense =
+        await cancelExpenseFromDb(expenseId)
+
+      setExpenses((current) =>
+        current.map((expense) =>
+          String(expense.id) === String(expenseId)
+            ? cancelledExpense
+            : expense
+        )
       )
-    )
+    } catch (error) {
+      console.error(
+        'Gider iptal etme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Gider iptal edilemedi.'
+      )
+    } finally {
+      setCancellingExpenseId(null)
+    }
   }
 
   const renderTopMetrics = () => (
@@ -1490,8 +1614,14 @@ function Finance({
             >
               İptal
             </button>
-            <button type="submit" className="save-button">
-              Geliri Kaydet
+            <button
+              type="submit"
+              className="save-button"
+              disabled={isSavingIncome}
+            >
+              {isSavingIncome
+                ? 'Kaydediliyor...'
+                : 'Geliri Kaydet'}
             </button>
           </div>
         </form>
@@ -1562,8 +1692,15 @@ function Finance({
                         type="button"
                         className="cancel-mini-button"
                         onClick={() => cancelIncome(income.id)}
+                        disabled={
+                          String(cancellingIncomeId) ===
+                          String(income.id)
+                        }
                       >
-                        İptal Et
+                        {String(cancellingIncomeId) ===
+                        String(income.id)
+                          ? 'İptal Ediliyor...'
+                          : 'İptal Et'}
                       </button>
                     )}
                   </td>
@@ -1745,8 +1882,14 @@ function Finance({
             >
               İptal
             </button>
-            <button type="submit" className="save-button">
-              Gideri Kaydet
+            <button
+              type="submit"
+              className="save-button"
+              disabled={isSavingExpense}
+            >
+              {isSavingExpense
+                ? 'Kaydediliyor...'
+                : 'Gideri Kaydet'}
             </button>
           </div>
         </form>
@@ -1802,8 +1945,15 @@ function Finance({
                       type="button"
                       className="cancel-mini-button"
                       onClick={() => cancelExpense(expense.id)}
+                      disabled={
+                        String(cancellingExpenseId) ===
+                        String(expense.id)
+                      }
                     >
-                      İptal Et
+                      {String(cancellingExpenseId) ===
+                      String(expense.id)
+                        ? 'İptal Ediliyor...'
+                        : 'İptal Et'}
                     </button>
                   </td>
                 </tr>
@@ -2180,10 +2330,13 @@ function Finance({
                 className="save-button"
                 disabled={
                   !selectedTeacherSummary ||
-                  selectedTeacherRemaining <= 0
+                  selectedTeacherRemaining <= 0 ||
+                  isSavingTeacherPayment
                 }
               >
-                Ödemeyi Kaydet
+                {isSavingTeacherPayment
+                  ? 'Kaydediliyor...'
+                  : 'Ödemeyi Kaydet'}
               </button>
             </div>
           </form>
