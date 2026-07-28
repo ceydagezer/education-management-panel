@@ -443,6 +443,153 @@ function mapStudentFromDb(row) {
   )
 }
 
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getStudentErrorMessage(
+  error,
+  fallbackMessage,
+  duplicateMessage = ''
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (
+    duplicateMessage &&
+    (
+      error?.code === '23505' ||
+      String(
+        error?.message ?? ''
+      )
+        .toLocaleLowerCase('tr-TR')
+        .includes('duplicate')
+    )
+  ) {
+    return duplicateMessage
+  }
+
+  return fallbackMessage
+}
+
+function getSafePagination(
+  page,
+  pageSize
+) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  return {
+    safePage,
+    safePageSize,
+    from,
+    to:
+      from +
+      safePageSize -
+      1
+  }
+}
+
+function cleanSearchValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[(),]/g, ' ')
+}
+
+function normalizeDateKey(
+  value,
+  label,
+  {
+    required = false
+  } = {}
+) {
+  const dateKey = String(
+    value || ''
+  ).trim()
+
+  if (!dateKey) {
+    if (required) {
+      throw new Error(
+        `${label} zorunludur.`
+      )
+    }
+
+    return ''
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      dateKey
+    )
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  const date = new Date(
+    `${dateKey}T12:00:00`
+  )
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date
+      .toISOString()
+      .slice(0, 10) !== dateKey
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  return dateKey
+}
+
 function normalizeStudentPackages(form) {
   if (
     Array.isArray(form.enrolledPackages) &&
@@ -499,9 +646,14 @@ function normalizeStudentForm(form) {
     form.phone ?? ''
   ).trim()
 
-  const registerDate = String(
-    form.registerDate ?? ''
-  ).trim()
+  const registerDate =
+    normalizeDateKey(
+      form.registerDate,
+      'Kayıt tarihi',
+      {
+        required: true
+      }
+    )
 
   if (!/^[0-9]{11}$/.test(tcNo)) {
     throw new Error(
@@ -556,11 +708,23 @@ function normalizeStudentForm(form) {
       )
 
       const firstPaymentDate =
-        item.firstPaymentDate || ''
+        normalizeDateKey(
+          item.firstPaymentDate,
+          'İlk ödeme tarihi',
+          {
+            required: true
+          }
+        )
 
       const nextPaymentDate =
-        item.nextPaymentDate ||
-        firstPaymentDate
+        normalizeDateKey(
+          item.nextPaymentDate ||
+            firstPaymentDate,
+          'Sonraki ödeme tarihi',
+          {
+            required: true
+          }
+        )
 
       const paymentDay = Number(
         item.paymentDay ||
@@ -594,9 +758,12 @@ function normalizeStudentForm(form) {
         )
       }
 
-      if (!nextPaymentDate) {
+      if (
+        nextPaymentDate <
+          firstPaymentDate
+      ) {
         throw new Error(
-          'Her paket için sonraki ödeme tarihi seçilmelidir.'
+          'Sonraki ödeme tarihi ilk ödeme tarihinden önce olamaz.'
         )
       }
 
@@ -655,7 +822,10 @@ function normalizeStudentForm(form) {
         null,
 
       birth_date:
-        form.birthDate || null,
+        normalizeDateKey(
+          form.birthDate,
+          'Doğum tarihi'
+        ) || null,
 
       register_date:
         registerDate,
@@ -741,35 +911,15 @@ export async function getStudentsPage({
   teacherId = '',
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(
-    1,
-    Number(page) || 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
   )
-
-  const allowedPageSizes = [
-    10,
-    25,
-    50
-  ]
-
-  const requestedPageSize =
-    Number(pageSize)
-
-  const safePageSize =
-    allowedPageSizes.includes(
-      requestedPageSize
-    )
-      ? requestedPageSize
-      : 10
-
-  const from =
-    (safePage - 1) *
-    safePageSize
-
-  const to =
-    from +
-    safePageSize -
-    1
 
   let query = supabase
     .from('student_list_view')
@@ -787,11 +937,8 @@ export async function getStudentsPage({
     )
   }
 
-  const cleanSearchText = String(
-    searchText || ''
-  )
-    .trim()
-    .replace(/[(),]/g, ' ')
+  const cleanSearchText =
+    cleanSearchValue(searchText)
 
   if (cleanSearchText) {
     const searchPattern =
@@ -810,17 +957,25 @@ export async function getStudentsPage({
     )
   }
 
-  if (packageId) {
+  const cleanPackageId = String(
+    packageId || ''
+  ).trim()
+
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (cleanPackageId) {
     query = query.contains(
       'package_ids',
-      [packageId]
+      [cleanPackageId]
     )
   }
 
-  if (teacherId) {
+  if (cleanTeacherId) {
     query = query.contains(
       'teacher_ids',
-      [teacherId]
+      [cleanTeacherId]
     )
   }
 
@@ -880,7 +1035,10 @@ export async function getStudentsPage({
 
   if (error) {
     throw new Error(
-      `Öğrenci listesi alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci listesi şu anda alınamadı.'
+      )
     )
   }
 
@@ -921,7 +1079,12 @@ export async function getStudentListCounts() {
             )
 
           if (error) {
-            throw error
+            throw new Error(
+              getStudentErrorMessage(
+                error,
+                'Öğrenci durum sayıları şu anda alınamadı.'
+              )
+            )
           }
 
           return [
@@ -958,7 +1121,10 @@ export async function getStudents() {
 
   if (error) {
     throw new Error(
-      `Öğrenciler alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenciler şu anda alınamadı.'
+      )
     )
   }
 
@@ -970,7 +1136,11 @@ export async function getStudents() {
 export async function getStudentById(
   studentId
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
@@ -979,12 +1149,15 @@ export async function getStudentById(
   const { data, error } = await supabase
     .from('students')
     .select(studentSelect)
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .single()
 
   if (error) {
     throw new Error(
-      `Öğrenci alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci bilgileri şu anda alınamadı.'
+      )
     )
   }
 
@@ -1004,14 +1177,12 @@ export async function createStudent(form) {
     .single()
 
   if (error) {
-    if (error.code === '23505') {
-      throw new Error(
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Öğrenci eklenemedi.',
         'Bu TC Kimlik No ile kayıtlı başka bir öğrenci bulunmaktadır.'
       )
-    }
-
-    throw new Error(
-      `Öğrenci eklenemedi: ${error.message}`
     )
   }
 
@@ -1035,7 +1206,7 @@ export async function createStudent(form) {
     } = await supabase
       .from('students')
       .delete()
-      .eq('id', studentId)
+      .eq('id', cleanStudentId)
 
     if (rollbackError) {
       console.error(
@@ -1051,11 +1222,15 @@ export async function createStudent(form) {
     }
 
     throw new Error(
-      `Öğrenci paketleri kaydedilemedi: ${packageError.message}`
+      getStudentErrorMessage(
+        packageError,
+        'Öğrenci paketleri kaydedilemedi.',
+        'Aynı paket öğrenciye birden fazla aktif kayıt olarak eklenemez.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 export async function setStudentPassive(
@@ -1083,11 +1258,14 @@ export async function setStudentPassive(
     )
   }
 
-  if (!passiveDate) {
-    throw new Error(
-      'Pasife alma tarihi zorunludur.'
+  const cleanPassiveDate =
+    normalizeDateKey(
+      passiveDate,
+      'Pasife alma tarihi',
+      {
+        required: true
+      }
     )
-  }
 
   const {
     data,
@@ -1100,13 +1278,16 @@ export async function setStudentPassive(
       p_passive_reason:
         cleanReason,
       p_passive_date:
-        passiveDate
+        cleanPassiveDate
     }
   )
 
   if (error) {
     throw new Error(
-      `Öğrenci pasife alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci pasife alınamadı.'
+      )
     )
   }
 
@@ -1126,7 +1307,11 @@ export async function reactivateStudent(
   studentId,
   reactivatedAt
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
@@ -1150,7 +1335,10 @@ export async function reactivateStudent(
 
   if (error) {
     throw new Error(
-      `Öğrenci aktifleştirilemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci aktifleştirilemedi.'
+      )
     )
   }
 
@@ -1163,9 +1351,14 @@ function normalizeStudentUpdate(form) {
   const tcNo = String(form.tcNo ?? '').trim()
   const fullName = String(form.fullName ?? '').trim()
   const phone = String(form.phone ?? '').trim()
-  const registerDate = String(
-    form.registerDate ?? ''
-  ).trim()
+  const registerDate =
+    normalizeDateKey(
+      form.registerDate,
+      'Kayıt tarihi',
+      {
+        required: true
+      }
+    )
 
   if (!/^[0-9]{11}$/.test(tcNo)) {
     throw new Error(
@@ -1191,7 +1384,11 @@ function normalizeStudentUpdate(form) {
       full_name: fullName,
       gender:
         String(form.gender ?? '').trim() || null,
-      birth_date: form.birthDate || null,
+      birth_date:
+        normalizeDateKey(
+          form.birthDate,
+          'Doğum tarihi'
+        ) || null,
       register_date: registerDate,
       phone,
       email:
@@ -1222,9 +1419,22 @@ function normalizePackageUpdateRow(item) {
     item.agreedPrice ?? item.monthlyFee
   )
   const firstPaymentDate =
-    item.firstPaymentDate || ''
+    normalizeDateKey(
+      item.firstPaymentDate,
+      'İlk ödeme tarihi',
+      {
+        required: true
+      }
+    )
   const nextPaymentDate =
-    item.nextPaymentDate || firstPaymentDate
+    normalizeDateKey(
+      item.nextPaymentDate ||
+        firstPaymentDate,
+      'Sonraki ödeme tarihi',
+      {
+        required: true
+      }
+    )
   const paymentDay = Number(
     item.paymentDay ||
       String(firstPaymentDate).slice(8, 10)
@@ -1245,9 +1455,12 @@ function normalizePackageUpdateRow(item) {
     )
   }
 
-  if (!firstPaymentDate || !nextPaymentDate) {
+  if (
+    nextPaymentDate <
+      firstPaymentDate
+  ) {
     throw new Error(
-      'Paket ödeme tarihleri zorunludur.'
+      'Sonraki ödeme tarihi ilk ödeme tarihinden önce olamaz.'
     )
   }
 
@@ -1303,7 +1516,10 @@ async function syncStudentPackages(
 
   if (readError) {
     throw new Error(
-      `Öğrenci paketleri alınamadı: ${readError.message}`
+      getStudentErrorMessage(
+        readError,
+        'Öğrenci paketleri şu anda alınamadı.'
+      )
     )
   }
 
@@ -1333,7 +1549,10 @@ async function syncStudentPackages(
 
       if (error) {
         throw new Error(
-          `Öğrenci paketi güncellenemedi: ${error.message}`
+          getStudentErrorMessage(
+          error,
+          'Öğrenci paketi güncellenemedi.'
+        )
         )
       }
 
@@ -1355,7 +1574,11 @@ async function syncStudentPackages(
       }
 
       throw new Error(
-        `Öğrenci paketi eklenemedi: ${error.message}`
+        getStudentErrorMessage(
+        error,
+        'Öğrenci paketi eklenemedi.',
+        'Aynı paket öğrenciye birden fazla aktif kayıt olarak eklenemez.'
+      )
       )
     }
   }
@@ -1365,8 +1588,14 @@ export async function updateStudent(
   studentId,
   form
 ) {
-  if (!studentId) {
-    throw new Error('Öğrenci kimliği bulunamadı.')
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
+    throw new Error(
+      'Öğrenci kimliği bulunamadı.'
+    )
   }
 
   const {
@@ -1377,7 +1606,7 @@ export async function updateStudent(
   const { error } = await supabase
     .from('students')
     .update(studentRow)
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
 
   if (error) {
     if (error.code === '23505') {
@@ -1387,16 +1616,22 @@ export async function updateStudent(
     }
 
     throw new Error(
-      `Öğrenci güncellenemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci güncellenemedi.',
+        'Bu TC Kimlik No ile kayıtlı başka bir öğrenci bulunmaktadır.'
+      )
     )
   }
 
   await syncStudentPackages(
-    studentId,
+    cleanStudentId,
     enrolledPackages
   )
 
-  return getStudentById(studentId)
+  return getStudentById(
+    cleanStudentId
+  )
 }
 
 export async function archiveStudent(
@@ -1407,18 +1642,40 @@ export async function archiveStudent(
     retentionReviewDate
   }
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
   }
 
+  const cleanArchivedAt =
+    normalizeDateKey(
+      archivedAt,
+      'Arşiv tarihi',
+      {
+        required: true
+      }
+    )
+
+  const cleanRetentionReviewDate =
+    normalizeDateKey(
+      retentionReviewDate,
+      'İnceleme tarihi',
+      {
+        required: true
+      }
+    )
+
   if (
-    !archivedAt ||
-    !retentionReviewDate
+    cleanRetentionReviewDate <
+      cleanArchivedAt
   ) {
     throw new Error(
-      'Arşiv ve inceleme tarihleri zorunludur.'
+      'İnceleme tarihi arşiv tarihinden önce olamaz.'
     )
   }
 
@@ -1428,86 +1685,102 @@ export async function archiveStudent(
       is_active: false,
       status: 'Arşiv',
       is_archived: true,
-      archived_at: archivedAt,
+      archived_at: cleanArchivedAt,
       archive_reason:
         String(
           archiveReason ||
           'Pasif öğrenci arşive taşındı'
         ).trim(),
       retention_review_date:
-        retentionReviewDate,
+        cleanRetentionReviewDate,
       retention_status:
         'Saklama Süresi Devam Ediyor'
     })
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .eq('is_active', false)
     .eq('is_anonymized', false)
 
   if (error) {
     throw new Error(
-      `Öğrenci arşive taşınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci arşive taşınamadı.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 export async function extendStudentRetention(
   studentId,
   retentionReviewDate
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
   }
 
-  if (!retentionReviewDate) {
-    throw new Error(
-      'Yeni inceleme tarihi zorunludur.'
+  const cleanRetentionReviewDate =
+    normalizeDateKey(
+      retentionReviewDate,
+      'Yeni inceleme tarihi',
+      {
+        required: true
+      }
     )
-  }
 
   const { error } = await supabase
     .from('students')
     .update({
       retention_review_date:
-        retentionReviewDate,
+        cleanRetentionReviewDate,
       retention_status:
         'Saklamaya Devam'
     })
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .eq('is_archived', true)
     .eq('is_anonymized', false)
 
   if (error) {
     throw new Error(
-      `Saklama süresi uzatılamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Saklama süresi uzatılamadı.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 export async function anonymizeStudent(
   studentId,
   anonymizedAt
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
   }
 
   const anonymousName =
-    `Anonim Öğrenci #${String(
-      studentId
-    ).slice(0, 8)}`
+    `Anonim Öğrenci #${cleanStudentId.slice(
+      0,
+      8
+    )}`
 
   const anonymousTcNo =
-    String(
-      studentId
-    )
+    cleanStudentId
       .replace(/[^0-9]/g, '')
       .padEnd(11, '0')
       .slice(0, 11)
@@ -1536,7 +1809,7 @@ export async function anonymizeStudent(
       retention_status:
         'Anonimleştirildi'
     })
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .eq('is_archived', true)
     .eq('is_anonymized', false)
 
@@ -1548,11 +1821,15 @@ export async function anonymizeStudent(
     }
 
     throw new Error(
-      `Öğrenci anonimleştirilemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci anonimleştirilemedi.',
+        'Anonim öğrenci kimliği oluşturulurken benzersizlik hatası oluştu.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 
@@ -1582,7 +1859,10 @@ export async function deleteStudentPermanently(
 
   if (error) {
     throw new Error(
-      `Öğrenci kalıcı olarak silinemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci kalıcı olarak silinemedi.'
+      )
     )
   }
 

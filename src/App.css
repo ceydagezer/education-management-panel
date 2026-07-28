@@ -32,14 +32,6 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-html {
-  font-family:
-    'DM Sans',
-    'Segoe UI',
-    Arial,
-    sans-serif;
-}
-
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -50,12 +42,6 @@ body {
   color: #1e293b;
   background: #f5f8fc;
 
-  font-family:
-    'DM Sans',
-    'Segoe UI',
-    Arial,
-    sans-serif;
-
   font-size: 14px;
   font-weight: 400;
   line-height: 1.55;
@@ -64,12 +50,6 @@ body {
 #root {
   min-height: 100vh;
   min-height: 100dvh;
-
-  font-family:
-    'DM Sans',
-    'Segoe UI',
-    Arial,
-    sans-serif;
 }
 
 *,
@@ -82,8 +62,7 @@ button,
 input,
 select,
 textarea {
-  font-family: inherit;
-  font-size: inherit;
+  font: inherit;
 }
 
 button {
@@ -110,13 +89,6 @@ h4,
 h5,
 h6 {
   color: #0f172a;
-
-  font-family:
-    'DM Sans',
-    'Segoe UI',
-    Arial,
-    sans-serif;
-
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.025em;
@@ -275,7 +247,7 @@ td {
   min-height: 42px;
   padding: 0 16px;
 
-  font-family: inherit;
+  font: inherit;
   font-size: 13px;
   font-weight: 700;
 
@@ -360,6 +332,22 @@ td {
 @keyframes appLoadingSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   HAREKET AZALTMA TERCİHİ
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .unsaved-changes-modal,
+  .app-loading-spinner {
+    animation: none;
+  }
+
+  .unsaved-stay-button,
+  .unsaved-leave-button {
+    transition: none;
   }
 }
 

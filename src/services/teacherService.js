@@ -2,7 +2,25 @@ import { supabase } from '../lib/supabase'
 
 const PHOTO_BUCKET = 'teacher-photos'
 const CV_BUCKET = 'teacher-cvs'
-const SIGNED_URL_SECONDS = 60 * 60 * 24
+
+const SIGNED_URL_SECONDS =
+  60 * 60 * 24
+
+const MAX_PHOTO_SIZE =
+  5 * 1024 * 1024
+
+const MAX_CV_SIZE =
+  10 * 1024 * 1024
+
+const ALLOWED_PHOTO_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp'
+]
+
+const ALLOWED_CV_TYPES = [
+  'application/pdf'
+]
 
 const teacherSelect = `
   id,
@@ -34,11 +52,100 @@ const teacherSelect = `
   )
 `
 
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getTeacherErrorMessage(
+  error,
+  fallbackMessage
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  return fallbackMessage
+}
+
+function normalizeDateKey(
+  value,
+  label,
+  {
+    required = false
+  } = {}
+) {
+  const dateKey = String(
+    value ?? ''
+  ).trim()
+
+  if (!dateKey) {
+    if (required) {
+      throw new Error(
+        `${label} zorunludur.`
+      )
+    }
+
+    return ''
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      dateKey
+    )
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  const date = new Date(
+    `${dateKey}T12:00:00`
+  )
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date
+      .toISOString()
+      .slice(0, 10) !== dateKey
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  return dateKey
+}
+
 function mapTeacherFromDb(row) {
   const specialties = (
     row.teacher_specialties ?? []
   )
-    .map((relation) => relation.specialty)
+    .map(
+      (relation) =>
+        relation.specialty
+    )
     .filter(Boolean)
     .map((specialty) => ({
       id: specialty.id,
@@ -49,11 +156,21 @@ function mapTeacherFromDb(row) {
 
   return {
     id: row.id,
-    fullName: row.full_name ?? '',
-    phone: row.phone ?? '',
-    email: row.email ?? '',
-    birthDate: row.birth_date ?? '',
-    gender: row.gender ?? '',
+
+    fullName:
+      row.full_name ?? '',
+
+    phone:
+      row.phone ?? '',
+
+    email:
+      row.email ?? '',
+
+    birthDate:
+      row.birth_date ?? '',
+
+    gender:
+      row.gender ?? '',
 
     commissionRate: Number(
       row.commission_rate ?? 50
@@ -142,7 +259,9 @@ async function createSignedUrl(
   return data?.signedUrl ?? ''
 }
 
-async function attachFileUrls(teacher) {
+async function attachFileUrls(
+  teacher
+) {
   const [
     photoUrl,
     cvUrl
@@ -171,6 +290,52 @@ async function attachFileUrls(teacher) {
   }
 }
 
+function validateTeacherFile(
+  file,
+  {
+    label,
+    allowedTypes,
+    maxSize
+  }
+) {
+  if (!file) {
+    return
+  }
+
+  if (
+    !allowedTypes.includes(
+      file.type
+    )
+  ) {
+    throw new Error(
+      `${label} dosya türü desteklenmiyor.`
+    )
+  }
+
+  if (
+    !Number.isFinite(
+      Number(file.size)
+    ) ||
+    file.size <= 0
+  ) {
+    throw new Error(
+      `${label} dosyası geçerli değildir.`
+    )
+  }
+
+  if (file.size > maxSize) {
+    const maxSizeMb =
+      Math.round(
+        maxSize /
+        (1024 * 1024)
+      )
+
+    throw new Error(
+      `${label} en fazla ${maxSizeMb} MB olabilir.`
+    )
+  }
+}
+
 function normalizeTeacherForm(form) {
   const fullName = String(
     form.fullName ?? ''
@@ -182,6 +347,19 @@ function normalizeTeacherForm(form) {
 
   const email = String(
     form.email ?? ''
+  ).trim()
+
+  const birthDate =
+    normalizeDateKey(
+      form.birthDate,
+      'Doğum tarihi',
+      {
+        required: true
+      }
+    )
+
+  const gender = String(
+    form.gender ?? ''
   ).trim()
 
   const commissionRate = Number(
@@ -201,7 +379,12 @@ function normalizeTeacherForm(form) {
             : specialty?.id
         )
         .filter(Boolean)
-        .map(String)
+        .map((specialtyId) =>
+          String(
+            specialtyId
+          ).trim()
+        )
+        .filter(Boolean)
     )
   ]
 
@@ -223,13 +406,7 @@ function normalizeTeacherForm(form) {
     )
   }
 
-  if (!form.birthDate) {
-    throw new Error(
-      'Doğum tarihi zorunludur.'
-    )
-  }
-
-  if (!form.gender) {
+  if (!gender) {
     throw new Error(
       'Cinsiyet zorunludur.'
     )
@@ -267,6 +444,28 @@ function normalizeTeacherForm(form) {
     )
   }
 
+  validateTeacherFile(
+    form.photoFile,
+    {
+      label: 'Fotoğraf',
+      allowedTypes:
+        ALLOWED_PHOTO_TYPES,
+      maxSize:
+        MAX_PHOTO_SIZE
+    }
+  )
+
+  validateTeacherFile(
+    form.cvFile,
+    {
+      label: 'CV',
+      allowedTypes:
+        ALLOWED_CV_TYPES,
+      maxSize:
+        MAX_CV_SIZE
+    }
+  )
+
   return {
     teacherRow: {
       full_name:
@@ -277,10 +476,9 @@ function normalizeTeacherForm(form) {
       email,
 
       birth_date:
-        form.birthDate,
+        birthDate,
 
-      gender:
-        form.gender,
+      gender,
 
       commission_rate:
         commissionRate,
@@ -288,9 +486,10 @@ function normalizeTeacherForm(form) {
       payment_day:
         paymentDay,
 
-      notes: String(
-        form.notes ?? ''
-      ).trim()
+      notes:
+        String(
+          form.notes ?? ''
+        ).trim() || null
     },
 
     specialtyIds
@@ -330,11 +529,21 @@ async function uploadTeacherFile({
   prefix,
   file
 }) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (!cleanTeacherId) {
+    throw new Error(
+      'Öğretmen kimliği bulunamadı.'
+    )
+  }
+
   const extension =
     getFileExtension(file)
 
   const filePath =
-    `${teacherId}/${prefix}-${Date.now()}.${extension}`
+    `${cleanTeacherId}/${prefix}-${Date.now()}.${extension}`
 
   const { error } = await supabase
     .storage
@@ -353,7 +562,10 @@ async function uploadTeacherFile({
 
   if (error) {
     throw new Error(
-      `Dosya yüklenemedi: ${error.message}`
+      getTeacherErrorMessage(
+        error,
+        'Dosya yüklenemedi.'
+      )
     )
   }
 
@@ -364,14 +576,18 @@ async function removeStorageFile(
   bucket,
   path
 ) {
-  if (!path) {
+  const cleanPath = String(
+    path || ''
+  ).trim()
+
+  if (!cleanPath) {
     return
   }
 
   const { error } = await supabase
     .storage
     .from(bucket)
-    .remove([path])
+    .remove([cleanPath])
 
   if (error) {
     console.error(
@@ -384,15 +600,31 @@ async function removeStorageFile(
 async function getTeacherById(
   teacherId
 ) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (!cleanTeacherId) {
+    throw new Error(
+      'Öğretmen kimliği bulunamadı.'
+    )
+  }
+
   const { data, error } = await supabase
     .from('teachers')
     .select(teacherSelect)
-    .eq('id', teacherId)
+    .eq(
+      'id',
+      cleanTeacherId
+    )
     .single()
 
   if (error) {
     throw new Error(
-      `Öğretmen kaydı alınamadı: ${error.message}`
+      getTeacherErrorMessage(
+        error,
+        'Öğretmen kaydı şu anda alınamadı.'
+      )
     )
   }
 
@@ -405,13 +637,19 @@ export async function getTeachers() {
   const { data, error } = await supabase
     .from('teachers')
     .select(teacherSelect)
-    .order('created_at', {
-      ascending: false
-    })
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
 
   if (error) {
     throw new Error(
-      `Öğretmenler alınamadı: ${error.message}`
+      getTeacherErrorMessage(
+        error,
+        'Öğretmenler şu anda alınamadı.'
+      )
     )
   }
 
@@ -429,6 +667,28 @@ async function replaceTeacherSpecialties(
   teacherId,
   specialtyIds
 ) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (!cleanTeacherId) {
+    throw new Error(
+      'Öğretmen kimliği bulunamadı.'
+    )
+  }
+
+  const cleanSpecialtyIds = [
+    ...new Set(
+      (specialtyIds || [])
+        .map((specialtyId) =>
+          String(
+            specialtyId || ''
+          ).trim()
+        )
+        .filter(Boolean)
+    )
+  ]
+
   const {
     error: deleteError
   } = await supabase
@@ -436,26 +696,29 @@ async function replaceTeacherSpecialties(
     .delete()
     .eq(
       'teacher_id',
-      teacherId
+      cleanTeacherId
     )
 
   if (deleteError) {
     throw new Error(
-      `Öğretmen uzmanlıkları temizlenemedi: ${deleteError.message}`
+      getTeacherErrorMessage(
+        deleteError,
+        'Öğretmen uzmanlıkları güncellenemedi.'
+      )
     )
   }
 
   if (
-    specialtyIds.length === 0
+    cleanSpecialtyIds.length === 0
   ) {
     return
   }
 
   const relationRows =
-    specialtyIds.map(
+    cleanSpecialtyIds.map(
       (specialtyId) => ({
         teacher_id:
-          teacherId,
+          cleanTeacherId,
 
         specialty_id:
           specialtyId
@@ -470,7 +733,10 @@ async function replaceTeacherSpecialties(
 
   if (insertError) {
     throw new Error(
-      `Öğretmen uzmanlıkları kaydedilemedi: ${insertError.message}`
+      getTeacherErrorMessage(
+        insertError,
+        'Öğretmen uzmanlıkları kaydedilemedi.'
+      )
     )
   }
 }
@@ -499,7 +765,10 @@ export async function createTeacher(
 
   if (error) {
     throw new Error(
-      `Öğretmen eklenemedi: ${error.message}`
+      getTeacherErrorMessage(
+        error,
+        'Öğretmen eklenemedi.'
+      )
     )
   }
 
@@ -566,7 +835,10 @@ export async function createTeacher(
 
     if (filePathError) {
       throw new Error(
-        `Dosya bilgileri kaydedilemedi: ${filePathError.message}`
+        getTeacherErrorMessage(
+          filePathError,
+          'Dosya bilgileri kaydedilemedi.'
+        )
       )
     }
 
@@ -587,13 +859,22 @@ export async function createTeacher(
       )
     ])
 
-    await supabase
+    const {
+      error: rollbackError
+    } = await supabase
       .from('teachers')
       .delete()
       .eq(
         'id',
         teacherId
       )
+
+    if (rollbackError) {
+      console.error(
+        'Başarısız öğretmen kaydı geri alınamadı:',
+        rollbackError
+      )
+    }
 
     throw saveError
   }
@@ -607,7 +888,11 @@ export async function updateTeacher(
   teacherId,
   form
 ) {
-  if (!teacherId) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (!cleanTeacherId) {
     throw new Error(
       'Öğretmen kimliği bulunamadı.'
     )
@@ -618,11 +903,13 @@ export async function updateTeacher(
     specialtyIds
   } = normalizeTeacherForm(form)
 
-  const oldPhotoPath =
+  const oldPhotoPath = String(
     form.photoPath || ''
+  ).trim()
 
-  const oldCvPath =
+  const oldCvPath = String(
     form.cvFilePath || ''
+  ).trim()
 
   let uploadedPhotoPath = ''
   let uploadedCvPath = ''
@@ -634,7 +921,8 @@ export async function updateTeacher(
           bucket:
             PHOTO_BUCKET,
 
-          teacherId,
+          teacherId:
+            cleanTeacherId,
 
           prefix:
             'profile',
@@ -650,7 +938,8 @@ export async function updateTeacher(
           bucket:
             CV_BUCKET,
 
-          teacherId,
+          teacherId:
+            cleanTeacherId,
 
           prefix:
             'cv',
@@ -697,17 +986,20 @@ export async function updateTeacher(
       })
       .eq(
         'id',
-        teacherId
+        cleanTeacherId
       )
 
     if (error) {
       throw new Error(
-        `Öğretmen güncellenemedi: ${error.message}`
+        getTeacherErrorMessage(
+          error,
+          'Öğretmen güncellenemedi.'
+        )
       )
     }
 
     await replaceTeacherSpecialties(
-      teacherId,
+      cleanTeacherId,
       specialtyIds
     )
 
@@ -753,7 +1045,7 @@ export async function updateTeacher(
   }
 
   return getTeacherById(
-    teacherId
+    cleanTeacherId
   )
 }
 
@@ -762,9 +1054,28 @@ export async function setTeacherPassive(
   passiveReason,
   passiveDate
 ) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
   const cleanReason = String(
     passiveReason ?? ''
   ).trim()
+
+  const cleanPassiveDate =
+    normalizeDateKey(
+      passiveDate,
+      'Pasife alma tarihi',
+      {
+        required: true
+      }
+    )
+
+  if (!cleanTeacherId) {
+    throw new Error(
+      'Öğretmen kimliği bulunamadı.'
+    )
+  }
 
   if (!cleanReason) {
     throw new Error(
@@ -782,24 +1093,27 @@ export async function setTeacherPassive(
         'Pasif',
 
       passive_date:
-        passiveDate,
+        cleanPassiveDate,
 
       passive_reason:
         cleanReason
     })
     .eq(
       'id',
-      teacherId
+      cleanTeacherId
     )
 
   if (error) {
     throw new Error(
-      `Öğretmen pasife alınamadı: ${error.message}`
+      getTeacherErrorMessage(
+        error,
+        'Öğretmen pasife alınamadı.'
+      )
     )
   }
 
   return getTeacherById(
-    teacherId
+    cleanTeacherId
   )
 }
 
@@ -807,6 +1121,25 @@ export async function reactivateTeacher(
   teacherId,
   reactivatedAt
 ) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  const cleanReactivatedAt =
+    normalizeDateKey(
+      reactivatedAt,
+      'Aktifleştirme tarihi',
+      {
+        required: true
+      }
+    )
+
+  if (!cleanTeacherId) {
+    throw new Error(
+      'Öğretmen kimliği bulunamadı.'
+    )
+  }
+
   const { error } = await supabase
     .from('teachers')
     .update({
@@ -817,7 +1150,7 @@ export async function reactivateTeacher(
         'Aktif',
 
       reactivated_at:
-        reactivatedAt,
+        cleanReactivatedAt,
 
       passive_date:
         null,
@@ -827,16 +1160,19 @@ export async function reactivateTeacher(
     })
     .eq(
       'id',
-      teacherId
+      cleanTeacherId
     )
 
   if (error) {
     throw new Error(
-      `Öğretmen aktifleştirilemedi: ${error.message}`
+      getTeacherErrorMessage(
+        error,
+        'Öğretmen aktifleştirilemedi.'
+      )
     )
   }
 
   return getTeacherById(
-    teacherId
+    cleanTeacherId
   )
 }

@@ -23,7 +23,8 @@ function Schedule({
   setLessonPlans,
   students = [],
   teachers = [],
-  packages = []
+  packages = [],
+  scheduleLoading = false
 }) {
   const days = [
     'Pazartesi',
@@ -724,7 +725,9 @@ function Schedule({
         </div>
 
         <button className="manage-button" type="button">
-          {lessonPlans.length} ders
+          {scheduleLoading
+            ? '— ders'
+            : `${lessonPlans.length} ders`}
         </button>
       </section>
 
@@ -835,7 +838,10 @@ function Schedule({
           <button
             className="save-button schedule-save-button"
             type="submit"
-            disabled={isSavingLesson}
+            disabled={
+              isSavingLesson ||
+              scheduleLoading
+            }
           >
             {isSavingLesson
               ? 'Kaydediliyor...'
@@ -1044,7 +1050,9 @@ function Schedule({
           </div>
 
           <button className="lesson-count" type="button">
-            {filteredLessonPlans.length} ders
+            {scheduleLoading
+              ? '— ders'
+              : `${filteredLessonPlans.length} ders`}
           </button>
         </div>
 
@@ -1060,33 +1068,43 @@ function Schedule({
             </thead>
 
             <tbody>
-              {timeSlots.map((time) => (
-                <tr key={time}>
-                  <td className="weekly-time-cell schedule-hour">{time}</td>
+              {scheduleLoading ? (
+                <tr>
+                  <td
+                    colSpan={days.length + 1}
+                    className="empty-table"
+                  >
+                    Ders programı yükleniyor...
+                  </td>
+                </tr>
+              ) : (
+                timeSlots.map((time) => (
+                  <tr key={time}>
+                    <td className="weekly-time-cell schedule-hour">{time}</td>
 
-                  {days.map((day) => {
-                    const cellKey = `${day}-${time}`
-                    const cellLessons = getLessonsForCell(day, time)
-                    const isExpanded = Boolean(expandedCells[cellKey])
-                    const visibleLessons = isExpanded
-                      ? cellLessons
-                      : cellLessons.slice(0, 2)
-                    const hiddenLessonCount = Math.max(
-                      0,
-                      cellLessons.length - 2
-                    )
+                    {days.map((day) => {
+                      const cellKey = `${day}-${time}`
+                      const cellLessons = getLessonsForCell(day, time)
+                      const isExpanded = Boolean(expandedCells[cellKey])
+                      const visibleLessons = isExpanded
+                        ? cellLessons
+                        : cellLessons.slice(0, 2)
+                      const hiddenLessonCount = Math.max(
+                        0,
+                        cellLessons.length - 2
+                      )
 
-                    return (
-                      <td
-                        key={cellKey}
-                        className={
-                          cellLessons.length > 0
-                            ? 'schedule-cell-has-lessons'
-                            : ''
-                        }
-                      >
-                        {cellLessons.length > 0 ? (
-                          <div className="schedule-cell-stack">
+                      return (
+                        <td
+                          key={cellKey}
+                          className={
+                            cellLessons.length > 0
+                              ? 'schedule-cell-has-lessons'
+                              : ''
+                          }
+                        >
+                          {cellLessons.length > 0 ? (
+                            <div className="schedule-cell-stack">
                             {visibleLessons.map((lesson) => {
                               const compactStatus = getCompactLessonStatusLabel(
                                 lesson.status
@@ -1190,9 +1208,10 @@ function Schedule({
                         )}
                       </td>
                     )
-                  })}
-                </tr>
-              ))}
+                    })}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -1206,7 +1225,9 @@ function Schedule({
           </div>
 
           <button className="lesson-count" type="button">
-            {filteredLessonPlans.length} ders
+            {scheduleLoading
+              ? '— ders'
+              : `${filteredLessonPlans.length} ders`}
           </button>
         </div>
 
@@ -1225,7 +1246,16 @@ function Schedule({
             </thead>
 
             <tbody>
-              {filteredLessonPlans.length > 0 ? (
+              {scheduleLoading ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="empty-table"
+                  >
+                    Ders programı yükleniyor...
+                  </td>
+                </tr>
+              ) : filteredLessonPlans.length > 0 ? (
                 filteredLessonPlans.map((lesson) => (
                   <tr key={lesson.id}>
                     <td>

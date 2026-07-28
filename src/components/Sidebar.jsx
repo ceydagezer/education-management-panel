@@ -1,3 +1,5 @@
+import academyLogo from '../assets/LOGO.JPG'
+
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'students', label: 'Öğrenciler' },
@@ -20,11 +22,17 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-logo">♪</div>
+        <div className="brand-logo-frame">
+          <img
+            src={academyLogo}
+            alt="Artı Akademi"
+            className="brand-logo-image"
+          />
+        </div>
 
-        <div>
+        <div className="brand-text">
           <h2>Artı Akademi</h2>
-          <p>Bilim Sanat Paneli</p>
+          <p>Yönetici Paneli</p>
         </div>
       </div>
 

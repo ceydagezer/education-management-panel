@@ -48,6 +48,45 @@ import Payments from './pages/Payments'
 import Finance from './pages/Finance'
 import LessonStatusTracking from './pages/LessonStatusTracking'
 
+const VALID_PAGES = [
+  'dashboard',
+  'students',
+  'packages',
+  'teachers',
+  'schedule',
+  'lesson-status',
+  'payments',
+  'finance'
+]
+
+const getReadableConnectionError = (
+  error,
+  fallbackMessage
+) => {
+  if (
+    typeof navigator !== 'undefined' &&
+    !navigator.onLine
+  ) {
+    return 'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
+  }
+
+  const message = String(
+    error?.message || ''
+  ).toLocaleLowerCase('tr-TR')
+
+  if (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch') ||
+    message.includes('timeout') ||
+    message.includes('zaman aşımı')
+  ) {
+    return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+  }
+
+  return fallbackMessage
+}
+
 function App() {
   /*
    * =========================================================
@@ -90,17 +129,6 @@ function App() {
   const [password, setPassword] =
     useState('')
 
-  const validPages = [
-    'dashboard',
-    'students',
-    'packages',
-    'teachers',
-    'schedule',
-    'lesson-status',
-    'payments',
-    'finance'
-  ]
-
   const [activePage, setActivePage] =
     useState(() => {
       const savedPage =
@@ -108,7 +136,7 @@ function App() {
           'arti-akademi-active-page'
         )
 
-      return validPages.includes(savedPage)
+      return VALID_PAGES.includes(savedPage)
         ? savedPage
         : 'dashboard'
     })
@@ -258,40 +286,6 @@ function App() {
 
     let isMounted = true
 
-    const getReadableDataError = (
-      error
-    ) => {
-      if (
-        typeof navigator !==
-          'undefined' &&
-        !navigator.onLine
-      ) {
-        return 'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
-      }
-
-      const message = String(
-        error?.message || ''
-      ).toLocaleLowerCase(
-        'tr-TR'
-      )
-
-      if (
-        message.includes(
-          'failed to fetch'
-        ) ||
-        message.includes('network') ||
-        message.includes('fetch') ||
-        message.includes('timeout') ||
-        message.includes(
-          'zaman aşımı'
-        )
-      ) {
-        return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
-      }
-
-      return 'Panel verileri şu anda yüklenemedi. Lütfen kısa bir süre sonra tekrar deneyiniz.'
-    }
-
     const loadPanelData =
       async () => {
         setDataLoading(true)
@@ -401,8 +395,9 @@ function App() {
 
           if (isMounted) {
             setDataError(
-              getReadableDataError(
-                error
+              getReadableConnectionError(
+                error,
+                'Panel verileri şu anda yüklenemedi. Lütfen kısa bir süre sonra tekrar deneyiniz.'
               )
             )
           }
@@ -417,6 +412,12 @@ function App() {
 
     return () => {
       isMounted = false
+
+      if (timeoutId) {
+        window.clearTimeout(
+          timeoutId
+        )
+      }
     }
   }, [
     session,
@@ -509,9 +510,10 @@ function App() {
 
           if (isMounted) {
             setLessonOccurrencesError(
-              error instanceof Error
-                ? error.message
-                : 'Ders durum kayıtları alınamadı.'
+              getReadableConnectionError(
+                error,
+                'Ders durum kayıtları şu anda alınamadı. Lütfen tekrar deneyiniz.'
+              )
             )
           }
         } finally {
@@ -542,37 +544,6 @@ function App() {
   useEffect(() => {
     let isMounted = true
     let timeoutId
-
-    const getReadableAuthError = (
-      error
-    ) => {
-      if (
-        typeof navigator !==
-          'undefined' &&
-        !navigator.onLine
-      ) {
-        return 'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
-      }
-
-      const message = String(
-        error?.message || ''
-      ).toLocaleLowerCase(
-        'tr-TR'
-      )
-
-      if (
-        message.includes('fetch') ||
-        message.includes('network') ||
-        message.includes('timeout') ||
-        message.includes(
-          'failed to fetch'
-        )
-      ) {
-        return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
-      }
-
-      return 'Oturum kontrolü tamamlanamadı. Lütfen tekrar deneyiniz.'
-    }
 
     const loadInitialSession =
       async () => {
@@ -659,8 +630,9 @@ function App() {
           if (isMounted) {
             setSession(null)
             setAuthError(
-              getReadableAuthError(
-                error
+              getReadableConnectionError(
+                error,
+                'Oturum kontrolü tamamlanamadı. Lütfen tekrar deneyiniz.'
               )
             )
             setAuthLoading(false)
@@ -1024,7 +996,10 @@ function App() {
             )
           } else {
             setLoginError(
-              `Giriş yapılamadı: ${error.message}`
+              getReadableConnectionError(
+                error,
+                'Giriş yapılamadı. Lütfen bilgilerinizi kontrol edip tekrar deneyiniz.'
+              )
             )
           }
 
@@ -1040,7 +1015,10 @@ function App() {
         )
 
         setLoginError(
-          'Giriş sırasında beklenmeyen bir hata oluştu.'
+          getReadableConnectionError(
+            error,
+            'Giriş sırasında beklenmeyen bir hata oluştu.'
+          )
         )
       } finally {
         setLoginLoading(false)
@@ -1083,7 +1061,10 @@ function App() {
 
         if (error) {
           alert(
-            `Çıkış yapılamadı: ${error.message}`
+            getReadableConnectionError(
+              error,
+              'Çıkış işlemi tamamlanamadı. Lütfen tekrar deneyiniz.'
+            )
           )
 
           return
@@ -1112,7 +1093,10 @@ function App() {
         )
 
         alert(
-          'Çıkış sırasında beklenmeyen bir hata oluştu.'
+          getReadableConnectionError(
+            error,
+            'Çıkış sırasında beklenmeyen bir hata oluştu.'
+          )
         )
       }
     }
@@ -1189,7 +1173,7 @@ function App() {
     return (
       <div className="app-loading-screen">
         <LoadingState
-          text="Branşlar, paketler, öğretmenler, öğrenciler, ders programı, tahsilatlar ve finans verileri yükleniyor..."
+          text="Branşlar, paketler, öğretmenler, öğrenciler, ders programı ve öğretmen ödeme kayıtları yükleniyor..."
         />
       </div>
     )
@@ -1239,17 +1223,8 @@ function App() {
             teachers={
               teachers
             }
-            packages={
-              packages
-            }
             lessonPlans={
               lessonPlans
-            }
-            otherIncomes={
-              otherIncomes
-            }
-            teacherPayments={
-              teacherPayments
             }
             onNavigate={
               handleMenuClick

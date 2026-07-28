@@ -112,6 +112,7 @@ function Teachers({
   setTeachers,
   specialties = [],
   setSpecialties,
+  teachersLoading = false,
   unsavedChanges
 }) {
   const createEmptyForm = () => ({
@@ -1552,7 +1553,10 @@ function Teachers({
             className="excel-button"
             type="button"
             onClick={exportTeachersToExcel}
-            disabled={isExportingExcel}
+            disabled={
+              isExportingExcel ||
+              teachersLoading
+            }
           >
             {isExportingExcel
               ? 'Excel Hazırlanıyor...'
@@ -1563,7 +1567,10 @@ function Teachers({
             className="manage-button"
             type="button"
             onClick={openAddForm}
-            disabled={isSavingTeacher}
+            disabled={
+              isSavingTeacher ||
+              teachersLoading
+            }
           >
             + Öğretmen Ekle
           </button>
@@ -2082,7 +2089,9 @@ function Teachers({
             className="lesson-count"
             type="button"
           >
-            {filteredTeachers.length} öğretmen
+            {teachersLoading
+              ? '— öğretmen'
+              : `${filteredTeachers.length} öğretmen`}
           </button>
         </div>
 
@@ -2098,7 +2107,11 @@ function Teachers({
               setTeacherStatusFilter('active')
             }
           >
-            Aktif ({activeTeacherCount})
+            Aktif (
+            {teachersLoading
+              ? '—'
+              : activeTeacherCount}
+            )
           </button>
 
           <button
@@ -2112,7 +2125,11 @@ function Teachers({
               setTeacherStatusFilter('passive')
             }
           >
-            Pasif ({passiveTeacherCount})
+            Pasif (
+            {teachersLoading
+              ? '—'
+              : passiveTeacherCount}
+            )
           </button>
 
           <button
@@ -2126,7 +2143,11 @@ function Teachers({
               setTeacherStatusFilter('all')
             }
           >
-            Tümü ({teachers.length})
+            Tümü (
+            {teachersLoading
+              ? '—'
+              : teachers.length}
+            )
           </button>
         </div>
 
@@ -2147,7 +2168,16 @@ function Teachers({
             </thead>
 
             <tbody>
-              {filteredTeachers.length > 0 ? (
+              {teachersLoading ? (
+                <tr>
+                  <td
+                    className="empty-table"
+                    colSpan="9"
+                  >
+                    Öğretmenler yükleniyor...
+                  </td>
+                </tr>
+              ) : filteredTeachers.length > 0 ? (
                 filteredTeachers.map((teacher) => {
                   const paymentDay =
                     getTeacherPaymentDay(teacher)

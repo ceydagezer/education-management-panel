@@ -6,6 +6,82 @@
  * Bir formül değişirse yalnızca bu dosya güncellenir.
  */
 
+const DATE_KEY_PATTERN =
+  /^\d{4}-\d{2}-\d{2}$/
+
+function isValidDateParts(
+  year,
+  month,
+  day
+) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return false
+  }
+
+  const utcValue = Date.UTC(
+    year,
+    month - 1,
+    day
+  )
+
+  const validationDate =
+    new Date(utcValue)
+
+  return (
+    validationDate.getUTCFullYear() ===
+      year &&
+    validationDate.getUTCMonth() ===
+      month - 1 &&
+    validationDate.getUTCDate() ===
+      day
+  )
+}
+
+function parseDateKey(value) {
+  const dateKey = String(
+    value || ''
+  ).slice(0, 10)
+
+  if (
+    !DATE_KEY_PATTERN.test(dateKey)
+  ) {
+    return null
+  }
+
+  const [
+    year,
+    month,
+    day
+  ] = dateKey
+    .split('-')
+    .map(Number)
+
+  if (
+    !isValidDateParts(
+      year,
+      month,
+      day
+    )
+  ) {
+    return null
+  }
+
+  return {
+    dateKey,
+    year,
+    month,
+    day
+  }
+}
+
 /*
  * Bir tarih değerini "YYYY-MM-DD" biçimine çevirir.
  *
@@ -20,71 +96,60 @@ export const getDateKey = (value) => {
   }
 
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
+    if (
+      Number.isNaN(
+        value.getTime()
+      )
+    ) {
       return ''
     }
 
     return [
       value.getFullYear(),
-      String(value.getMonth() + 1).padStart(2, '0'),
-      String(value.getDate()).padStart(2, '0')
+      String(
+        value.getMonth() + 1
+      ).padStart(2, '0'),
+      String(
+        value.getDate()
+      ).padStart(2, '0')
     ].join('-')
   }
 
-  return String(value).slice(0, 10)
+  return (
+    parseDateKey(value)
+      ?.dateKey || ''
+  )
 }
 
 /*
  * Bugünün tarihini yerel saate göre
  * "YYYY-MM-DD" biçiminde döndürür.
  */
-export const getTodayKey = () => {
-  const now = new Date()
-
-  return getDateKey(now)
-}
+export const getTodayKey = () =>
+  getDateKey(
+    new Date()
+  )
 
 /*
  * "YYYY-MM-DD" biçimindeki tarihi UTC milisaniyeye çevirir.
  * Tarih farkı hesaplamalarında saat dilimi kaynaklı
  * bir gün kayma problemini önler.
  */
-export const dateKeyToUtc = (dateKey) => {
-  const [year, month, day] = String(dateKey || '')
-    .slice(0, 10)
-    .split('-')
-    .map(Number)
+export const dateKeyToUtc = (
+  dateKey
+) => {
+  const parsed =
+    parseDateKey(dateKey)
 
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day) ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
+  if (!parsed) {
     return null
   }
 
-  const utcValue = Date.UTC(
-    year,
-    month - 1,
-    day
+  return Date.UTC(
+    parsed.year,
+    parsed.month - 1,
+    parsed.day
   )
-
-  const validationDate = new Date(utcValue)
-
-  const isValidDate =
-    validationDate.getUTCFullYear() === year &&
-    validationDate.getUTCMonth() === month - 1 &&
-    validationDate.getUTCDate() === day
-
-  if (!isValidDate) {
-    return null
-  }
-
-  return utcValue
 }
 
 /*
@@ -100,15 +165,26 @@ export const getDayDifference = (
   fromDateKey,
   toDateKey
 ) => {
-  const fromUtc = dateKeyToUtc(fromDateKey)
-  const toUtc = dateKeyToUtc(toDateKey)
+  const fromUtc =
+    dateKeyToUtc(
+      fromDateKey
+    )
 
-  if (fromUtc === null || toUtc === null) {
+  const toUtc =
+    dateKeyToUtc(
+      toDateKey
+    )
+
+  if (
+    fromUtc === null ||
+    toUtc === null
+  ) {
     return null
   }
 
   return Math.round(
-    (toUtc - fromUtc) / 86400000
+    (toUtc - fromUtc) /
+      86400000
   )
 }
 
@@ -124,12 +200,21 @@ export const getDaysInMonth = (
   year,
   monthIndex
 ) => {
-  const numericYear = Number(year)
-  const numericMonthIndex = Number(monthIndex)
+  const numericYear =
+    Number(year)
+
+  const numericMonthIndex =
+    Number(monthIndex)
 
   if (
-    !Number.isInteger(numericYear) ||
-    !Number.isInteger(numericMonthIndex)
+    !Number.isInteger(
+      numericYear
+    ) ||
+    !Number.isInteger(
+      numericMonthIndex
+    ) ||
+    numericMonthIndex < 0 ||
+    numericMonthIndex > 11
   ) {
     return 0
   }
@@ -152,30 +237,42 @@ export const createDueDate = (
   monthIndex,
   paymentDay
 ) => {
-  const numericYear = Number(year)
-  const numericMonthIndex = Number(monthIndex)
-  const numericPaymentDay = Number(paymentDay)
+  const numericYear =
+    Number(year)
+
+  const numericMonthIndex =
+    Number(monthIndex)
+
+  const numericPaymentDay =
+    Number(paymentDay)
 
   if (
-    !Number.isInteger(numericYear) ||
-    !Number.isInteger(numericMonthIndex) ||
+    !Number.isInteger(
+      numericYear
+    ) ||
+    !Number.isInteger(
+      numericMonthIndex
+    ) ||
     numericMonthIndex < 0 ||
     numericMonthIndex > 11
   ) {
     return ''
   }
 
-  const daysInMonth = getDaysInMonth(
-    numericYear,
-    numericMonthIndex
-  )
+  const daysInMonth =
+    getDaysInMonth(
+      numericYear,
+      numericMonthIndex
+    )
 
   if (!daysInMonth) {
     return ''
   }
 
   const safePaymentDay =
-    Number.isFinite(numericPaymentDay) &&
+    Number.isInteger(
+      numericPaymentDay
+    ) &&
     numericPaymentDay > 0
       ? numericPaymentDay
       : 1
@@ -187,8 +284,12 @@ export const createDueDate = (
 
   return [
     numericYear,
-    String(numericMonthIndex + 1).padStart(2, '0'),
-    String(safeDay).padStart(2, '0')
+    String(
+      numericMonthIndex + 1
+    ).padStart(2, '0'),
+    String(
+      safeDay
+    ).padStart(2, '0')
   ].join('-')
 }
 
@@ -204,26 +305,19 @@ export const addOneMonth = (
   dateKey,
   paymentDay
 ) => {
-  const cleanDateKey = getDateKey(dateKey)
+  const parsed =
+    parseDateKey(dateKey)
 
-  const [year, month] = cleanDateKey
-    .split('-')
-    .map(Number)
-
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    month < 1 ||
-    month > 12
-  ) {
+  if (!parsed) {
     return ''
   }
 
-  const nextMonthDate = new Date(
-    year,
-    month,
-    1
-  )
+  const nextMonthDate =
+    new Date(
+      parsed.year,
+      parsed.month,
+      1
+    )
 
   return createDueDate(
     nextMonthDate.getFullYear(),
@@ -245,43 +339,35 @@ export const addMonthsToDate = (
   dateValue,
   monthCount
 ) => {
-  const dateKey = getDateKey(dateValue)
-  const numericMonthCount = Number(monthCount)
+  const parsed =
+    parseDateKey(
+      getDateKey(
+        dateValue
+      )
+    )
+
+  const numericMonthCount =
+    Number(monthCount)
 
   if (
-    !dateKey ||
-    !Number.isInteger(numericMonthCount)
+    !parsed ||
+    !Number.isInteger(
+      numericMonthCount
+    )
   ) {
     return ''
   }
 
-  const [year, month, day] = dateKey
-    .split('-')
-    .map(Number)
+  const sourceDate =
+    new Date(
+      parsed.year,
+      parsed.month - 1,
+      1
+    )
 
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
-  ) {
-    return ''
-  }
-
-  const sourceDate = new Date(
-    year,
-    month - 1,
-    day
-  )
-
-  if (Number.isNaN(sourceDate.getTime())) {
-    return ''
-  }
-
-  const originalDay = sourceDate.getDate()
-
-  sourceDate.setDate(1)
   sourceDate.setMonth(
-    sourceDate.getMonth() + numericMonthCount
+    sourceDate.getMonth() +
+      numericMonthCount
   )
 
   const lastDayOfTargetMonth =
@@ -292,12 +378,14 @@ export const addMonthsToDate = (
 
   sourceDate.setDate(
     Math.min(
-      originalDay,
+      parsed.day,
       lastDayOfTargetMonth
     )
   )
 
-  return getDateKey(sourceDate)
+  return getDateKey(
+    sourceDate
+  )
 }
 
 /*
@@ -310,9 +398,14 @@ export const addYearsToDate = (
   dateValue,
   yearCount
 ) => {
-  const numericYearCount = Number(yearCount)
+  const numericYearCount =
+    Number(yearCount)
 
-  if (!Number.isInteger(numericYearCount)) {
+  if (
+    !Number.isInteger(
+      numericYearCount
+    )
+  ) {
     return ''
   }
 
@@ -329,17 +422,28 @@ export const addYearsToDate = (
  * 5000 -> "5.000"
  * 1250.5 -> "1.250,5"
  */
-export const formatPrice = (value) => {
-  const numericValue = Number(value)
+export const formatPrice = (
+  value
+) => {
+  const numericValue =
+    Number(value)
 
-  if (!Number.isFinite(numericValue)) {
+  if (
+    !Number.isFinite(
+      numericValue
+    )
+  ) {
     return '0'
   }
 
-  return numericValue.toLocaleString('tr-TR', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  })
+  return numericValue
+    .toLocaleString(
+      'tr-TR',
+      {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      }
+    )
 }
 
 /*
@@ -348,33 +452,29 @@ export const formatPrice = (value) => {
  * Örnek:
  * "2026-07-25" -> "25.07.2026"
  */
-export const formatDate = (dateValue) => {
-  const dateKey = getDateKey(dateValue)
+export const formatDate = (
+  dateValue
+) => {
+  const parsed =
+    parseDateKey(
+      getDateKey(
+        dateValue
+      )
+    )
 
-  if (!dateKey) {
+  if (!parsed) {
     return '-'
   }
 
-  const [year, month, day] = dateKey
-    .split('-')
-    .map(Number)
-
   const date = new Date(
-    year,
-    month - 1,
-    day
+    parsed.year,
+    parsed.month - 1,
+    parsed.day
   )
 
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return dateKey
-  }
-
-  return date.toLocaleDateString('tr-TR')
+  return date.toLocaleDateString(
+    'tr-TR'
+  )
 }
 
 /*
@@ -383,11 +483,25 @@ export const formatDate = (dateValue) => {
  * Örnek:
  * "2026-07" -> "Temmuz 2026"
  */
-export const formatPeriod = (periodValue) => {
-  const [year, month] = String(
+export const formatPeriod = (
+  periodValue
+) => {
+  const periodKey = String(
     periodValue || ''
-  )
-    .slice(0, 7)
+  ).slice(0, 7)
+
+  if (
+    !/^\d{4}-\d{2}$/.test(
+      periodKey
+    )
+  ) {
+    return '-'
+  }
+
+  const [
+    year,
+    month
+  ] = periodKey
     .split('-')
     .map(Number)
 
@@ -404,8 +518,11 @@ export const formatPeriod = (periodValue) => {
     year,
     month - 1,
     1
-  ).toLocaleDateString('tr-TR', {
-    month: 'long',
-    year: 'numeric'
-  })
+  ).toLocaleDateString(
+    'tr-TR',
+    {
+      month: 'long',
+      year: 'numeric'
+    }
+  )
 }

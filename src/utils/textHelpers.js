@@ -10,8 +10,12 @@
  * Bir değeri güvenli biçimde string'e çevirir
  * ve baştaki/sondaki boşlukları temizler.
  */
-export const cleanText = (value) =>
-  String(value ?? '').trim()
+export const cleanText = (
+  value
+) =>
+  String(
+    value ?? ''
+  ).trim()
 
 /*
  * Durum, kategori ve sabit metin karşılaştırmalarında
@@ -20,8 +24,11 @@ export const cleanText = (value) =>
  * Örnek:
  * "  Aktif " -> "aktif"
  */
-export const normalizeStatusText = (value) =>
-  cleanText(value).toLocaleLowerCase('tr-TR')
+export const normalizeStatusText = (
+  value
+) =>
+  cleanText(value)
+    .toLocaleLowerCase('tr-TR')
 
 /*
  * Arama kutuları için gelişmiş normalizasyon.
@@ -34,17 +41,17 @@ export const normalizeStatusText = (value) =>
  * Örnek:
  * "  Şule  IŞIK  " -> "sule isik"
  */
-export const normalizeSearchText = (value) =>
+export const normalizeSearchText = (
+  value
+) =>
   cleanText(value)
     .toLocaleLowerCase('tr-TR')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(
+      /[\u0300-\u036f]/g,
+      ''
+    )
     .replace(/ı/g, 'i')
-    .replace(/ç/g, 'c')
-    .replace(/ğ/g, 'g')
-    .replace(/ö/g, 'o')
-    .replace(/ş/g, 's')
-    .replace(/ü/g, 'u')
     .replace(/\s+/g, ' ')
 
 /*
@@ -58,8 +65,12 @@ export const areTextsEqual = (
   firstValue,
   secondValue
 ) =>
-  normalizeSearchText(firstValue) ===
-  normalizeSearchText(secondValue)
+  normalizeSearchText(
+    firstValue
+  ) ===
+  normalizeSearchText(
+    secondValue
+  )
 
 /*
  * Bir metnin arama ifadesini içerip içermediğini
@@ -72,7 +83,9 @@ export const includesSearchText = (
   searchValue
 ) => {
   const normalizedSearch =
-    normalizeSearchText(searchValue)
+    normalizeSearchText(
+      searchValue
+    )
 
   if (!normalizedSearch) {
     return true
@@ -80,7 +93,9 @@ export const includesSearchText = (
 
   return normalizeSearchText(
     sourceValue
-  ).includes(normalizedSearch)
+  ).includes(
+    normalizedSearch
+  )
 }
 
 /*
@@ -98,20 +113,26 @@ export const matchesSearchQuery = (
   searchValue
 ) => {
   const normalizedSearch =
-    normalizeSearchText(searchValue)
+    normalizeSearchText(
+      searchValue
+    )
 
   if (!normalizedSearch) {
     return true
   }
 
-  const safeValues = Array.isArray(values)
-    ? values
-    : [values]
+  const safeValues =
+    Array.isArray(values)
+      ? values
+      : [values]
 
-  return safeValues.some((value) =>
-    normalizeSearchText(value).includes(
-      normalizedSearch
-    )
+  return safeValues.some(
+    (value) =>
+      normalizeSearchText(
+        value
+      ).includes(
+        normalizedSearch
+      )
   )
 }
 
@@ -125,19 +146,43 @@ export const getInitials = (
   value,
   maximumLength = 2
 ) => {
-  const words = cleanText(value)
-    .split(/\s+/)
-    .filter(Boolean)
+  const words =
+    cleanText(value)
+      .split(/\s+/)
+      .filter(Boolean)
 
   if (words.length === 0) {
     return ''
   }
 
+  const numericMaximumLength =
+    Number(maximumLength)
+
+  const safeMaximumLength =
+    Number.isFinite(
+      numericMaximumLength
+    )
+      ? Math.max(
+          1,
+          Math.trunc(
+            numericMaximumLength
+          )
+        )
+      : 2
+
   return words
-    .slice(0, Math.max(1, maximumLength))
-    .map((word) => word.charAt(0))
+    .slice(
+      0,
+      safeMaximumLength
+    )
+    .map(
+      (word) =>
+        word.charAt(0)
+    )
     .join('')
-    .toLocaleUpperCase('tr-TR')
+    .toLocaleUpperCase(
+      'tr-TR'
+    )
 }
 
 /*
@@ -149,14 +194,19 @@ export const getInitials = (
 export const capitalizeFirstLetter = (
   value
 ) => {
-  const text = cleanText(value)
+  const text =
+    cleanText(value)
 
   if (!text) {
     return ''
   }
 
   return (
-    text.charAt(0).toLocaleUpperCase('tr-TR') +
+    text
+      .charAt(0)
+      .toLocaleUpperCase(
+        'tr-TR'
+      ) +
     text.slice(1)
   )
 }
@@ -167,14 +217,23 @@ export const capitalizeFirstLetter = (
  * Örnek:
  * "ayşe yılmaz" -> "Ayşe Yılmaz"
  */
-export const toTitleCaseTr = (value) =>
+export const toTitleCaseTr = (
+  value
+) =>
   cleanText(value)
-    .toLocaleLowerCase('tr-TR')
+    .toLocaleLowerCase(
+      'tr-TR'
+    )
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) =>
-      word.charAt(0).toLocaleUpperCase('tr-TR') +
-      word.slice(1)
+    .map(
+      (word) =>
+        word
+          .charAt(0)
+          .toLocaleUpperCase(
+            'tr-TR'
+          ) +
+        word.slice(1)
     )
     .join(' ')
 
@@ -198,7 +257,10 @@ export const areIdsEqual = (
     return false
   }
 
-  return String(firstId) === String(secondId)
+  return (
+    String(firstId).trim() ===
+    String(secondId).trim()
+  )
 }
 
 /*
@@ -208,5 +270,12 @@ export const areIdsEqual = (
  * Örnek:
  * "(0532) 123 45 67" -> "05321234567"
  */
-export const keepOnlyDigits = (value) =>
-  String(value ?? '').replace(/\D/g, '')
+export const keepOnlyDigits = (
+  value
+) =>
+  String(
+    value ?? ''
+  ).replace(
+    /\D/g,
+    ''
+  )

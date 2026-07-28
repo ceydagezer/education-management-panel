@@ -56,6 +56,7 @@ function Packages({
   setPackages = () => {},
   specialties = [],
   setSpecialties = () => {},
+  packagesLoading = false,
   unsavedChanges
 }) {
   const emptyForm = {
@@ -1152,7 +1153,9 @@ function Packages({
             className="lesson-count"
             type="button"
           >
-            {activePackages.length} paket
+            {packagesLoading
+              ? '— paket'
+              : `${activePackages.length} paket`}
           </button>
         </div>
 
@@ -1171,7 +1174,16 @@ function Packages({
           </thead>
 
           <tbody>
-            {activePackages.length > 0 ? (
+            {packagesLoading ? (
+              <tr>
+                <td
+                  colSpan="8"
+                  className="empty-table"
+                >
+                  Paketler yükleniyor...
+                </td>
+              </tr>
+            ) : activePackages.length > 0 ? (
               activePackages.map((item) => {
                 const isDeleting =
                   areIdsEqual(

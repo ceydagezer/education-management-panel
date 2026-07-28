@@ -116,6 +116,21 @@
   text-decoration: underline;
 }
 
+
+.teacher-photo-upload:focus-visible,
+.teacher-photo-remove:focus-visible,
+.specialty-add-row button:focus-visible,
+.teacher-cv-dropzone:focus-visible,
+.teacher-cv-remove:focus-visible,
+.teacher-status-filter-button:focus-visible,
+.teacher-passive-button:focus-visible,
+.teacher-reactivate-button:focus-visible,
+.teacher-pdf-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
 .hidden-file-input {
   display: none;
 }
@@ -826,171 +841,13 @@
 
 
 /* =========================================================
-   ÖĞRETMEN LİSTESİ - KOMPAKT MASAÜSTÜ TABLOSU
-   İletişim tek sütunda gösterilir, notlar listeden kaldırılır.
+   ÖĞRETMEN LİSTESİ - DENGELİ SÜTUN YAPISI
    ========================================================= */
 
 .teacher-status-filter-bar
   + .payment-table-wrapper {
   width: 100%;
   overflow-x: hidden;
-}
-
-.teacher-list-table {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
-}
-
-.teacher-list-table th,
-.teacher-list-table td {
-  box-sizing: border-box;
-  vertical-align: middle;
-}
-
-.teacher-list-table th {
-  padding: 13px 12px;
-  font-size: 11px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.teacher-list-table td {
-  padding: 16px 12px;
-  font-size: 12px;
-  text-align: center;
-}
-
-.teacher-list-table th:nth-child(1),
-.teacher-list-table td:nth-child(1) {
-  width: 15%;
-  text-align: left;
-}
-
-.teacher-list-table th:nth-child(2),
-.teacher-list-table td:nth-child(2) {
-  width: 17%;
-  text-align: left;
-}
-
-.teacher-list-table th:nth-child(3),
-.teacher-list-table td:nth-child(3) {
-  width: 11%;
-  text-align: left;
-}
-
-.teacher-list-table th:nth-child(4),
-.teacher-list-table td:nth-child(4) {
-  width: 9%;
-}
-
-.teacher-list-table th:nth-child(5),
-.teacher-list-table td:nth-child(5) {
-  width: 8%;
-}
-
-.teacher-list-table th:nth-child(6),
-.teacher-list-table td:nth-child(6) {
-  width: 12%;
-}
-
-.teacher-list-table th:nth-child(7),
-.teacher-list-table td:nth-child(7) {
-  width: 9%;
-}
-
-.teacher-list-table th:nth-child(8),
-.teacher-list-table td:nth-child(8) {
-  width: 18%;
-}
-
-.teacher-list-table .teacher-table-user {
-  min-width: 0;
-  justify-content: flex-start;
-}
-
-.teacher-list-table .teacher-table-user strong {
-  overflow: hidden;
-  min-width: 0;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.teacher-contact-cell {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
-  color: #64748b;
-  line-height: 1.35;
-}
-
-.teacher-contact-cell span {
-  display: block;
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.teacher-contact-cell b {
-  color: #334155;
-  font-size: 11px;
-}
-
-.teacher-list-table .teacher-status-cell {
-  align-items: center;
-  min-width: 0;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.teacher-list-table .teacher-table-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-
-.teacher-list-table .teacher-pdf-button,
-.teacher-list-table .detail-button,
-.teacher-list-table .teacher-passive-button,
-.teacher-list-table .teacher-reactivate-button {
-  padding: 7px 9px;
-  font-size: 11px;
-}
-
-@media (max-width: 1180px) {
-  .teacher-status-filter-bar
-    + .payment-table-wrapper {
-    overflow-x: auto;
-  }
-
-  .teacher-list-table {
-    min-width: 1050px;
-    table-layout: auto;
-  }
-
-  .teacher-list-table th,
-  .teacher-list-table td {
-    white-space: nowrap;
-  }
-
-  .teacher-list-table th:nth-child(n),
-  .teacher-list-table td:nth-child(n) {
-    width: auto;
-  }
-}
-
-/* =========================================================
-   ÖĞRETMEN LİSTESİ - DENGELİ SÜTUN YAPISI
-   ========================================================= */
-
-.teacher-status-filter-bar
-  + .payment-table-wrapper {
-  overflow-x: visible;
 }
 
 .teacher-list-table {
@@ -1146,12 +1003,11 @@
 @media (max-width: 1180px) {
   .teacher-status-filter-bar
     + .payment-table-wrapper {
-    overflow-x: hidden;
+    overflow-x: auto;
   }
 
   .teacher-list-table {
-    width: 100%;
-    min-width: 0;
+    min-width: 1050px;
     table-layout: fixed;
   }
 
@@ -1159,40 +1015,6 @@
   .teacher-list-table td {
     white-space: nowrap;
   }
-}
-
-/* =========================================================
-   ÖĞRETMEN FORMU SELECT OKLARI
-   Cinsiyet ve aylık ödeme günü alanlarında oku görünür tutar
-   ve sağ kenardan biraz sola taşır.
-   ========================================================= */
-
-.teacher-form-card .form-group select {
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  -moz-appearance: none !important;
-
-  padding-right: 48px !important;
-
-  background-color: #f8fafc !important;
-  background-image:
-    linear-gradient(
-      45deg,
-      transparent 50%,
-      #334155 50%
-    ),
-    linear-gradient(
-      135deg,
-      #334155 50%,
-      transparent 50%
-    ) !important;
-  background-repeat: no-repeat !important;
-  background-position:
-    calc(100% - 20px) 50%,
-    calc(100% - 15px) 50% !important;
-  background-size:
-    5px 5px,
-    5px 5px !important;
 }
 
 /* Öğretmen formu select okları */

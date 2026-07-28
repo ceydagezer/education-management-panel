@@ -24,6 +24,78 @@ import {
   normalizeStatusText
 } from '../utils/textHelpers'
 
+const formatLocalDateKey = (date) => {
+  const year = date.getFullYear()
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0')
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const getMondayDateKey = (
+  value = new Date()
+) => {
+  const date =
+    value instanceof Date
+      ? new Date(value)
+      : new Date(
+          `${String(value).slice(
+            0,
+            10
+          )}T12:00:00`
+        )
+
+  if (Number.isNaN(date.getTime())) {
+    return formatLocalDateKey(
+      new Date()
+    )
+  }
+
+  const dayOfWeek =
+    date.getDay() || 7
+
+  date.setDate(
+    date.getDate() -
+      dayOfWeek +
+      1
+  )
+
+  return formatLocalDateKey(date)
+}
+
+const addDaysToDateKey = (
+  dateKey,
+  dayCount
+) => {
+  const date = new Date(
+    `${dateKey}T12:00:00`
+  )
+
+  date.setDate(
+    date.getDate() +
+      dayCount
+  )
+
+  return formatLocalDateKey(date)
+}
+
+const formatShortDate = (
+  dateKey
+) =>
+  new Date(
+    `${dateKey}T12:00:00`
+  ).toLocaleDateString(
+    'tr-TR',
+    {
+      day: '2-digit',
+      month: '2-digit'
+    }
+  )
+
 function LessonStatusTracking({
   lessons = [],
   lessonPlans = [],
@@ -77,6 +149,28 @@ function LessonStatusTracking({
     Cumartesi: 6,
     Pazar: 7
   }
+
+  const todayDateKey =
+    formatLocalDateKey(
+      new Date()
+    )
+
+  const currentWeekStart =
+    getMondayDateKey(
+      todayDateKey
+    )
+
+  const formattedToday =
+    new Date(
+      `${todayDateKey}T12:00:00`
+    ).toLocaleDateString(
+      'tr-TR',
+      {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+      }
+    )
 
   const emptyMakeupForm = {
     teacherId: '',
@@ -165,7 +259,7 @@ function LessonStatusTracking({
   const [
     historyLoading,
     setHistoryLoading
-  ] = useState(false)
+  ] = useState(true)
 
   const [
     historyError,
@@ -380,9 +474,9 @@ function LessonStatusTracking({
     return students.find(
       (student) =>
         areIdsEqual(
-        student.id,
-        makeupForm.studentId
-      )
+          student.id,
+          makeupForm.studentId
+        )
     )
   }
 
@@ -521,26 +615,46 @@ function LessonStatusTracking({
     )
   }
 
+  const getLessonDateForDay = (
+    day
+  ) => {
+    const dayIndex =
+      (dayOrder[day] || 1) - 1
+
+    return addDaysToDateKey(
+      currentWeekStart,
+      dayIndex
+    )
+  }
+
+  const selectedWeekEnd =
+    addDaysToDateKey(
+      currentWeekStart,
+      6
+    )
+
   /*
-   * Üst haftalık tablo güncel lesson_plans kayıtlarını gösterir.
-   * Occurrence kaydı varsa yalnızca dersin güncel durumunu ekler.
-   * Programdan silinen plan bu tablodan hemen çıkar.
+   * Aynı haftalık ders planı her hafta tekrar eder.
+   * Bu nedenle occurrence kaydı plan kimliği ve gerçek ders tarihiyle
+   * birlikte bulunur.
    */
-  const occurrenceByPlanId = new Map(
-    lessons
-      .filter(
-        (lesson) =>
-          lesson.lessonPlanId
-      )
-      .map(
-        (lesson) => [
-          String(
-            lesson.lessonPlanId
-          ),
-          lesson
-        ]
-      )
-  )
+  const occurrenceByPlanAndDate =
+    new Map(
+      lessons
+        .filter(
+          (lesson) =>
+            lesson.lessonPlanId &&
+            lesson.lessonDate
+        )
+        .map(
+          (lesson) => [
+            `${String(
+              lesson.lessonPlanId
+            )}-${lesson.lessonDate}`,
+            lesson
+          ]
+        )
+    )
 
   const currentScheduleLessons =
     lessonPlans
@@ -549,9 +663,16 @@ function LessonStatusTracking({
           lesson.isActive !== false
       )
       .map((lesson) => {
+        const lessonDate =
+          getLessonDateForDay(
+            lesson.day
+          )
+
         const occurrence =
-          occurrenceByPlanId.get(
-            String(lesson.id)
+          occurrenceByPlanAndDate.get(
+            `${String(
+              lesson.id
+            )}-${lessonDate}`
           )
 
         return {
@@ -560,6 +681,7 @@ function LessonStatusTracking({
             occurrence?.id || '',
           lessonPlanId:
             lesson.id,
+          lessonDate,
           status:
             occurrence?.status ||
             'Planlandı',
@@ -568,13 +690,13 @@ function LessonStatusTracking({
             lesson.note ||
             '',
           isMakeup:
-            occurrence?.isMakeup === true
+            false
         }
       })
 
   /*
-   * Plan tablosunda yer almayan ve henüz sonuçlanmamış telafi
-   * dersleri de güncel haftalık takip tablosunda gösterilir.
+   * Telafi dersleri yalnızca seçilen haftanın içindeyse gösterilir.
+   * Tarihsiz eski test kayıtları geçiş sürecinde görünmeye devam eder.
    */
   const pendingMakeupLessons =
     lessons.filter((lesson) => {
@@ -583,7 +705,17 @@ function LessonStatusTracking({
           lesson.status
         )
 
+      const belongsToSelectedWeek =
+        !lesson.lessonDate ||
+        (
+          lesson.lessonDate >=
+            currentWeekStart &&
+          lesson.lessonDate <=
+            selectedWeekEnd
+        )
+
       return (
+        belongsToSelectedWeek &&
         isMakeupLesson(lesson) &&
         (
           status ===
@@ -669,10 +801,35 @@ function LessonStatusTracking({
             )
 
             if (isMounted) {
+              const isOffline =
+                typeof navigator !==
+                  'undefined' &&
+                !navigator.onLine
+
+              const errorMessage =
+                String(
+                  error?.message || ''
+                ).toLocaleLowerCase(
+                  'tr-TR'
+                )
+
+              const isNetworkError =
+                errorMessage.includes(
+                  'failed to fetch'
+                ) ||
+                errorMessage.includes(
+                  'network'
+                ) ||
+                errorMessage.includes(
+                  'fetch'
+                )
+
               setHistoryError(
-                error instanceof Error
-                  ? error.message
-                  : 'Ders geçmişi alınamadı.'
+                isOffline
+                  ? 'İnternet bağlantısı bulunamadı. Ders geçmişi yüklenemedi.'
+                  : isNetworkError
+                    ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+                    : 'Ders geçmişi şu anda yüklenemedi.'
               )
             }
           } finally {
@@ -802,36 +959,19 @@ function LessonStatusTracking({
   }
 
   const updateLessonStatus = async (
-    lessonId,
+    currentLesson,
     newStatus
   ) => {
-    if (updatingLessonId) {
+    if (
+      !currentLesson ||
+      updatingLessonId
+    ) {
       return
     }
 
-    const currentLesson =
-      lessons.find(
-        (lesson) =>
-          areIdsEqual(
-            lesson.id,
-            lessonId
-          )
-      ) ||
-      weeklyLessons.find(
-        (lesson) =>
-          areIdsEqual(
-            lesson.occurrenceId,
-            lessonId
-          ) ||
-          areIdsEqual(
-            lesson.id,
-            lessonId
-          )
-      )
-
-    if (!currentLesson) {
-      return
-    }
+    const actionId =
+      currentLesson.occurrenceId ||
+      currentLesson.id
 
     const statusToSave =
       newStatus === 'Geri al'
@@ -842,25 +982,72 @@ function LessonStatusTracking({
           )
         : newStatus
 
-    setUpdatingLessonId(lessonId)
+    const lessonDate =
+      currentLesson.lessonDate ||
+      getLessonDateForDay(
+        currentLesson.day
+      )
+
+    setUpdatingLessonId(actionId)
 
     try {
-      const updatedLesson =
-        await updateLessonOccurrenceStatus(
-          lessonId,
-          statusToSave
-        )
+      let savedLesson
 
-      setLessons((currentLessons) =>
-        currentLessons.map((lesson) =>
-          areIdsEqual(
-            lesson.id,
-            lessonId
+      if (currentLesson.occurrenceId) {
+        savedLesson =
+          await updateLessonOccurrenceStatus(
+            currentLesson.occurrenceId,
+            statusToSave,
+            lessonDate
           )
-            ? updatedLesson
-            : lesson
+
+        setLessons((currentLessons) =>
+          currentLessons.map(
+            (lesson) =>
+              areIdsEqual(
+                lesson.id,
+                currentLesson
+                  .occurrenceId
+              )
+                ? savedLesson
+                : lesson
+          )
         )
-      )
+      } else {
+        savedLesson =
+          await createLessonOccurrence({
+            lessonPlanId:
+              currentLesson.lessonPlanId ||
+              currentLesson.id,
+            teacherId:
+              currentLesson.teacherId,
+            studentId:
+              currentLesson.studentId,
+            packageId:
+              currentLesson.packageId,
+            lessonDate,
+            day:
+              currentLesson.day,
+            time:
+              currentLesson.time,
+            duration:
+              currentLesson.duration ||
+              '60 dk',
+            status:
+              statusToSave,
+            note:
+              currentLesson.note || '',
+            isMakeup:
+              false,
+            relatedLessonId:
+              null
+          })
+
+        setLessons((currentLessons) => [
+          ...currentLessons,
+          savedLesson
+        ])
+      }
 
       setHistoryReloadKey(
         (current) => current + 1
@@ -961,6 +1148,7 @@ function LessonStatusTracking({
     setShowStudentSuggestions(false)
     setSelectedStatus('all')
     setOpenMenuId(null)
+    resetHistoryPage()
   }
 
   const performOpenMakeupForm = () => {
@@ -1113,6 +1301,10 @@ function LessonStatusTracking({
             makeupForm.studentId,
           packageId:
             makeupForm.packageId,
+          lessonDate:
+            getLessonDateForDay(
+              makeupForm.day
+            ),
           day:
             makeupForm.day,
           time:
@@ -1170,6 +1362,11 @@ function LessonStatusTracking({
             Haftalık ders programını görüntüleyin,
             iptal ve telafi süreçlerini takip edin.
           </p>
+        </div>
+
+        <div className="status-today-date">
+          <span>Bugün</span>
+          <strong>{formattedToday}</strong>
         </div>
       </section>
 
@@ -1601,7 +1798,14 @@ function LessonStatusTracking({
 
                 {days.map((day) => (
                   <th key={day}>
-                    {day}
+                    <span>{day}</span>
+                    <small>
+                      {formatShortDate(
+                        getLessonDateForDay(
+                          day
+                        )
+                      )}
+                    </small>
                   </th>
                 ))}
               </tr>
@@ -1789,8 +1993,7 @@ function LessonStatusTracking({
                                                   type="button"
                                                   onClick={() =>
                                                     updateLessonStatus(
-                                                      lesson.occurrenceId ||
-                                                        lesson.id,
+                                                      lesson,
                                                       action
                                                     )
                                                   }
@@ -1865,7 +2068,9 @@ function LessonStatusTracking({
           </div>
 
           <span className="lesson-count">
-            {historyTotal} kayıt
+            {historyLoading
+              ? '— kayıt'
+              : `${historyTotal} kayıt`}
           </span>
         </div>
 
@@ -2112,9 +2317,11 @@ function LessonStatusTracking({
 
         <div className="status-history-pagination">
           <span>
-            {historyFirstRecord}–{historyLastRecord}
-            {' / '}
-            {historyTotal} kayıt
+            {historyLoading
+              ? 'Ders geçmişi yükleniyor...'
+              : historyTotal === 0
+                ? 'Gösterilecek kayıt yok'
+                : `${historyFirstRecord}–${historyLastRecord} / ${historyTotal} kayıt`}
           </span>
 
           <div>

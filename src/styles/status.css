@@ -2562,3 +2562,20 @@
     min-width: 1040px;
   }
 }
+
+.status-today-date {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  color: #64748b;
+}
+
+.status-today-date span {
+  font-size: 12px;
+}
+
+.status-today-date strong {
+  font-size: 14px;
+  color: #334155;
+}

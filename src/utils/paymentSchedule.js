@@ -13,6 +13,7 @@
 
 import {
   addOneMonth,
+  getDateKey,
   getDayDifference
 } from './dateHelpers'
 
@@ -22,11 +23,24 @@ const GRACE_DAYS = 3
 /*
  * Ödeme kaydının aktif olup olmadığını kontrol eder.
  *
- * İptal edilmiş veya silinmiş olarak işaretlenmiş
+ * İptal edilmiş, silinmiş veya pasif olarak işaretlenmiş
  * tahsilatlar toplam hesaba dahil edilmez.
  */
-export const isActivePayment = (payment) => {
+export const isActivePayment = (
+  payment
+) => {
   if (!payment) {
+    return false
+  }
+
+  if (
+    payment.isActive === false ||
+    payment.is_active === false ||
+    payment.isCancelled === true ||
+    payment.is_cancelled === true ||
+    payment.isDeleted === true ||
+    payment.is_deleted === true
+  ) {
     return false
   }
 
@@ -36,16 +50,15 @@ export const isActivePayment = (payment) => {
     .trim()
     .toLocaleLowerCase('tr-TR')
 
-  return (
-    payment.isCancelled !== true &&
-    payment.is_cancelled !== true &&
-    payment.isDeleted !== true &&
-    payment.is_deleted !== true &&
-    status !== 'iptal' &&
-    status !== 'iptal edildi' &&
-    status !== 'cancelled' &&
-    status !== 'canceled'
-  )
+  return ![
+    'iptal',
+    'iptal edildi',
+    'cancelled',
+    'canceled',
+    'silindi',
+    'deleted',
+    'pasif'
+  ].includes(status)
 }
 
 /*
@@ -54,7 +67,9 @@ export const isActivePayment = (payment) => {
  * Geçiş sürecinde eski ve yeni alan adlarını
  * birlikte destekler.
  */
-export const getPaymentAmount = (payment) => {
+export const getPaymentAmount = (
+  payment
+) => {
   const amount = Number(
     payment?.amount ??
       payment?.transactionAmount ??
@@ -72,15 +87,17 @@ export const getPaymentAmount = (payment) => {
  * Ödeme kaydından tarihi "YYYY-MM-DD"
  * biçiminde okur.
  */
-export const getPaymentDate = (payment) =>
-  String(
+export const getPaymentDate = (
+  payment
+) =>
+  getDateKey(
     payment?.paymentDate ??
       payment?.payment_date ??
       payment?.collectionDate ??
       payment?.collection_date ??
       payment?.date ??
       ''
-  ).slice(0, 10)
+  )
 
 /*
  * Ödemenin hangi döneme ait olduğunu okur.
@@ -88,27 +105,46 @@ export const getPaymentDate = (payment) =>
  * Sonuç biçimi:
  * YYYY-MM
  */
-export const getPaymentPeriod = (payment) => {
-  const explicitPeriod =
+export const getPaymentPeriod = (
+  payment
+) => {
+  const explicitPeriod = String(
     payment?.paymentPeriod ??
-    payment?.payment_period ??
-    payment?.period
-
-  if (explicitPeriod) {
-    return String(explicitPeriod).slice(0, 7)
-  }
-
-  const duePeriod = String(
-    payment?.dueDate ??
-      payment?.due_date ??
+      payment?.payment_period ??
+      payment?.period ??
       ''
   ).slice(0, 7)
 
-  if (duePeriod) {
-    return duePeriod
+  if (
+    /^\d{4}-\d{2}$/.test(
+      explicitPeriod
+    )
+  ) {
+    const month = Number(
+      explicitPeriod.slice(5, 7)
+    )
+
+    if (
+      month >= 1 &&
+      month <= 12
+    ) {
+      return explicitPeriod
+    }
   }
 
-  return getPaymentDate(payment).slice(0, 7)
+  const dueDate = getDateKey(
+    payment?.dueDate ??
+      payment?.due_date ??
+      ''
+  )
+
+  if (dueDate) {
+    return dueDate.slice(0, 7)
+  }
+
+  return getPaymentDate(
+    payment
+  ).slice(0, 7)
 }
 
 /*
@@ -127,20 +163,27 @@ export const getPaymentStudentPackageId = (
     payment?.student_package_id
 
   if (directId) {
-    return String(directId)
+    return String(
+      directId
+    ).trim()
   }
 
-  const studentId =
+  const studentId = String(
     payment?.studentId ??
-    payment?.student_id ??
-    ''
+      payment?.student_id ??
+      ''
+  ).trim()
 
-  const packageId =
+  const packageId = String(
     payment?.packageId ??
-    payment?.package_id ??
-    ''
+      payment?.package_id ??
+      ''
+  ).trim()
 
-  if (!studentId && !packageId) {
+  if (
+    !studentId &&
+    !packageId
+  ) {
     return ''
   }
 
@@ -160,26 +203,41 @@ export const getCollectedAmountForPeriod = (
   period,
   paymentList = [],
   excludedPaymentId = null
-) =>
-  paymentList
+) => {
+  const cleanStudentPackageId =
+    String(
+      studentPackageId || ''
+    ).trim()
+
+  const cleanPeriod = String(
+    period || ''
+  ).trim()
+
+  return paymentList
     .filter((payment) => {
       if (!isActivePayment(payment)) {
         return false
       }
 
       const sameStudentPackage =
-        getPaymentStudentPackageId(payment) ===
-        String(studentPackageId)
+        getPaymentStudentPackageId(
+          payment
+        ) === cleanStudentPackageId
 
       const samePeriod =
-        getPaymentPeriod(payment) ===
-        String(period)
+        getPaymentPeriod(
+          payment
+        ) === cleanPeriod
 
       const isExcluded =
         excludedPaymentId !== null &&
         excludedPaymentId !== undefined &&
-        String(payment.id) ===
-          String(excludedPaymentId)
+        String(
+          payment.id
+        ) ===
+          String(
+            excludedPaymentId
+          )
 
       return (
         sameStudentPackage &&
@@ -189,9 +247,13 @@ export const getCollectedAmountForPeriod = (
     })
     .reduce(
       (total, payment) =>
-        total + getPaymentAmount(payment),
+        total +
+        getPaymentAmount(
+          payment
+        ),
       0
     )
+}
 
 /*
  * Öğrenci-paket kaydından aylık beklenen
@@ -227,7 +289,9 @@ export const getStudentPackageRecordId = (
     packageRecord?.student_package_id ??
     packageRecord?.id
 
-  return id ? String(id) : ''
+  return id
+    ? String(id).trim()
+    : ''
 }
 
 /*
@@ -236,13 +300,13 @@ export const getStudentPackageRecordId = (
 export const getFirstPaymentDate = (
   packageRecord
 ) =>
-  String(
+  getDateKey(
     packageRecord?.firstPaymentDate ??
       packageRecord?.first_payment_date ??
       packageRecord?.nextPaymentDate ??
       packageRecord?.next_payment_date ??
       ''
-  ).slice(0, 10)
+  )
 
 /*
  * Öğrenci-paket kaydındaki ödeme gününü okur.
@@ -257,7 +321,9 @@ export const getPaymentDay = (
   )
 
   if (
-    !Number.isInteger(paymentDay) ||
+    !Number.isInteger(
+      paymentDay
+    ) ||
     paymentDay < 1 ||
     paymentDay > 31
   ) {
@@ -280,16 +346,24 @@ export const findCurrentDueRecord = (
   paymentList = []
 ) => {
   const expectedAmount =
-    getExpectedPaymentAmount(packageRecord)
+    getExpectedPaymentAmount(
+      packageRecord
+    )
 
   const firstPaymentDate =
-    getFirstPaymentDate(packageRecord)
+    getFirstPaymentDate(
+      packageRecord
+    )
 
   const studentPackageId =
-    getStudentPackageRecordId(packageRecord)
+    getStudentPackageRecordId(
+      packageRecord
+    )
 
   const paymentDay =
-    getPaymentDay(packageRecord)
+    getPaymentDay(
+      packageRecord
+    )
 
   if (
     !firstPaymentDate ||
@@ -297,27 +371,39 @@ export const findCurrentDueRecord = (
     !studentPackageId
   ) {
     return {
-      dueDate: firstPaymentDate,
-      period: firstPaymentDate
-        ? firstPaymentDate.slice(0, 7)
-        : '',
+      dueDate:
+        firstPaymentDate,
+
+      period:
+        firstPaymentDate
+          ? firstPaymentDate.slice(
+              0,
+              7
+            )
+          : '',
+
       expectedAmount,
+
       collectedAmount: 0,
-      remainingAmount: Math.max(
-        0,
-        expectedAmount
-      )
+
+      remainingAmount:
+        Math.max(
+          0,
+          expectedAmount
+        )
     }
   }
 
-  let dueDate = firstPaymentDate
+  let dueDate =
+    firstPaymentDate
 
   for (
     let index = 0;
     index < 120;
     index += 1
   ) {
-    const period = dueDate.slice(0, 7)
+    const period =
+      dueDate.slice(0, 7)
 
     const collectedAmount =
       getCollectedAmountForPeriod(
@@ -335,37 +421,47 @@ export const findCurrentDueRecord = (
         period,
         expectedAmount,
         collectedAmount,
-        remainingAmount: Math.max(
-          0,
-          expectedAmount -
-            collectedAmount
-        )
+
+        remainingAmount:
+          Math.max(
+            0,
+            expectedAmount -
+              collectedAmount
+          )
       }
     }
 
-    const nextDueDate = addOneMonth(
-      dueDate,
-      paymentDay
-    )
+    const nextDueDate =
+      addOneMonth(
+        dueDate,
+        paymentDay
+      )
 
     if (!nextDueDate) {
       break
     }
 
-    dueDate = nextDueDate
+    dueDate =
+      nextDueDate
   }
 
   return {
     dueDate,
-    period: dueDate
-      ? dueDate.slice(0, 7)
-      : '',
+
+    period:
+      dueDate
+        ? dueDate.slice(0, 7)
+        : '',
+
     expectedAmount,
+
     collectedAmount: 0,
-    remainingAmount: Math.max(
-      0,
-      expectedAmount
-    )
+
+    remainingAmount:
+      Math.max(
+        0,
+        expectedAmount
+      )
   }
 }
 
@@ -386,6 +482,12 @@ export const getDueStatus = ({
   collectedAmount,
   todayKey
 }) => {
+  const cleanDueDate =
+    getDateKey(dueDate)
+
+  const cleanTodayKey =
+    getDateKey(todayKey)
+
   const expected = Number(
     expectedAmount ?? 0
   )
@@ -406,7 +508,8 @@ export const getDueStatus = ({
 
   const remaining = Math.max(
     0,
-    safeExpected - safeCollected
+    safeExpected -
+      safeCollected
   )
 
   if (
@@ -417,29 +520,49 @@ export const getDueStatus = ({
       label: 'Ödendi',
       className: 'paid',
       filterValue: 'Ödendi',
+
       detail:
         'Bu dönemin ödemesi tamamlandı.',
+
       daysUntilDue: null,
       daysLate: 0
     }
   }
 
-  if (!dueDate) {
+  if (!cleanDueDate) {
     return {
       label:
         safeCollected > 0
           ? 'Kısmi Ödendi'
           : 'Tarih Eksik',
+
       className:
         safeCollected > 0
           ? 'partial'
           : 'pending',
+
       filterValue:
         safeCollected > 0
           ? 'Kısmi Ödendi'
           : 'Tarih Eksik',
+
       detail:
         'Ödeme tarihi tanımlanmalıdır.',
+
+      daysUntilDue: null,
+      daysLate: 0
+    }
+  }
+
+  if (!cleanTodayKey) {
+    return {
+      label: 'Tarih Eksik',
+      className: 'pending',
+      filterValue: 'Tarih Eksik',
+
+      detail:
+        'Bugünün tarihi geçerli değildir.',
+
       daysUntilDue: null,
       daysLate: 0
     }
@@ -447,17 +570,21 @@ export const getDueStatus = ({
 
   const daysUntilDue =
     getDayDifference(
-      todayKey,
-      dueDate
+      cleanTodayKey,
+      cleanDueDate
     )
 
-  if (daysUntilDue === null) {
+  if (
+    daysUntilDue === null
+  ) {
     return {
       label: 'Tarih Eksik',
       className: 'pending',
       filterValue: 'Tarih Eksik',
+
       detail:
         'Ödeme tarihi geçerli değildir.',
+
       daysUntilDue: null,
       daysLate: 0
     }
@@ -472,16 +599,20 @@ export const getDueStatus = ({
         safeCollected > 0
           ? 'Kısmi Ödendi'
           : 'Bekliyor',
+
       className:
         safeCollected > 0
           ? 'partial'
           : 'pending',
+
       filterValue:
         safeCollected > 0
           ? 'Kısmi Ödendi'
           : 'Bekliyor',
+
       detail:
         `${daysUntilDue} gün sonra ödeme günü.`,
+
       daysUntilDue,
       daysLate: 0
     }
@@ -493,10 +624,13 @@ export const getDueStatus = ({
         safeCollected > 0
           ? 'Kısmi · Yaklaşıyor'
           : 'Yaklaşıyor',
+
       className: 'upcoming',
       filterValue: 'Yaklaşıyor',
+
       detail:
         `${daysUntilDue} gün kaldı.`,
+
       daysUntilDue,
       daysLate: 0
     }
@@ -508,17 +642,22 @@ export const getDueStatus = ({
         safeCollected > 0
           ? 'Kısmi · Bugün'
           : 'Bugün',
+
       className: 'today',
       filterValue: 'Bugün',
+
       detail:
         'Ödeme günü bugün.',
+
       daysUntilDue: 0,
       daysLate: 0
     }
   }
 
   const daysLate =
-    Math.abs(daysUntilDue)
+    Math.abs(
+      daysUntilDue
+    )
 
   if (
     daysLate <=
@@ -527,13 +666,18 @@ export const getDueStatus = ({
     return {
       label:
         `${daysLate} Gün Gecikti`,
+
       className: 'grace',
+
       filterValue:
         'Tolerans Süresinde',
+
       detail:
         `Tolerans süresinde · ${
-          GRACE_DAYS - daysLate
+          GRACE_DAYS -
+          daysLate
         } gün kaldı.`,
+
       daysUntilDue,
       daysLate
     }
@@ -544,10 +688,13 @@ export const getDueStatus = ({
       safeCollected > 0
         ? 'Kısmi · Gecikti'
         : 'Gecikti',
+
     className: 'overdue',
     filterValue: 'Gecikti',
+
     detail:
       `${daysLate} gün gecikti.`,
+
     daysUntilDue,
     daysLate
   }
@@ -607,6 +754,7 @@ export const getRemainingPaymentAmount = (
 
   return Math.max(
     0,
-    safeExpected - safeCollected
+    safeExpected -
+      safeCollected
   )
 }

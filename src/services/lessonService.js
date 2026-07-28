@@ -232,6 +232,123 @@ function mapLessonOccurrenceFromDb(row) {
   }
 }
 
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getLessonErrorMessage(
+  error,
+  fallbackMessage,
+  duplicateMessage = ''
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (
+    duplicateMessage &&
+    (
+      error?.code === '23505' ||
+      String(
+        error?.message ?? ''
+      )
+        .toLocaleLowerCase('tr-TR')
+        .includes('duplicate')
+    )
+  ) {
+    return duplicateMessage
+  }
+
+  return fallbackMessage
+}
+
+function getSafePagination(
+  page,
+  pageSize
+) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  return {
+    safePage,
+    safePageSize,
+    from,
+    to:
+      from +
+      safePageSize -
+      1
+  }
+}
+
+function normalizeDateKey(
+  value,
+  label = 'Tarih'
+) {
+  const dateKey = String(
+    value || ''
+  ).trim()
+
+  if (!dateKey) {
+    return ''
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      dateKey
+    )
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  return dateKey
+}
+
 function validateLessonInput(form) {
   const studentId = String(
     form.studentId || ''
@@ -317,7 +434,10 @@ export async function getLessonPlans() {
 
   if (error) {
     throw new Error(
-      `Ders programı alınamadı: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders programı şu anda alınamadı.'
+      )
     )
   }
 
@@ -337,7 +457,10 @@ export async function getLessonOccurrences() {
 
   if (error) {
     throw new Error(
-      `Ders durum kayıtları alınamadı: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders durum kayıtları şu anda alınamadı.'
+      )
     )
   }
 
@@ -357,41 +480,44 @@ export async function getLessonHistoryPage({
   endDate = '',
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(
-    1,
-    Number(page) || 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
   )
-
-  const allowedPageSizes = [
-    10,
-    25,
-    50
-  ]
-
-  const requestedPageSize =
-    Number(pageSize)
-
-  const safePageSize =
-    allowedPageSizes.includes(
-      requestedPageSize
-    )
-      ? requestedPageSize
-      : 10
-
-  const from =
-    (safePage - 1) *
-    safePageSize
-
-  const to =
-    from +
-    safePageSize -
-    1
 
   const historyStatuses = [
     'Yapıldı',
     'Telafi yapıldı',
     'İptal edildi'
   ]
+
+  const cleanStartDate =
+    normalizeDateKey(
+      startDate,
+      'Başlangıç tarihi'
+    )
+
+  const cleanEndDate =
+    normalizeDateKey(
+      endDate,
+      'Bitiş tarihi'
+    )
+
+  if (
+    cleanStartDate &&
+    cleanEndDate &&
+    cleanStartDate >
+      cleanEndDate
+  ) {
+    throw new Error(
+      'Başlangıç tarihi bitiş tarihinden sonra olamaz.'
+    )
+  }
 
   let query = supabase
     .from('lesson_occurrences')
@@ -444,17 +570,17 @@ export async function getLessonHistoryPage({
     )
   }
 
-  if (startDate) {
+  if (cleanStartDate) {
     query = query.gte(
       'lesson_date',
-      startDate
+      cleanStartDate
     )
   }
 
-  if (endDate) {
+  if (cleanEndDate) {
     query = query.lte(
       'lesson_date',
-      endDate
+      cleanEndDate
     )
   }
 
@@ -485,7 +611,10 @@ export async function getLessonHistoryPage({
 
   if (error) {
     throw new Error(
-      `Ders geçmişi alınamadı: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders geçmişi şu anda alınamadı.'
+      )
     )
   }
 
@@ -518,19 +647,12 @@ export async function createLessonPlan(
     .single()
 
   if (error) {
-    if (
-      error.code === '23505' ||
-      error.message
-        .toLocaleLowerCase('tr-TR')
-        .includes('duplicate')
-    ) {
-      throw new Error(
+    throw new Error(
+      getLessonErrorMessage(
+        error,
+        'Ders planı kaydedilemedi.',
         'Seçilen gün ve saatte öğrenci veya öğretmen için başka bir aktif ders bulunmaktadır.'
       )
-    }
-
-    throw new Error(
-      `Ders planı kaydedilemedi: ${error.message}`
     )
   }
 
@@ -550,7 +672,10 @@ export async function createLessonOccurrence(
     lesson_plan_id:
       form.lessonPlanId || null,
     lesson_date:
-      form.lessonDate || null,
+      normalizeDateKey(
+        form.lessonDate,
+        'Ders tarihi'
+      ) || null,
     related_occurrence_id:
       form.relatedOccurrenceId ||
       form.relatedLessonId ||
@@ -568,7 +693,11 @@ export async function createLessonOccurrence(
 
   if (error) {
     throw new Error(
-      `Ders durum kaydı oluşturulamadı: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders durum kaydı oluşturulamadı.',
+        'Bu ders için aynı tarihte daha önce bir durum kaydı oluşturulmuş.'
+      )
     )
   }
 
@@ -601,7 +730,10 @@ export async function deleteLessonPlan(
 
   if (error) {
     throw new Error(
-      `Ders planı silinemedi: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders planı silinemedi.'
+      )
     )
   }
 
@@ -613,7 +745,11 @@ export async function deleteLessonPlan(
 export async function deleteLessonOccurrence(
   occurrenceId
 ) {
-  if (!occurrenceId) {
+  const cleanOccurrenceId = String(
+    occurrenceId || ''
+  ).trim()
+
+  if (!cleanOccurrenceId) {
     throw new Error(
       'Ders durum kaydı kimliği bulunamadı.'
     )
@@ -622,20 +758,28 @@ export async function deleteLessonOccurrence(
   const { error } = await supabase
     .from('lesson_occurrences')
     .delete()
-    .eq('id', occurrenceId)
+    .eq('id', cleanOccurrenceId)
 
   if (error) {
     throw new Error(
-      `Ders durum kaydı silinemedi: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders durum kaydı silinemedi.'
+      )
     )
   }
 }
 
 export async function updateLessonOccurrenceStatus(
   occurrenceId,
-  status
+  status,
+  lessonDate = ''
 ) {
-  if (!occurrenceId) {
+  const cleanOccurrenceId = String(
+    occurrenceId || ''
+  ).trim()
+
+  if (!cleanOccurrenceId) {
     throw new Error(
       'Ders durum kaydı kimliği bulunamadı.'
     )
@@ -651,21 +795,37 @@ export async function updateLessonOccurrenceStatus(
     )
   }
 
+  const cleanLessonDate =
+    normalizeDateKey(
+      lessonDate,
+      'Ders tarihi'
+    )
+
+  const updates = {
+    status: cleanStatus
+  }
+
+  if (cleanLessonDate) {
+    updates.lesson_date =
+      cleanLessonDate
+  }
+
   const {
     data,
     error
   } = await supabase
     .from('lesson_occurrences')
-    .update({
-      status: cleanStatus
-    })
-    .eq('id', occurrenceId)
+    .update(updates)
+    .eq('id', cleanOccurrenceId)
     .select(lessonOccurrenceSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Ders durumu güncellenemedi: ${error.message}`
+      getLessonErrorMessage(
+        error,
+        'Ders durumu güncellenemedi.'
+      )
     )
   }
 

@@ -65,11 +65,8 @@ const paymentMethods = [
 
 function Finance({
   teachers = [],
-  otherIncomes = [],
   setOtherIncomes = () => {},
-  expenses = [],
   setExpenses = () => {},
-  teacherPayments = [],
   setTeacherPayments = () => {},
   unsavedChanges
 }) {
@@ -126,7 +123,7 @@ function Finance({
   const [incomeTotal, setIncomeTotal] =
     useState(0)
   const [incomeLoading, setIncomeLoading] =
-    useState(false)
+    useState(true)
   const [incomeError, setIncomeError] =
     useState('')
   const [incomeReloadKey, setIncomeReloadKey] =
@@ -138,6 +135,10 @@ function Finance({
       totalIncome: 0,
       recordCount: 0
     })
+  const [
+    incomeSummaryLoading,
+    setIncomeSummaryLoading
+  ] = useState(true)
   const [expenseSearch, setExpenseSearch] =
     useState('')
   const [
@@ -171,7 +172,7 @@ function Finance({
   const [
     expenseLoading,
     setExpenseLoading
-  ] = useState(false)
+  ] = useState(true)
   const [expenseError, setExpenseError] =
     useState('')
   const [
@@ -185,6 +186,10 @@ function Finance({
     totalExpense: 0,
     recordCount: 0
   })
+  const [
+    expenseSummaryLoading,
+    setExpenseSummaryLoading
+  ] = useState(true)
   const [teacherSearch, setTeacherSearch] =
     useState('')
 
@@ -196,7 +201,7 @@ function Finance({
   const [
     teacherEarningsLoading,
     setTeacherEarningsLoading
-  ] = useState(false)
+  ] = useState(true)
 
   const [
     teacherEarningsError,
@@ -262,7 +267,7 @@ function Finance({
   const [
     teacherHistoryLoading,
     setTeacherHistoryLoading
-  ] = useState(false)
+  ] = useState(true)
 
   const [
     teacherHistoryError,
@@ -279,6 +284,8 @@ function Finance({
     let isMounted = true
 
     const loadIncomeSummary = async () => {
+      setIncomeSummaryLoading(true)
+
       try {
         const result =
           await getFinanceIncomeSummary()
@@ -291,6 +298,10 @@ function Finance({
           'Gelir özeti alınamadı:',
           error
         )
+      } finally {
+        if (isMounted) {
+          setIncomeSummaryLoading(false)
+        }
       }
     }
 
@@ -390,6 +401,8 @@ function Finance({
 
     const loadExpenseSummary =
       async () => {
+        setExpenseSummaryLoading(true)
+
         try {
           const result =
             await getFinanceExpenseSummary()
@@ -402,6 +415,10 @@ function Finance({
             'Gider özeti alınamadı:',
             error
           )
+        } finally {
+          if (isMounted) {
+            setExpenseSummaryLoading(false)
+          }
         }
       }
 
@@ -1670,11 +1687,32 @@ useEffect(() => {
     }
   }
 
+  const financeSummaryLoading =
+    incomeSummaryLoading ||
+    expenseSummaryLoading ||
+    teacherEarningsLoading
+
+  const renderCurrencyValue = (
+    value,
+    isLoading = financeSummaryLoading
+  ) =>
+    isLoading
+      ? '₺—'
+      : `₺${formatPrice(value)}`
+
+  const renderCountValue = (
+    value,
+    isLoading = financeSummaryLoading
+  ) =>
+    isLoading
+      ? '—'
+      : value
+
   const renderTopMetrics = () => (
     <section className="finance-metric-grid">
       <div className="finance-metric-card income">
         <span>Toplam Gelir</span>
-        <strong>₺{formatPrice(totalIncome)}</strong>
+        <strong>{renderCurrencyValue(totalIncome)}</strong>
         <small>
           Öğrenci tahsilatları otomatik, diğer gelirler manuel olarak eklenir.
         </small>
@@ -1682,19 +1720,21 @@ useEffect(() => {
 
       <div className="finance-metric-card expense">
         <span>Toplam Gider</span>
-        <strong>₺{formatPrice(totalExpense)}</strong>
+        <strong>{renderCurrencyValue(totalExpense)}</strong>
         <small>Kurum giderleri ve öğretmenlere yapılan ödemeler.</small>
       </div>
 
       <div className="finance-metric-card net">
         <span>Net Nakit</span>
-        <strong>₺{formatPrice(netCash)}</strong>
+        <strong>{renderCurrencyValue(netCash)}</strong>
         <small>Toplam gelir − gerçekleşen giderler</small>
       </div>
 
       <div className="finance-metric-card teacher">
         <span>Bekleyen Öğretmen Hakedişi</span>
-        <strong>₺{formatPrice(totalTeacherRemaining)}</strong>
+        <strong>
+          {renderCurrencyValue(totalTeacherRemaining)}
+        </strong>
         <small>Hak edilmiş ancak henüz ödenmemiş tutar.</small>
       </div>
     </section>
@@ -1712,17 +1752,27 @@ useEffect(() => {
 
         <div className="finance-summary-row">
           <span>Öğrenci Tahsilatları</span>
-          <strong>₺{formatPrice(totalStudentIncome)}</strong>
+          <strong>
+            {renderCurrencyValue(
+              totalStudentIncome,
+              incomeSummaryLoading
+            )}
+          </strong>
         </div>
 
         <div className="finance-summary-row">
           <span>Diğer Gelirler</span>
-          <strong>₺{formatPrice(totalOtherIncome)}</strong>
+          <strong>
+            {renderCurrencyValue(
+              totalOtherIncome,
+              incomeSummaryLoading
+            )}
+          </strong>
         </div>
 
         <div className="finance-summary-row total">
           <span>Toplam Gelir</span>
-          <strong>₺{formatPrice(totalIncome)}</strong>
+          <strong>{renderCurrencyValue(totalIncome)}</strong>
         </div>
       </section>
 
@@ -1736,17 +1786,27 @@ useEffect(() => {
 
         <div className="finance-summary-row">
           <span>Kurum Giderleri</span>
-          <strong>₺{formatPrice(totalInstitutionExpenses)}</strong>
+          <strong>
+            {renderCurrencyValue(
+              totalInstitutionExpenses,
+              expenseSummaryLoading
+            )}
+          </strong>
         </div>
 
         <div className="finance-summary-row">
           <span>Öğretmenlere Ödenen</span>
-          <strong>₺{formatPrice(totalTeacherPaid)}</strong>
+          <strong>
+            {renderCurrencyValue(
+              totalTeacherPaid,
+              teacherEarningsLoading
+            )}
+          </strong>
         </div>
 
         <div className="finance-summary-row total">
           <span>Toplam Gider</span>
-          <strong>₺{formatPrice(totalExpense)}</strong>
+          <strong>{renderCurrencyValue(totalExpense)}</strong>
         </div>
       </section>
 
@@ -1763,22 +1823,39 @@ useEffect(() => {
         <div className="finance-teacher-summary-grid">
           <div className="finance-teacher-summary-item">
             <span>Tahakkuk Eden Hakediş</span>
-            <strong>₺{formatPrice(totalTeacherEarning)}</strong>
+            <strong>
+              {renderCurrencyValue(
+                totalTeacherEarning,
+                teacherEarningsLoading
+              )}
+            </strong>
           </div>
 
           <div className="finance-teacher-summary-item paid">
             <span>Ödenen Hakediş</span>
-            <strong>₺{formatPrice(totalTeacherPaid)}</strong>
+            <strong>
+            {renderCurrencyValue(
+              totalTeacherPaid,
+              teacherEarningsLoading
+            )}
+          </strong>
           </div>
 
           <div className="finance-teacher-summary-item pending">
             <span>Bekleyen Hakediş</span>
-            <strong>₺{formatPrice(totalTeacherRemaining)}</strong>
+            <strong>
+          {renderCurrencyValue(totalTeacherRemaining)}
+        </strong>
           </div>
 
           <div className="finance-teacher-summary-item lessons">
             <span>Hakedişe Esas Yapılan Ders</span>
-            <strong>{totalCompletedLessonCount}</strong>
+            <strong>
+              {renderCountValue(
+                totalCompletedLessonCount,
+                teacherEarningsLoading
+              )}
+            </strong>
           </div>
         </div>
       </section>
@@ -2114,7 +2191,9 @@ useEffect(() => {
 
       <div className="finance-list-controls finance-income-count-row">
         <span className="finance-record-count">
-          {incomeTotal} kayıt
+          {incomeLoading
+            ? '— kayıt'
+            : `${incomeTotal} kayıt`}
         </span>
       </div>
 
@@ -2206,9 +2285,11 @@ useEffect(() => {
 
       <div className="finance-income-pagination">
         <div className="finance-income-pagination-summary">
-          {incomeTotal === 0
-            ? 'Gösterilecek kayıt yok'
-            : `${incomeFirstRecord}–${incomeLastRecord} / ${incomeTotal} gelir kaydı`}
+          {incomeLoading
+            ? 'Gelir kayıtları yükleniyor...'
+            : incomeTotal === 0
+              ? 'Gösterilecek kayıt yok'
+              : `${incomeFirstRecord}–${incomeLastRecord} / ${incomeTotal} gelir kaydı`}
         </div>
 
         <div className="finance-income-pagination-controls">
@@ -2626,7 +2707,9 @@ useEffect(() => {
 
       <div className="finance-list-controls finance-income-count-row">
         <span className="finance-record-count">
-          {expenseTotal} kayıt
+          {expenseLoading
+            ? '— kayıt'
+            : `${expenseTotal} kayıt`}
         </span>
       </div>
 
@@ -2738,9 +2821,11 @@ useEffect(() => {
 
       <div className="finance-income-pagination">
         <div className="finance-income-pagination-summary">
-          {expenseTotal === 0
-            ? 'Gösterilecek kayıt yok'
-            : `${expenseFirstRecord}–${expenseLastRecord} / ${expenseTotal} gider kaydı`}
+          {expenseLoading
+            ? 'Gider kayıtları yükleniyor...'
+            : expenseTotal === 0
+              ? 'Gösterilecek kayıt yok'
+              : `${expenseFirstRecord}–${expenseLastRecord} / ${expenseTotal} gider kaydı`}
         </div>
 
         <div className="finance-income-pagination-controls">
@@ -2930,22 +3015,39 @@ useEffect(() => {
       <section className="finance-teacher-metric-grid">
         <div className="finance-teacher-metric-card">
           <span>Tahakkuk Eden Hakediş</span>
-          <strong>₺{formatPrice(totalTeacherEarning)}</strong>
+          <strong>
+              {renderCurrencyValue(
+                totalTeacherEarning,
+                teacherEarningsLoading
+              )}
+            </strong>
         </div>
 
         <div className="finance-teacher-metric-card paid">
           <span>Ödenen Tutar</span>
-          <strong>₺{formatPrice(totalTeacherPaid)}</strong>
+          <strong>
+            {renderCurrencyValue(
+              totalTeacherPaid,
+              teacherEarningsLoading
+            )}
+          </strong>
         </div>
 
         <div className="finance-teacher-metric-card pending">
           <span>Bekleyen Hakediş</span>
-          <strong>₺{formatPrice(totalTeacherRemaining)}</strong>
+          <strong>
+          {renderCurrencyValue(totalTeacherRemaining)}
+        </strong>
         </div>
 
         <div className="finance-teacher-metric-card lessons">
           <span>Hakedişe Esas Yapılan Ders</span>
-          <strong>{totalCompletedLessonCount}</strong>
+          <strong>
+              {renderCountValue(
+                totalCompletedLessonCount,
+                teacherEarningsLoading
+              )}
+            </strong>
         </div>
       </section>
 
@@ -3405,7 +3507,9 @@ useEffect(() => {
             </div>
 
             <span className="finance-record-count">
-              {teacherHistoryTotal} kayıt
+              {teacherHistoryLoading
+                ? '— kayıt'
+                : `${teacherHistoryTotal} kayıt`}
             </span>
           </div>
 

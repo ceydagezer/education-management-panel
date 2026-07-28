@@ -29,7 +29,7 @@
   background: #fee2e2;
 }
 
-/* Select ok hizası düzeltildi */
+/* Select ok hizası */
 
 .package-form-card select {
   appearance: none;
@@ -68,9 +68,7 @@
 
 .package-calculation-box span {
   display: block;
-
   margin-bottom: 6px;
-
   color: #0369a1;
   font-size: 13px;
   font-weight: 900;
@@ -78,7 +76,6 @@
 
 .package-calculation-box p {
   margin: 0;
-
   color: #64748b;
   font-size: 14px;
   line-height: 1.5;
@@ -103,7 +100,6 @@
 .package-calculation-item {
   min-width: 0;
   padding: 14px;
-
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 15px;
@@ -111,25 +107,19 @@
 
 .package-calculation-item small {
   display: block;
-
   margin-bottom: 8px;
-
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
 }
 
-/* Yazılar küçültüldü */
-
 .package-summary-grid
   .package-calculation-item strong {
   display: block;
-
   color: #0f172a;
   font-size: 16px;
   font-weight: 800;
   line-height: 1.25;
-
   word-break: break-word;
 }
 
@@ -148,18 +138,12 @@
 
   background: transparent;
   border: none;
-  border-top: none;
   box-shadow: none;
-
   transform: none;
 }
 
 .package-form-actions::before,
-.package-form-actions::after {
-  display: none;
-  content: none;
-}
-
+.package-form-actions::after,
 .package-form-card form::before,
 .package-form-card form::after {
   display: none;
@@ -169,139 +153,12 @@
 .package-form-card .form-actions {
   margin-top: 22px;
   padding-top: 0;
-
   background: transparent;
   border: none;
-  border-top: none;
   box-shadow: none;
 }
 
-/* =========================================================
-   PAKET LİSTESİ TABLO HİZALAMASI
-   ========================================================= */
-
-.package-list-table {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
-}
-
-.package-list-table th,
-.package-list-table td {
-  box-sizing: border-box;
-  vertical-align: middle;
-  text-align: center;
-}
-
-/*
- * Başlıkların mevcut aralıkları korunur.
- * Gövde hücreleri de başlıkların eksenine alınır.
- */
-
-.package-list-table th:nth-child(1),
-.package-list-table td:nth-child(1) {
-  width: 16%;
-}
-
-.package-list-table th:nth-child(2),
-.package-list-table td:nth-child(2) {
-  width: 11%;
-}
-
-.package-list-table th:nth-child(3),
-.package-list-table td:nth-child(3) {
-  width: 13%;
-}
-
-.package-list-table th:nth-child(4),
-.package-list-table td:nth-child(4) {
-  width: 10%;
-}
-
-.package-list-table th:nth-child(5),
-.package-list-table td:nth-child(5) {
-  width: 12%;
-}
-
-.package-list-table th:nth-child(6),
-.package-list-table td:nth-child(6) {
-  width: 14%;
-}
-
-.package-list-table th:nth-child(7),
-.package-list-table td:nth-child(7) {
-  width: 9%;
-}
-
-.package-list-table th:nth-child(8),
-.package-list-table td:nth-child(8) {
-  width: 15%;
-}
-
-.package-list-table td:nth-child(1),
-.package-list-table td:nth-child(2) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.package-list-table .table-actions {
-  justify-content: center;
-  width: 100%;
-}
-
-@media (max-width: 1100px) {
-  .package-list-table {
-    table-layout: fixed;
-  }
-
-  .package-list-table th,
-  .package-list-table td {
-    padding-right: 8px;
-    padding-left: 8px;
-    font-size: 12px;
-  }
-
-  .package-list-table .table-actions {
-    gap: 6px;
-  }
-
-  .package-list-table .detail-button,
-  .package-list-table .delete-button {
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .package-calculation-box {
-    grid-template-columns: 1fr;
-  }
-
-  .package-summary-grid {
-    grid-template-columns:
-      repeat(2, minmax(150px, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .package-calculation-grid,
-  .package-summary-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 600px) {
-  .package-form-actions {
-    gap: 10px;
-    margin-top: 18px;
-  }
-
-  .package-summary-grid
-    .package-calculation-item strong {
-    font-size: 15px;
-  }
-}
+/* Branş ekleme satırı */
 
 .specialty-inline-row {
   display: flex;
@@ -319,20 +176,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 760px) {
-  .specialty-inline-row {
-    flex-direction: column;
-  }
-
-  .specialty-add-button {
-    width: 100%;
-  }
-}
-
-/* =========================================================
-   PAKET TABLOSU - KESİN ORTALAMA
-   Genel lesson-table kurallarını geçersiz kılar.
-   ========================================================= */
+/* Paket listesi */
 
 .lesson-table.package-list-table {
   width: 100%;
@@ -342,18 +186,67 @@
 
 .lesson-table.package-list-table thead th,
 .lesson-table.package-list-table tbody td {
+  box-sizing: border-box;
+  padding-right: 12px;
+  padding-left: 12px;
   vertical-align: middle;
   text-align: center !important;
 }
 
-.lesson-table.package-list-table thead th {
-  padding-right: 12px;
-  padding-left: 12px;
+.lesson-table.package-list-table
+  th:nth-child(1),
+.lesson-table.package-list-table
+  td:nth-child(1) {
+  width: 16%;
 }
 
-.lesson-table.package-list-table tbody td {
-  padding-right: 12px;
-  padding-left: 12px;
+.lesson-table.package-list-table
+  th:nth-child(2),
+.lesson-table.package-list-table
+  td:nth-child(2) {
+  width: 11%;
+}
+
+.lesson-table.package-list-table
+  th:nth-child(3),
+.lesson-table.package-list-table
+  td:nth-child(3) {
+  width: 13%;
+}
+
+.lesson-table.package-list-table
+  th:nth-child(4),
+.lesson-table.package-list-table
+  td:nth-child(4) {
+  width: 10%;
+}
+
+.lesson-table.package-list-table
+  th:nth-child(5),
+.lesson-table.package-list-table
+  td:nth-child(5) {
+  width: 12%;
+}
+
+.lesson-table.package-list-table
+  th:nth-child(6),
+.lesson-table.package-list-table
+  td:nth-child(6) {
+  width: 14%;
+}
+
+.lesson-table.package-list-table
+  th:nth-child(7),
+.lesson-table.package-list-table
+  td:nth-child(7) {
+  width: 9%;
+}
+
+.lesson-table.package-list-table
+  th:nth-child(8),
+.lesson-table.package-list-table
+  td:nth-child(8) {
+  width: 15%;
 }
 
 .lesson-table.package-list-table
@@ -373,4 +266,73 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
+}
+
+.delete-button:focus-visible,
+.specialty-add-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+@media (max-width: 1200px) {
+  .package-calculation-box {
+    grid-template-columns: 1fr;
+  }
+
+  .package-summary-grid {
+    grid-template-columns:
+      repeat(2, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .lesson-table.package-list-table th,
+  .lesson-table.package-list-table td {
+    padding-right: 8px;
+    padding-left: 8px;
+    font-size: 12px;
+  }
+
+  .lesson-table.package-list-table
+    .table-actions {
+    gap: 6px;
+  }
+
+  .lesson-table.package-list-table
+    .detail-button,
+  .lesson-table.package-list-table
+    .delete-button {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .package-calculation-grid,
+  .package-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .specialty-inline-row {
+    flex-direction: column;
+  }
+
+  .specialty-add-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .package-form-actions {
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .package-summary-grid
+    .package-calculation-item strong {
+    font-size: 15px;
+  }
 }

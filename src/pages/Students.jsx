@@ -190,7 +190,7 @@ function Students({
   const [
     studentListLoading,
     setStudentListLoading
-  ] = useState(false)
+  ] = useState(true)
 
   const [
     studentListError,
@@ -587,10 +587,35 @@ function Students({
             )
 
             if (isMounted) {
+              const isOffline =
+                typeof navigator !==
+                  'undefined' &&
+                !navigator.onLine
+
+              const errorMessage =
+                String(
+                  error?.message || ''
+                ).toLocaleLowerCase(
+                  'tr-TR'
+                )
+
+              const isNetworkError =
+                errorMessage.includes(
+                  'failed to fetch'
+                ) ||
+                errorMessage.includes(
+                  'network'
+                ) ||
+                errorMessage.includes(
+                  'fetch'
+                )
+
               setStudentListError(
-                error instanceof Error
-                  ? error.message
-                  : 'Öğrenci listesi alınamadı.'
+                isOffline
+                  ? 'İnternet bağlantısı bulunamadı. Öğrenci listesi yüklenemedi.'
+                  : isNetworkError
+                    ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+                    : 'Öğrenci listesi şu anda yüklenemedi.'
               )
             }
           } finally {
@@ -4644,7 +4669,9 @@ function Students({
             <p>Kayıtlı öğrenciler ve temel bilgileri</p>
           </div>
           <button className="lesson-count" type="button">
-            {studentListTotal} öğrenci
+            {studentListLoading
+              ? '— öğrenci'
+              : `${studentListTotal} öğrenci`}
           </button>
         </div>
 
@@ -4658,7 +4685,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('active')}
             >
               Aktif
-              <span>{studentListCounts.active}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.active}
+              </span>
             </button>
 
             <button
@@ -4669,7 +4700,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('passive')}
             >
               Pasif
-              <span>{studentListCounts.passive}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.passive}
+              </span>
             </button>
 
             <button
@@ -4680,7 +4715,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('archived')}
             >
               Arşiv
-              <span>{studentListCounts.archived}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.archived}
+              </span>
             </button>
 
             <button
@@ -4691,7 +4730,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('review')}
             >
               İnceleme
-              <span>{studentListCounts.review}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.review}
+              </span>
             </button>
 
             <button
@@ -4702,7 +4745,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('all')}
             >
               Tümü
-              <span>{studentListCounts.all}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.all}
+              </span>
             </button>
           </div>
 
@@ -4931,9 +4978,11 @@ function Students({
 
         <div className="student-list-pagination">
           <div className="student-list-pagination-summary">
-            {studentListTotal === 0
-              ? 'Gösterilecek kayıt yok'
-              : `${studentListFirstRecord}–${studentListLastRecord} / ${studentListTotal} öğrenci`}
+            {studentListLoading
+              ? 'Öğrenci listesi yükleniyor...'
+              : studentListTotal === 0
+                ? 'Gösterilecek kayıt yok'
+                : `${studentListFirstRecord}–${studentListLastRecord} / ${studentListTotal} öğrenci`}
           </div>
 
           <div className="student-list-pagination-controls">

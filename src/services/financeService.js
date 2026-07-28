@@ -212,6 +212,8 @@ function mapTeacherEarningLessonFromDb(row) {
       row.package_name || 'Tanımsız Paket',
     instrument:
       row.instrument || '',
+    lessonDate:
+      row.lesson_date || '',
     day:
       row.day || '',
     time:
@@ -252,6 +254,89 @@ function validatePositiveAmount(value, label) {
   return amount
 }
 
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getFinanceErrorMessage(
+  error,
+  fallbackMessage
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  return fallbackMessage
+}
+
+function getSafePagination(
+  page,
+  pageSize
+) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  return {
+    safePage,
+    safePageSize,
+    from,
+    to:
+      from +
+      safePageSize -
+      1
+  }
+}
+
+function cleanSearchValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[(),]/g, ' ')
+}
+
 
 export async function getFinanceIncomePage({
   page = 1,
@@ -263,23 +348,23 @@ export async function getFinanceIncomePage({
   endDate = '',
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(1, Number(page) || 1)
-  const allowedPageSizes = [10, 25, 50]
-  const requestedPageSize = Number(pageSize)
-  const safePageSize = allowedPageSizes.includes(requestedPageSize)
-    ? requestedPageSize
-    : 10
-  const from = (safePage - 1) * safePageSize
-  const to = from + safePageSize - 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
+  )
 
   let query = supabase
     .from('finance_income_view')
     .select('*', { count: 'exact' })
     .eq('status', 'Aktif')
 
-  const cleanSearchText = String(searchText || '')
-    .trim()
-    .replace(/[(),]/g, ' ')
+  const cleanSearchText =
+    cleanSearchValue(searchText)
 
   if (cleanSearchText) {
     const searchPattern = `%${cleanSearchText}%`
@@ -332,7 +417,10 @@ export async function getFinanceIncomePage({
   const { data, error, count } = await query
 
   if (error) {
-    throw new Error(`Gelir kayıtları alınamadı: ${error.message}`)
+    throw new Error(getFinanceErrorMessage(
+        error,
+        'Gelir kayıtları şu anda alınamadı.'
+      ))
   }
 
   return {
@@ -349,7 +437,10 @@ export async function getFinanceIncomeSummary() {
     .single()
 
   if (error) {
-    throw new Error(`Gelir özeti alınamadı: ${error.message}`)
+    throw new Error(getFinanceErrorMessage(
+        error,
+        'Gelir özeti şu anda alınamadı.'
+      ))
   }
 
   return {
@@ -373,7 +464,10 @@ export async function getOtherIncomes() {
 
   if (error) {
     throw new Error(
-      `Ek gelirler alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Ek gelirler şu anda alınamadı.'
+      )
     )
   }
 
@@ -448,7 +542,10 @@ export async function createOtherIncome(form) {
 
   if (error) {
     throw new Error(
-      `Ek gelir kaydedilemedi: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Ek gelir kaydedilemedi.'
+      )
     )
   }
 
@@ -458,7 +555,11 @@ export async function createOtherIncome(form) {
 export async function cancelOtherIncome(
   incomeId
 ) {
-  if (!incomeId) {
+  const cleanIncomeId = String(
+    incomeId || ''
+  ).trim()
+
+  if (!cleanIncomeId) {
     throw new Error(
       'Ek gelir kimliği bulunamadı.'
     )
@@ -471,13 +572,16 @@ export async function cancelOtherIncome(
       cancelled_at:
         new Date().toISOString()
     })
-    .eq('id', incomeId)
+    .eq('id', cleanIncomeId)
     .select(otherIncomeSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Ek gelir iptal edilemedi: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Ek gelir iptal edilemedi.'
+      )
     )
   }
 
@@ -495,35 +599,15 @@ export async function getExpensesPage({
   endDate = '',
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(
-    1,
-    Number(page) || 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
   )
-
-  const allowedPageSizes = [
-    10,
-    25,
-    50
-  ]
-
-  const requestedPageSize =
-    Number(pageSize)
-
-  const safePageSize =
-    allowedPageSizes.includes(
-      requestedPageSize
-    )
-      ? requestedPageSize
-      : 10
-
-  const from =
-    (safePage - 1) *
-    safePageSize
-
-  const to =
-    from +
-    safePageSize -
-    1
 
   let query = supabase
     .from('expenses')
@@ -532,11 +616,8 @@ export async function getExpensesPage({
     })
     .neq('status', 'İptal')
 
-  const cleanSearchText = String(
-    searchText || ''
-  )
-    .trim()
-    .replace(/[(),]/g, ' ')
+  const cleanSearchText =
+    cleanSearchValue(searchText)
 
   if (cleanSearchText) {
     const searchPattern =
@@ -638,7 +719,10 @@ export async function getExpensesPage({
 
   if (error) {
     throw new Error(
-      `Gider kayıtları alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Gider kayıtları şu anda alınamadı.'
+      )
     )
   }
 
@@ -664,7 +748,10 @@ export async function getFinanceExpenseSummary() {
 
   if (error) {
     throw new Error(
-      `Gider özeti alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Gider özeti şu anda alınamadı.'
+      )
     )
   }
 
@@ -691,7 +778,10 @@ export async function getExpenses() {
 
   if (error) {
     throw new Error(
-      `Giderler alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Giderler şu anda alınamadı.'
+      )
     )
   }
 
@@ -766,7 +856,10 @@ export async function createExpense(form) {
 
   if (error) {
     throw new Error(
-      `Gider kaydedilemedi: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Gider kaydedilemedi.'
+      )
     )
   }
 
@@ -776,7 +869,11 @@ export async function createExpense(form) {
 export async function cancelExpense(
   expenseId
 ) {
-  if (!expenseId) {
+  const cleanExpenseId = String(
+    expenseId || ''
+  ).trim()
+
+  if (!cleanExpenseId) {
     throw new Error(
       'Gider kimliği bulunamadı.'
     )
@@ -789,13 +886,16 @@ export async function cancelExpense(
       cancelled_at:
         new Date().toISOString()
     })
-    .eq('id', expenseId)
+    .eq('id', cleanExpenseId)
     .select(expenseSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Gider iptal edilemedi: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Gider iptal edilemedi.'
+      )
     )
   }
 
@@ -821,7 +921,10 @@ export async function getTeacherEarningsSummary() {
 
   if (error) {
     throw new Error(
-      `Öğretmen hakediş özeti alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Öğretmen hakediş özeti şu anda alınamadı.'
+      )
     )
   }
 
@@ -862,7 +965,10 @@ export async function getTeacherEarningLessons(
 
   if (error) {
     throw new Error(
-      `Öğretmen hakediş dersleri alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Öğretmen hakediş dersleri şu anda alınamadı.'
+      )
     )
   }
 
@@ -880,35 +986,15 @@ export async function getTeacherPaymentsPage({
   endDate = '',
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(
-    1,
-    Number(page) || 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
   )
-
-  const allowedPageSizes = [
-    10,
-    25,
-    50
-  ]
-
-  const requestedPageSize =
-    Number(pageSize)
-
-  const safePageSize =
-    allowedPageSizes.includes(
-      requestedPageSize
-    )
-      ? requestedPageSize
-      : 10
-
-  const from =
-    (safePage - 1) *
-    safePageSize
-
-  const to =
-    from +
-    safePageSize -
-    1
 
   let query = supabase
     .from('teacher_payment_history_view')
@@ -916,11 +1002,8 @@ export async function getTeacherPaymentsPage({
       count: 'exact'
     })
 
-  const cleanSearchText = String(
-    searchText || ''
-  )
-    .trim()
-    .replace(/[(),]/g, ' ')
+  const cleanSearchText =
+    cleanSearchValue(searchText)
 
   if (cleanSearchText) {
     const searchPattern =
@@ -1004,7 +1087,10 @@ export async function getTeacherPaymentsPage({
 
   if (error) {
     throw new Error(
-      `Öğretmen ödeme geçmişi alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Öğretmen ödeme geçmişi şu anda alınamadı.'
+      )
     )
   }
 
@@ -1031,7 +1117,10 @@ export async function getTeacherPayments() {
 
   if (error) {
     throw new Error(
-      `Öğretmen ödemeleri alınamadı: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Öğretmen ödemeleri şu anda alınamadı.'
+      )
     )
   }
 
@@ -1102,7 +1191,10 @@ export async function createTeacherPayment(
 
   if (error) {
     throw new Error(
-      `Öğretmen ödemesi kaydedilemedi: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Öğretmen ödemesi kaydedilemedi.'
+      )
     )
   }
 
@@ -1112,7 +1204,11 @@ export async function createTeacherPayment(
 export async function cancelTeacherPayment(
   paymentId
 ) {
-  if (!paymentId) {
+  const cleanPaymentId = String(
+    paymentId || ''
+  ).trim()
+
+  if (!cleanPaymentId) {
     throw new Error(
       'Öğretmen ödemesi kimliği bulunamadı.'
     )
@@ -1125,13 +1221,16 @@ export async function cancelTeacherPayment(
       cancelled_at:
         new Date().toISOString()
     })
-    .eq('id', paymentId)
+    .eq('id', cleanPaymentId)
     .select(teacherPaymentSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Öğretmen ödemesi iptal edilemedi: ${error.message}`
+      getFinanceErrorMessage(
+        error,
+        'Öğretmen ödemesi iptal edilemedi.'
+      )
     )
   }
 
