@@ -1,8 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
+
+import {
+  createLessonOccurrence,
+  deleteLessonOccurrence,
+  getLessonHistoryPage,
+  updateLessonOccurrenceStatus
+} from '../services/lessonService'
 import '../styles/status.css'
+
+import {
+  getCompactLessonStatusLabel,
+  getLessonStatusBadgeClass,
+  getLessonStatusClass,
+  getLessonStatusLabel,
+  isActiveLesson,
+  isMakeupLesson,
+  normalizeLessonStatus
+} from '../utils/lessonHelpers'
+
+import {
+  areIdsEqual,
+  normalizeSearchText,
+  normalizeStatusText
+} from '../utils/textHelpers'
 
 function LessonStatusTracking({
   lessons = [],
+  lessonPlans = [],
   setLessons,
   teachers = [],
   students = [],
@@ -94,6 +118,65 @@ function LessonStatusTracking({
   const [expandedCells, setExpandedCells] =
     useState({})
 
+  const [updatingLessonId, setUpdatingLessonId] =
+    useState(null)
+
+  const [deletingLessonId, setDeletingLessonId] =
+    useState(null)
+
+  const [isSavingMakeup, setIsSavingMakeup] =
+    useState(false)
+
+  const [
+    historyRows,
+    setHistoryRows
+  ] = useState([])
+
+  const [
+    historyTotal,
+    setHistoryTotal
+  ] = useState(0)
+
+  const [
+    historyPage,
+    setHistoryPage
+  ] = useState(1)
+
+  const [
+    historyPageSize,
+    setHistoryPageSize
+  ] = useState(10)
+
+  const [
+    historyStartDate,
+    setHistoryStartDate
+  ] = useState('')
+
+  const [
+    historyEndDate,
+    setHistoryEndDate
+  ] = useState('')
+
+  const [
+    historySort,
+    setHistorySort
+  ] = useState('newest')
+
+  const [
+    historyLoading,
+    setHistoryLoading
+  ] = useState(false)
+
+  const [
+    historyError,
+    setHistoryError
+  ] = useState('')
+
+  const [
+    historyReloadKey,
+    setHistoryReloadKey
+  ] = useState(0)
+
   const studentSearchRef = useRef(null)
 
   /*
@@ -113,23 +196,15 @@ function LessonStatusTracking({
   const activeTeachers = teachers.filter(
     (teacher) =>
       teacher.isActive !== false &&
-      teacher.status !== 'Pasif'
+      normalizeStatusText(teacher.status) !== 'pasif'
   )
 
   const activeStudents = students.filter(
     (student) =>
       student.isActive !== false &&
-      student.status !== 'Pasif' &&
-      !student.isArchived
+      normalizeStatusText(student.status) !== 'pasif' &&
+      student.isArchived !== true
   )
-
-  const normalizeSearchText = (value) =>
-    String(value || '')
-      .toLocaleLowerCase('tr-TR')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/ı/g, 'i')
-      .trim()
 
   const getStudentFullName = (student) =>
     student?.fullName || student?.name || ''
@@ -213,51 +288,6 @@ function LessonStatusTracking({
     }
   }, [])
 
-  const normalizeStatus = (status) => {
-    if (status === 'Telafi') {
-      return 'Telafi yapılacak'
-    }
-
-    if (status === 'İptal') {
-      return 'İptal edildi'
-    }
-
-    return status || 'Planlandı'
-  }
-
-  const getStatusLabel = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    if (normalizedStatus === 'Planlandı') {
-      return 'Düzenli Ders'
-    }
-
-    return normalizedStatus
-  }
-
-  const getCompactStatusLabel = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    switch (normalizedStatus) {
-      case 'Yapıldı':
-        return 'Yapıldı'
-
-      case 'İptal edildi':
-        return 'İptal'
-
-      case 'Telafi yapılacak':
-        return 'Telafi'
-
-      case 'Telafi yapıldı':
-        return 'Telafi yapıldı'
-
-      default:
-        return ''
-    }
-  }
-
   const getTeacherName = (lesson) => {
     if (lesson.teacherName) {
       return lesson.teacherName
@@ -269,8 +299,7 @@ function LessonStatusTracking({
 
     const teacher = teachers.find(
       (item) =>
-        String(item.id) ===
-        String(lesson.teacherId)
+        areIdsEqual(item.id, lesson.teacherId)
     )
 
     return (
@@ -288,10 +317,15 @@ function LessonStatusTracking({
     const teacherName =
       lesson.teacherName || lesson.teacher
 
+    const normalizedTeacherName =
+      normalizeStatusText(teacherName)
+
     const teacher = teachers.find(
       (item) =>
-        item.fullName === teacherName ||
-        item.name === teacherName
+        normalizeStatusText(item.fullName) ===
+          normalizedTeacherName ||
+        normalizeStatusText(item.name) ===
+          normalizedTeacherName
     )
 
     return teacher?.id || ''
@@ -345,8 +379,10 @@ function LessonStatusTracking({
   const getSelectedStudent = () => {
     return students.find(
       (student) =>
-        String(student.id) ===
-        String(makeupForm.studentId)
+        areIdsEqual(
+        student.id,
+        makeupForm.studentId
+      )
     )
   }
 
@@ -365,8 +401,8 @@ function LessonStatusTracking({
         (enrolledPackage) => {
           const packageDetail = packages.find(
             (item) =>
-              String(item.id) ===
-              String(
+              areIdsEqual(
+                item.id,
                 enrolledPackage.packageId
               )
           )
@@ -415,8 +451,7 @@ function LessonStatusTracking({
       return packages.filter((item) =>
         student.packageIds.some(
           (packageId) =>
-            String(packageId) ===
-            String(item.id)
+            areIdsEqual(packageId, item.id)
         )
       )
     }
@@ -424,103 +459,301 @@ function LessonStatusTracking({
     if (student.packageId) {
       return packages.filter(
         (item) =>
-          String(item.id) ===
-          String(student.packageId)
+          areIdsEqual(item.id, student.packageId)
       )
     }
 
     return []
   }
 
-  const filteredLessons = lessons.filter(
-    (lesson) => {
-      const lessonStatus =
-        normalizeStatus(lesson.status)
+  const matchesCurrentFilters = (lesson) => {
+    const lessonStatus =
+      normalizeLessonStatus(lesson.status)
 
-      const teacherMatch =
-        selectedTeacher === 'all' ||
-        String(getTeacherId(lesson)) ===
-          String(selectedTeacher)
-
-      const lessonStudent = students.find(
-        (student) =>
-          String(student.id) ===
-          String(lesson.studentId)
+    const teacherMatch =
+      selectedTeacher === 'all' ||
+      areIdsEqual(
+        getTeacherId(lesson),
+        selectedTeacher
       )
 
-      const lessonStudentSearchValue =
-        normalizeSearchText(
-          [
-            getStudentName(lesson),
-            lessonStudent?.phone,
-            lessonStudent?.motherPhone,
-            lessonStudent?.fatherPhone,
-            lessonStudent?.tcNo,
-            lessonStudent?.email
-          ]
-            .filter(Boolean)
-            .join(' ')
+    const lessonStudent = students.find(
+      (student) =>
+        areIdsEqual(
+          student.id,
+          lesson.studentId
         )
+    )
 
-      const studentMatch =
-        selectedStudent !== 'all'
-          ? String(lesson.studentId) ===
-            String(selectedStudent)
-          : !normalizedStudentSearch ||
-            lessonStudentSearchValue.includes(
-              normalizedStudentSearch
-            )
-
-      const statusMatch =
-        selectedStatus === 'all' ||
-        lessonStatus === selectedStatus
-
-      return (
-        teacherMatch &&
-        studentMatch &&
-        statusMatch
+    const lessonStudentSearchValue =
+      normalizeSearchText(
+        [
+          getStudentName(lesson),
+          lessonStudent?.phone,
+          lessonStudent?.motherPhone,
+          lessonStudent?.fatherPhone,
+          lessonStudent?.tcNo,
+          lessonStudent?.email
+        ]
+          .filter(Boolean)
+          .join(' ')
       )
-    }
+
+    const studentMatch =
+      selectedStudent !== 'all'
+        ? areIdsEqual(
+            lesson.studentId,
+            selectedStudent
+          )
+        : !normalizedStudentSearch ||
+          lessonStudentSearchValue.includes(
+            normalizedStudentSearch
+          )
+
+    const statusMatch =
+      selectedStatus === 'all' ||
+      lessonStatus === selectedStatus
+
+    return (
+      teacherMatch &&
+      studentMatch &&
+      statusMatch
+    )
+  }
+
+  /*
+   * Üst haftalık tablo güncel lesson_plans kayıtlarını gösterir.
+   * Occurrence kaydı varsa yalnızca dersin güncel durumunu ekler.
+   * Programdan silinen plan bu tablodan hemen çıkar.
+   */
+  const occurrenceByPlanId = new Map(
+    lessons
+      .filter(
+        (lesson) =>
+          lesson.lessonPlanId
+      )
+      .map(
+        (lesson) => [
+          String(
+            lesson.lessonPlanId
+          ),
+          lesson
+        ]
+      )
   )
 
-  const sortedLessons = [
-    ...filteredLessons
-  ].sort((firstLesson, secondLesson) => {
-    const firstDayOrder =
-      dayOrder[firstLesson.day] ?? 99
+  const currentScheduleLessons =
+    lessonPlans
+      .filter(
+        (lesson) =>
+          lesson.isActive !== false
+      )
+      .map((lesson) => {
+        const occurrence =
+          occurrenceByPlanId.get(
+            String(lesson.id)
+          )
 
-    const secondDayOrder =
-      dayOrder[secondLesson.day] ?? 99
+        return {
+          ...lesson,
+          occurrenceId:
+            occurrence?.id || '',
+          lessonPlanId:
+            lesson.id,
+          status:
+            occurrence?.status ||
+            'Planlandı',
+          note:
+            occurrence?.note ||
+            lesson.note ||
+            '',
+          isMakeup:
+            occurrence?.isMakeup === true
+        }
+      })
 
-    const dayDifference =
-      firstDayOrder - secondDayOrder
+  /*
+   * Plan tablosunda yer almayan ve henüz sonuçlanmamış telafi
+   * dersleri de güncel haftalık takip tablosunda gösterilir.
+   */
+  const pendingMakeupLessons =
+    lessons.filter((lesson) => {
+      const status =
+        normalizeLessonStatus(
+          lesson.status
+        )
 
-    if (dayDifference !== 0) {
-      return dayDifference
+      return (
+        isMakeupLesson(lesson) &&
+        (
+          status ===
+            'Telafi yapılacak' ||
+          status === 'Planlandı'
+        )
+      )
+    })
+
+  const weeklyLessons = [
+    ...currentScheduleLessons,
+    ...pendingMakeupLessons
+  ].filter(matchesCurrentFilters)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setHistoryLoading(true)
+          setHistoryError('')
+
+          try {
+            const result =
+              await getLessonHistoryPage({
+                page: historyPage,
+                pageSize:
+                  historyPageSize,
+                teacherId:
+                  selectedTeacher ===
+                  'all'
+                    ? ''
+                    : selectedTeacher,
+                studentId:
+                  selectedStudent ===
+                  'all'
+                    ? ''
+                    : selectedStudent,
+                status:
+                  selectedStatus,
+                startDate:
+                  historyStartDate,
+                endDate:
+                  historyEndDate,
+                sortOption:
+                  historySort
+              })
+
+            if (!isMounted) {
+              return
+            }
+
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  result.total /
+                    historyPageSize
+                )
+              )
+
+            if (
+              historyPage >
+              totalPages
+            ) {
+              setHistoryPage(
+                totalPages
+              )
+              return
+            }
+
+            setHistoryRows(
+              result.data
+            )
+            setHistoryTotal(
+              result.total
+            )
+          } catch (error) {
+            console.error(
+              'Ders geçmişi alınamadı:',
+              error
+            )
+
+            if (isMounted) {
+              setHistoryError(
+                error instanceof Error
+                  ? error.message
+                  : 'Ders geçmişi alınamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setHistoryLoading(false)
+            }
+          }
+        },
+        150
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(
+        timeoutId
+      )
     }
+  }, [
+    historyPage,
+    historyPageSize,
+    selectedTeacher,
+    selectedStudent,
+    selectedStatus,
+    historyStartDate,
+    historyEndDate,
+    historySort,
+    historyReloadKey
+  ])
 
-    return String(
-      firstLesson.time || ''
-    ).localeCompare(
-      String(secondLesson.time || '')
+  const historyTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        historyTotal /
+          historyPageSize
+      )
     )
-  })
+
+  const historyFirstRecord =
+    historyTotal === 0
+      ? 0
+      : (
+          historyPage - 1
+        ) *
+          historyPageSize +
+        1
+
+  const historyLastRecord =
+    Math.min(
+      historyPage *
+        historyPageSize,
+      historyTotal
+    )
+
+  const resetHistoryPage = () => {
+    setHistoryPage(1)
+  }
 
   const getLessonsByDayAndHour = (
     day,
     hour
   ) => {
-    return filteredLessons
+    return weeklyLessons
       .filter(
         (lesson) =>
           lesson.day === day &&
           lesson.time === hour
       )
-      .sort((firstLesson, secondLesson) =>
-        getTeacherName(firstLesson).localeCompare(
-          getTeacherName(secondLesson),
-          'tr'
-        )
+      .sort(
+        (
+          firstLesson,
+          secondLesson
+        ) =>
+          getTeacherName(
+            firstLesson
+          ).localeCompare(
+            getTeacherName(
+              secondLesson
+            ),
+            'tr'
+          )
       )
   }
 
@@ -531,66 +764,9 @@ function LessonStatusTracking({
     }))
   }
 
-  const getStatusClass = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    switch (normalizedStatus) {
-      case 'Yapıldı':
-        return 'status-lesson-card completed'
-
-      case 'İptal edildi':
-        return 'status-lesson-card cancelled'
-
-      case 'Telafi yapılacak':
-        return 'status-lesson-card makeup-waiting'
-
-      case 'Telafi yapıldı':
-        return 'status-lesson-card makeup-completed'
-
-      default:
-        return 'status-lesson-card planned'
-    }
-  }
-
-  const getStatusBadgeClass = (status) => {
-    const normalizedStatus =
-      normalizeStatus(status)
-
-    switch (normalizedStatus) {
-      case 'Yapıldı':
-        return 'status-pill completed'
-
-      case 'İptal edildi':
-        return 'status-pill cancelled'
-
-      case 'Telafi yapılacak':
-        return 'status-pill makeup-waiting'
-
-      case 'Telafi yapıldı':
-        return 'status-pill makeup-completed'
-
-      default:
-        return 'status-pill planned'
-    }
-  }
-
-  const isMakeupLesson = (lesson) => {
-    const normalizedStatus =
-      normalizeStatus(lesson.status)
-
-    return (
-      lesson.isMakeup ||
-      normalizedStatus ===
-        'Telafi yapılacak' ||
-      normalizedStatus ===
-        'Telafi yapıldı'
-    )
-  }
-
   const getLessonActions = (lesson) => {
     const normalizedStatus =
-      normalizeStatus(lesson.status)
+      normalizeLessonStatus(lesson.status)
 
     const makeupLesson =
       isMakeupLesson(lesson)
@@ -625,38 +801,95 @@ function LessonStatusTracking({
     ]
   }
 
-  const updateLessonStatus = (
+  const updateLessonStatus = async (
     lessonId,
     newStatus
   ) => {
-    setLessons((currentLessons) =>
-      currentLessons.map((lesson) => {
-        if (lesson.id !== lessonId) {
-          return lesson
-        }
+    if (updatingLessonId) {
+      return
+    }
 
-        if (newStatus === 'Geri al') {
-          return {
-            ...lesson,
-            status: isMakeupLesson(lesson)
+    const currentLesson =
+      lessons.find(
+        (lesson) =>
+          areIdsEqual(
+            lesson.id,
+            lessonId
+          )
+      ) ||
+      weeklyLessons.find(
+        (lesson) =>
+          areIdsEqual(
+            lesson.occurrenceId,
+            lessonId
+          ) ||
+          areIdsEqual(
+            lesson.id,
+            lessonId
+          )
+      )
+
+    if (!currentLesson) {
+      return
+    }
+
+    const statusToSave =
+      newStatus === 'Geri al'
+        ? (
+            isMakeupLesson(currentLesson)
               ? 'Telafi yapılacak'
               : 'Planlandı'
-          }
-        }
+          )
+        : newStatus
 
-        return {
-          ...lesson,
-          status: newStatus
-        }
-      })
-    )
+    setUpdatingLessonId(lessonId)
 
-    setOpenMenuId(null)
+    try {
+      const updatedLesson =
+        await updateLessonOccurrenceStatus(
+          lessonId,
+          statusToSave
+        )
+
+      setLessons((currentLessons) =>
+        currentLessons.map((lesson) =>
+          areIdsEqual(
+            lesson.id,
+            lessonId
+          )
+            ? updatedLesson
+            : lesson
+        )
+      )
+
+      setHistoryReloadKey(
+        (current) => current + 1
+      )
+
+      setOpenMenuId(null)
+    } catch (error) {
+      console.error(
+        'Ders durumu güncelleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ders durumu güncellenemedi.'
+      )
+    } finally {
+      setUpdatingLessonId(null)
+    }
   }
 
-  const deleteMakeupLesson = (
+  const deleteMakeupLesson = async (
     lessonId
   ) => {
+    if (deletingLessonId) {
+      return
+    }
+
     const confirmDelete =
       window.confirm(
         'Bu telafi dersini kaldırmak istediğinize emin misiniz?'
@@ -666,19 +899,46 @@ function LessonStatusTracking({
       return
     }
 
-    setLessons((currentLessons) =>
-      currentLessons.filter(
-        (lesson) =>
-          lesson.id !== lessonId
-      )
-    )
+    setDeletingLessonId(lessonId)
 
-    setOpenMenuId(null)
+    try {
+      await deleteLessonOccurrence(lessonId)
+
+      setLessons((currentLessons) =>
+        currentLessons.filter(
+          (lesson) =>
+            !areIdsEqual(
+              lesson.id,
+              lessonId
+            )
+        )
+      )
+
+      setHistoryReloadKey(
+        (current) => current + 1
+      )
+
+      setOpenMenuId(null)
+    } catch (error) {
+      console.error(
+        'Telafi dersi silme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Telafi dersi silinemedi.'
+      )
+    } finally {
+      setDeletingLessonId(null)
+    }
   }
 
   const handleStudentSearchChange = (event) => {
     setStudentSearch(event.target.value)
     setSelectedStudent('all')
+    resetHistoryPage()
     setShowStudentSuggestions(true)
   }
 
@@ -749,8 +1009,7 @@ function LessonStatusTracking({
       const selectedPackage =
         studentPackages.find(
           (item) =>
-            String(item.id) ===
-            String(value)
+            areIdsEqual(item.id, value)
         )
 
       setMakeupForm((currentForm) => ({
@@ -781,31 +1040,33 @@ function LessonStatusTracking({
       const sameTime =
         lesson.time === makeupForm.time
 
-      const sameTeacher =
-        String(getTeacherId(lesson)) ===
-        String(makeupForm.teacherId)
+      const sameTeacher = areIdsEqual(
+        getTeacherId(lesson),
+        makeupForm.teacherId
+      )
 
-      const sameStudent =
-        String(lesson.studentId) ===
-        String(makeupForm.studentId)
+      const sameStudent = areIdsEqual(
+        lesson.studentId,
+        makeupForm.studentId
+      )
 
       const isSameSlot =
         sameDay && sameTime
 
-      const isActiveLesson =
-        normalizeStatus(lesson.status) !==
-        'İptal edildi'
-
       return (
         isSameSlot &&
-        isActiveLesson &&
+        isActiveLesson(lesson) &&
         (sameTeacher || sameStudent)
       )
     })
   }
 
-  const saveMakeupLesson = (event) => {
+  const saveMakeupLesson = async (event) => {
     event.preventDefault()
+
+    if (isSavingMakeup) {
+      return
+    }
 
     if (!makeupForm.studentId) {
       alert('Öğrenci seçilmelidir.')
@@ -841,82 +1102,55 @@ function LessonStatusTracking({
       return
     }
 
-    const selectedTeacherData =
-      teachers.find(
-        (teacher) =>
-          String(teacher.id) ===
-          String(makeupForm.teacherId)
+    setIsSavingMakeup(true)
+
+    try {
+      const savedLesson =
+        await createLessonOccurrence({
+          teacherId:
+            makeupForm.teacherId,
+          studentId:
+            makeupForm.studentId,
+          packageId:
+            makeupForm.packageId,
+          day:
+            makeupForm.day,
+          time:
+            makeupForm.time,
+          duration:
+            makeupForm.duration ||
+            '60 dk',
+          status:
+            'Telafi yapılacak',
+          note:
+            makeupForm.note.trim(),
+          isMakeup:
+            true,
+          relatedLessonId:
+            null
+        })
+
+      setLessons((currentLessons) => [
+        ...currentLessons,
+        savedLesson
+      ])
+
+      unsavedChanges?.markClean?.()
+      performCloseMakeupForm()
+    } catch (error) {
+      console.error(
+        'Telafi dersi kaydetme hatası:',
+        error
       )
 
-    const selectedStudentData =
-      students.find(
-        (student) =>
-          String(student.id) ===
-          String(makeupForm.studentId)
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Telafi dersi kaydedilemedi.'
       )
-
-    const makeupLesson = {
-      id: Date.now(),
-
-      teacherId: Number(
-        makeupForm.teacherId
-      ),
-
-      teacherName:
-        selectedTeacherData?.fullName ||
-        selectedTeacherData?.name ||
-        '',
-
-      teacher:
-        selectedTeacherData?.fullName ||
-        selectedTeacherData?.name ||
-        '',
-
-      studentId: Number(
-        makeupForm.studentId
-      ),
-
-      studentName:
-        selectedStudentData?.fullName ||
-        selectedStudentData?.name ||
-        '',
-
-      packageId: Number(
-        makeupForm.packageId
-      ),
-
-      packageName:
-        makeupForm.packageName,
-
-      instrument:
-        makeupForm.instrument,
-
-      day: makeupForm.day,
-      time: makeupForm.time,
-
-      duration:
-        makeupForm.duration ||
-        '60 dk',
-
-      status: 'Telafi yapılacak',
-
-      note: makeupForm.note.trim(),
-
-      isMakeup: true,
-      relatedLessonId: null
+    } finally {
+      setIsSavingMakeup(false)
     }
-
-    setLessons((currentLessons) => [
-      ...currentLessons,
-      makeupLesson
-    ])
-
-    /*
-     * Telafi dersi ana ders listesine başarıyla kaydedildi.
-     * Artık kaybolabilecek bir form taslağı bulunmuyor.
-     */
-    unsavedChanges?.markClean?.()
-    performCloseMakeupForm()
   }
 
   const studentPackageOptions =
@@ -1129,6 +1363,7 @@ function LessonStatusTracking({
               className="edit-section-button"
               type="button"
               onClick={closeMakeupForm}
+              disabled={isSavingMakeup}
             >
               Kapat
             </button>
@@ -1310,6 +1545,7 @@ function LessonStatusTracking({
                 type="button"
                 className="cancel-button"
                 onClick={closeMakeupForm}
+                disabled={isSavingMakeup}
               >
                 İptal
               </button>
@@ -1317,8 +1553,11 @@ function LessonStatusTracking({
               <button
                 type="submit"
                 className="save-button"
+                disabled={isSavingMakeup}
               >
-                Telafi Dersini Kaydet
+                {isSavingMakeup
+                  ? 'Kaydediliyor...'
+                  : 'Telafi Dersini Kaydet'}
               </button>
             </div>
           </form>
@@ -1331,7 +1570,7 @@ function LessonStatusTracking({
             <h2>Haftalık Program</h2>
 
             <p>
-              Haftalık ders programı ve ders
+              Güncel haftalık program ve ders
               durumları.
             </p>
           </div>
@@ -1349,7 +1588,7 @@ function LessonStatusTracking({
               className="lesson-count"
               type="button"
             >
-              {filteredLessons.length} ders
+              {weeklyLessons.length} ders
             </button>
           </div>
         </div>
@@ -1419,28 +1658,31 @@ function LessonStatusTracking({
                                   )
 
                                 const compactStatus =
-                                  getCompactStatusLabel(
+                                  getCompactLessonStatusLabel(
                                     lesson.status
                                   )
 
                                 return (
                                   <div
-                                    key={lesson.id}
-                                    className={`${getStatusClass(
-                                      lesson.status
+                                    key={(lesson.occurrenceId || lesson.id)}
+                                    className={`${getLessonStatusClass(
+                                      lesson.status,
+                                      'status-lesson-card'
                                     )} ${
-                                      lesson.isMakeup
+                                      isMakeupLesson(lesson)
                                         ? 'makeup-card'
                                         : ''
                                     } ${
-                                      openMenuId ===
-                                      lesson.id
+                                      areIdsEqual(
+                                        openMenuId,
+                                        (lesson.occurrenceId || lesson.id)
+                                      )
                                         ? 'menu-open'
                                         : ''
                                     }`}
                                   >
-                                    {lesson.isMakeup &&
-                                      normalizeStatus(
+                                    {isMakeupLesson(lesson) &&
+                                      normalizeLessonStatus(
                                         lesson.status
                                       ) ===
                                         'Telafi yapılacak' && (
@@ -1453,12 +1695,23 @@ function LessonStatusTracking({
                                             event.stopPropagation()
 
                                             deleteMakeupLesson(
-                                              lesson.id
+                                              (lesson.occurrenceId || lesson.id)
                                             )
                                           }}
+                                          disabled={
+                                            areIdsEqual(
+                                              deletingLessonId,
+                                              (lesson.occurrenceId || lesson.id)
+                                            )
+                                          }
                                           title="Telafi dersini kaldır"
                                         >
-                                          ×
+                                          {areIdsEqual(
+                                            deletingLessonId,
+                                            (lesson.occurrenceId || lesson.id)
+                                          )
+                                            ? '…'
+                                            : '×'}
                                         </button>
                                       )}
 
@@ -1509,10 +1762,12 @@ function LessonStatusTracking({
                                             event.stopPropagation()
 
                                             setOpenMenuId(
-                                              openMenuId ===
-                                                lesson.id
+                                              areIdsEqual(
+                                                openMenuId,
+                                                (lesson.occurrenceId || lesson.id)
+                                              )
                                                 ? null
-                                                : lesson.id
+                                                : (lesson.occurrenceId || lesson.id)
                                             )
                                           }}
                                           aria-label="Ders işlemleri"
@@ -1520,8 +1775,10 @@ function LessonStatusTracking({
                                           ⋯
                                         </button>
 
-                                        {openMenuId ===
-                                          lesson.id && (
+                                        {areIdsEqual(
+                                          openMenuId,
+                                          (lesson.occurrenceId || lesson.id)
+                                        ) && (
                                           <div className="lesson-action-menu">
                                             {lessonActions.map(
                                               (action) => (
@@ -1532,14 +1789,24 @@ function LessonStatusTracking({
                                                   type="button"
                                                   onClick={() =>
                                                     updateLessonStatus(
-                                                      lesson.id,
+                                                      lesson.occurrenceId ||
+                                                        lesson.id,
                                                       action
                                                     )
                                                   }
-                                                >
-                                                  {
-                                                    action
+                                                  disabled={
+                                                    areIdsEqual(
+                                                      updatingLessonId,
+                                                      (lesson.occurrenceId || lesson.id)
+                                                    )
                                                   }
+                                                >
+                                                  {areIdsEqual(
+                                                    updatingLessonId,
+                                                    (lesson.occurrenceId || lesson.id)
+                                                  )
+                                                    ? 'Kaydediliyor...'
+                                                    : action}
                                                 </button>
                                               )
                                             )}
@@ -1586,142 +1853,314 @@ function LessonStatusTracking({
         </div>
       </section>
 
-      <section className="lesson-table-card">
-        <div className="table-head">
+      <section className="lesson-table-card status-history-card">
+        <div className="table-head status-history-head">
           <div>
-            <h2>Ders Durum Listesi</h2>
+            <h2>Ders Geçmişi</h2>
 
             <p>
-              Seçili filtrelere göre derslerin
-              detaylı listesi
+              Sonuçlanmış ders kayıtları
+              Supabase’den sayfa sayfa yüklenir.
             </p>
           </div>
 
+          <span className="lesson-count">
+            {historyTotal} kayıt
+          </span>
+        </div>
+
+        <div className="status-history-filters">
+          <label>
+            Başlangıç Tarihi
+            <input
+              type="date"
+              value={historyStartDate}
+              onChange={(event) => {
+                setHistoryStartDate(
+                  event.target.value
+                )
+                resetHistoryPage()
+              }}
+            />
+          </label>
+
+          <label>
+            Bitiş Tarihi
+            <input
+              type="date"
+              value={historyEndDate}
+              onChange={(event) => {
+                setHistoryEndDate(
+                  event.target.value
+                )
+                resetHistoryPage()
+              }}
+            />
+          </label>
+
+          <label>
+            Sırala
+            <select
+              value={historySort}
+              onChange={(event) => {
+                setHistorySort(
+                  event.target.value
+                )
+                resetHistoryPage()
+              }}
+            >
+              <option value="newest">
+                En yeni tarih
+              </option>
+              <option value="oldest">
+                En eski tarih
+              </option>
+            </select>
+          </label>
+
+          <label>
+            Sayfa başına
+            <select
+              value={historyPageSize}
+              onChange={(event) => {
+                setHistoryPageSize(
+                  Number(
+                    event.target.value
+                  )
+                )
+                setHistoryPage(1)
+              }}
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </label>
+
           <button
             type="button"
-            className="lesson-count"
+            className="status-history-clear"
+            onClick={() => {
+              setHistoryStartDate('')
+              setHistoryEndDate('')
+              setHistorySort('newest')
+              setHistoryPage(1)
+            }}
           >
-            {sortedLessons.length} ders
+            Tarih Filtrelerini Temizle
           </button>
         </div>
 
-        <div className="payment-table-wrapper">
-          <table className="lesson-table status-detail-table">
-            <thead>
-              <tr>
-                <th>Gün</th>
-                <th>Saat</th>
-                <th>Öğretmen</th>
-                <th>Öğrenci</th>
-                <th>Ders</th>
-                <th>Durum</th>
-                <th>Not</th>
-              </tr>
-            </thead>
+        {historyError ? (
+          <div className="status-history-message error">
+            <span>{historyError}</span>
 
-            <tbody>
-              {sortedLessons.length > 0 ? (
-                sortedLessons.map(
-                  (lesson) => (
-                    <tr key={lesson.id}>
-                      <td>
-                        <span className="status-day-text">
-                          {lesson.day}
-                        </span>
-                      </td>
-
-                      <td>
-                        <strong className="status-time-text">
-                          {lesson.time}
-                        </strong>
-                      </td>
-
-                      <td>
-                        <span
-                          className="status-person-text"
-                          title={getTeacherName(
-                            lesson
-                          )}
-                        >
-                          {getTeacherName(
-                            lesson
-                          )}
-                        </span>
-                      </td>
-
-                      <td>
-                        <span
-                          className="status-person-text"
-                          title={getStudentName(
-                            lesson
-                          )}
-                        >
-                          {getStudentName(
-                            lesson
-                          )}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div
-                          className="status-lesson-detail"
-                          title={getLessonTitle(
-                            lesson
-                          )}
-                        >
-                          <strong>
-                            {getLessonInstrument(
-                              lesson
-                            )}
-                          </strong>
-                          <small>
-                            {getLessonTitle(
-                              lesson
-                            )}
-                          </small>
-                        </div>
-                      </td>
-
-                      <td>
-                        <span
-                          className={getStatusBadgeClass(
-                            lesson.status
-                          )}
-                        >
-                          {getStatusLabel(
-                            lesson.status
-                          )}
-                        </span>
-                      </td>
-
-                      <td
-                        className={`status-note-cell ${
-                          lesson.note
-                            ? 'has-note'
-                            : 'empty-note'
-                        }`}
-                        title={lesson.note || ''}
-                      >
-                        <span>
-                          {lesson.note || '—'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
+            <button
+              type="button"
+              onClick={() =>
+                setHistoryReloadKey(
+                  (current) =>
+                    current + 1
                 )
-              ) : (
+              }
+            >
+              Tekrar Dene
+            </button>
+          </div>
+        ) : (
+          <div className="status-history-table-wrapper">
+            <table className="lesson-table status-history-table">
+              <thead>
                 <tr>
-                  <td
-                    colSpan="7"
-                    className="empty-table"
-                  >
-                    Seçili filtrelere uygun
-                    ders bulunamadı.
-                  </td>
+                  <th>Tarih</th>
+                  <th>Gün</th>
+                  <th>Saat</th>
+                  <th>Öğretmen</th>
+                  <th>Öğrenci</th>
+                  <th>Ders</th>
+                  <th>Durum</th>
+                  <th>Not</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {historyLoading ? (
+                  <tr>
+                    <td
+                      colSpan="8"
+                      className="empty-table"
+                    >
+                      Ders geçmişi yükleniyor...
+                    </td>
+                  </tr>
+                ) : historyRows.length > 0 ? (
+                  historyRows.map(
+                    (lesson) => (
+                      <tr key={lesson.id}>
+                        <td className="status-history-date-cell">
+                          <span className="status-date-text">
+                            {lesson.lessonDate
+                              ? new Date(
+                                  `${lesson.lessonDate}T00:00:00`
+                                ).toLocaleDateString(
+                                  'tr-TR'
+                                )
+                              : '—'}
+                          </span>
+                        </td>
+
+                        <td className="status-history-day-cell">
+                          <span className="status-day-text">
+                            {lesson.day}
+                          </span>
+                        </td>
+
+                        <td className="status-history-time-cell">
+                          <strong className="status-time-text">
+                            {lesson.time}
+                          </strong>
+                        </td>
+
+                        <td className="status-history-teacher-cell">
+                          <span
+                            className="status-person-text"
+                            title={getTeacherName(
+                              lesson
+                            )}
+                          >
+                            {getTeacherName(
+                              lesson
+                            )}
+                          </span>
+                        </td>
+
+                        <td className="status-history-student-cell">
+                          <span
+                            className="status-person-text"
+                            title={getStudentName(
+                              lesson
+                            )}
+                          >
+                            {getStudentName(
+                              lesson
+                            )}
+                          </span>
+                        </td>
+
+                        <td className="status-history-lesson-cell">
+                          <div
+                            className="status-lesson-detail"
+                            title={getLessonTitle(
+                              lesson
+                            )}
+                          >
+                            <strong>
+                              {getLessonInstrument(
+                                lesson
+                              )}
+                            </strong>
+                            <small>
+                              {getLessonTitle(
+                                lesson
+                              )}
+                            </small>
+                          </div>
+                        </td>
+
+                        <td className="status-history-status-cell">
+                          <span
+                            className={getLessonStatusBadgeClass(
+                              lesson.status
+                            )}
+                          >
+                            {getLessonStatusLabel(
+                              lesson.status
+                            )}
+                          </span>
+                        </td>
+
+                        <td
+                          className={`status-history-note-cell status-note-cell ${
+                            lesson.note
+                              ? 'has-note'
+                              : 'empty-note'
+                          }`}
+                          title={lesson.note || ''}
+                        >
+                          <span>
+                            {lesson.note || '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  )
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="8"
+                      className="empty-table"
+                    >
+                      Seçili filtrelere uygun
+                      geçmiş ders kaydı bulunamadı.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="status-history-pagination">
+          <span>
+            {historyFirstRecord}–{historyLastRecord}
+            {' / '}
+            {historyTotal} kayıt
+          </span>
+
+          <div>
+            <button
+              type="button"
+              disabled={
+                historyPage <= 1 ||
+                historyLoading
+              }
+              onClick={() =>
+                setHistoryPage(
+                  (current) =>
+                    Math.max(
+                      1,
+                      current - 1
+                    )
+                )
+              }
+            >
+              Önceki
+            </button>
+
+            <span className="status-history-page">
+              {historyPage} / {historyTotalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={
+                historyPage >=
+                  historyTotalPages ||
+                historyLoading
+              }
+              onClick={() =>
+                setHistoryPage(
+                  (current) =>
+                    Math.min(
+                      historyTotalPages,
+                      current + 1
+                    )
+                )
+              }
+            >
+              Sonraki
+            </button>
+          </div>
         </div>
       </section>
     </div>

@@ -1156,7 +1156,7 @@ function Packages({
           </button>
         </div>
 
-        <table className="lesson-table">
+        <table className="lesson-table package-list-table">
           <thead>
             <tr>
               <th>Paket Adı</th>

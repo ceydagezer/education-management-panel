@@ -1,19 +1,45 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
+
+import {
+  LoadingButton
+} from '../components/AsyncState'
+
+import {
+  anonymizeStudent,
+  archiveStudent,
+  createStudent,
+  deleteStudentPermanently,
+  extendStudentRetention,
+  getStudentById,
+  getStudentListCounts,
+  getStudentsPage,
+  reactivateStudent,
+  setStudentPassive,
+  updateStudent
+} from '../services/studentService'
+
 import '../styles/students.css'
 
-const formatPrice = (value) =>
-  Number(value || 0).toLocaleString('tr-TR', {
-    maximumFractionDigits: 2
-  })
+import {
+  addMonthsToDate,
+  addYearsToDate,
+  formatDate,
+  formatPrice,
+  getDateKey,
+  getTodayKey
+} from '../utils/dateHelpers'
 
-const formatDate = (value) => {
-  if (!value) return '-'
-  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString('tr-TR')
-}
+import {
+  getPaymentAmount,
+  getPaymentDate,
+  getPaymentPeriod
+} from '../utils/paymentSchedule'
+
+import {
+  areIdsEqual,
+  normalizeStatusText
+} from '../utils/textHelpers'
 
 const createStudentPackageId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -28,54 +54,13 @@ const createStudentPackageId = () => {
 const ARCHIVE_AFTER_MONTHS = 6
 const RETENTION_REVIEW_YEARS = 2
 
-const getDateKey = (value = new Date()) => {
-  const date = value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0')
-  ].join('-')
-}
-
-const addMonthsToDate = (dateValue, monthCount) => {
-  if (!dateValue) return ''
-
-  const date = new Date(`${String(dateValue).slice(0, 10)}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) return ''
-
-  const originalDay = date.getDate()
-  date.setDate(1)
-  date.setMonth(date.getMonth() + monthCount)
-
-  const lastDayOfTargetMonth = new Date(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    0
-  ).getDate()
-
-  date.setDate(Math.min(originalDay, lastDayOfTargetMonth))
-
-  return getDateKey(date)
-}
-
-const addYearsToDate = (dateValue, yearCount) =>
-  addMonthsToDate(dateValue, yearCount * 12)
-
 function Students({
   students = [],
   setStudents,
   lessonPlans = [],
   packages = [],
   teachers = [],
-  payments = [],
   setLessonPlans,
-  setPayments,
   unsavedChanges,
   onUnsavedChangesChange,
   requestUnsavedAction
@@ -150,7 +135,76 @@ function Students({
     useState(false)
 
   const [statusFilter, setStatusFilter] = useState('active')
+
+  const [
+    studentListRows,
+    setStudentListRows
+  ] = useState([])
+
+  const [
+    studentListTotal,
+    setStudentListTotal
+  ] = useState(0)
+
+  const [
+    studentListCounts,
+    setStudentListCounts
+  ] = useState({
+    active: 0,
+    passive: 0,
+    archived: 0,
+    review: 0,
+    all: 0
+  })
+
+  const [
+    studentListSearch,
+    setStudentListSearch
+  ] = useState('')
+
+  const [
+    studentListPackageId,
+    setStudentListPackageId
+  ] = useState('')
+
+  const [
+    studentListTeacherId,
+    setStudentListTeacherId
+  ] = useState('')
+
+  const [
+    studentListSort,
+    setStudentListSort
+  ] = useState('newest')
+
+  const [
+    studentListPage,
+    setStudentListPage
+  ] = useState(1)
+
+  const [
+    studentListPageSize,
+    setStudentListPageSize
+  ] = useState(10)
+
+  const [
+    studentListLoading,
+    setStudentListLoading
+  ] = useState(false)
+
+  const [
+    studentListError,
+    setStudentListError
+  ] = useState('')
+
+  const [
+    studentListReloadKey,
+    setStudentListReloadKey
+  ] = useState(0)
   const [isCreatingPdf, setIsCreatingPdf] = useState(false)
+  const [isSavingStudent, setIsSavingStudent] = useState(false)
+  const [changingStudentStatus, setChangingStudentStatus] = useState(false)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   /*
    * ÖĞRENCİ EKRANI KAYDEDİLMEMİŞ DEĞİŞİKLİK TAKİBİ
@@ -293,11 +347,6 @@ function Students({
     discardTargetDrafts()
   }
 
-  const normalizeStatusText = (value) =>
-    String(value || '')
-      .trim()
-      .toLocaleLowerCase('tr-TR')
-
   const activeTeachers = teachers.filter(
     (teacher) =>
       teacher.isActive !== false &&
@@ -306,8 +355,6 @@ function Students({
 
   const getTeacherName = (teacher) =>
     teacher?.fullName || teacher?.name || ''
-
-  const getTodayKey = () => getDateKey(new Date())
 
   const isStudentAnonymized = (student) =>
     student?.isAnonymized === true ||
@@ -437,16 +484,8 @@ function Students({
   const getStudentLessons = (student) =>
     lessonPlans.filter(
       (lesson) =>
-        String(lesson.studentId) === String(student.id) ||
+        areIdsEqual(lesson.studentId, student.id) ||
         normalizeStatusText(lesson.studentName) ===
-          normalizeStatusText(student.fullName)
-    )
-
-  const getStudentPayments = (student) =>
-    payments.filter(
-      (payment) =>
-        String(payment.studentId) === String(student.id) ||
-        normalizeStatusText(payment.studentName) ===
           normalizeStatusText(student.fullName)
     )
 
@@ -456,8 +495,6 @@ function Students({
       normalizeStudentPackages(student).length
     const lessonCount =
       getStudentLessons(student).length
-    const paymentCount =
-      getStudentPayments(student).length
 
     if (packageCount > 0) {
       blockers.push(`${packageCount} paket kaydı`)
@@ -467,9 +504,6 @@ function Students({
       blockers.push(`${lessonCount} ders kaydı`)
     }
 
-    if (paymentCount > 0) {
-      blockers.push(`${paymentCount} tahsilat kaydı`)
-    }
 
     return blockers
   }
@@ -477,40 +511,222 @@ function Students({
   const canPermanentlyDeleteStudent = (student) =>
     getDeletionBlockers(student).length === 0
 
-  const activeStudentCount =
-    students.filter(isStudentActive).length
-
-  const passiveStudentCount =
-    students.filter(isStudentPassive).length
-
-  const archivedStudentCount =
-    students.filter(isArchivedStudent).length
-
-  const reviewStudentCount =
-    students.filter(isRetentionReviewDue).length
-
-  const filteredStudents = students.filter((student) => {
-    if (statusFilter === 'active') {
-      return isStudentActive(student)
+  useEffect(() => {
+    if (studentView !== 'list') {
+      return undefined
     }
 
-    if (statusFilter === 'passive') {
-      return isStudentPassive(student)
-    }
+    let isMounted = true
 
-    if (statusFilter === 'archived') {
-      return (
-        isArchivedStudent(student) &&
-        !isRetentionReviewDue(student)
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setStudentListLoading(true)
+          setStudentListError('')
+
+          try {
+            const [
+              pageResult,
+              countsResult
+            ] = await Promise.all([
+              getStudentsPage({
+                page:
+                  studentListPage,
+                pageSize:
+                  studentListPageSize,
+                status:
+                  statusFilter,
+                searchText:
+                  studentListSearch,
+                packageId:
+                  studentListPackageId,
+                teacherId:
+                  studentListTeacherId,
+                sortOption:
+                  studentListSort
+              }),
+              getStudentListCounts()
+            ])
+
+            if (!isMounted) {
+              return
+            }
+
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  pageResult.total /
+                    studentListPageSize
+                )
+              )
+
+            if (
+              studentListPage >
+              totalPages
+            ) {
+              setStudentListPage(
+                totalPages
+              )
+              return
+            }
+
+            setStudentListRows(
+              pageResult.data
+            )
+            setStudentListTotal(
+              pageResult.total
+            )
+            setStudentListCounts(
+              countsResult
+            )
+          } catch (error) {
+            console.error(
+              'Öğrenci listesi alınamadı:',
+              error
+            )
+
+            if (isMounted) {
+              setStudentListError(
+                error instanceof Error
+                  ? error.message
+                  : 'Öğrenci listesi alınamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setStudentListLoading(false)
+            }
+          }
+        },
+        studentListSearch.trim()
+          ? 350
+          : 0
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(
+        timeoutId
       )
     }
+  }, [
+    studentView,
+    statusFilter,
+    studentListPage,
+    studentListPageSize,
+    studentListSearch,
+    studentListPackageId,
+    studentListTeacherId,
+    studentListSort,
+    studentListReloadKey
+  ])
 
-    if (statusFilter === 'review') {
-      return isRetentionReviewDue(student)
+  const studentListTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        studentListTotal /
+          studentListPageSize
+      )
+    )
+
+  const studentListFirstRecord =
+    studentListTotal === 0
+      ? 0
+      : (
+          studentListPage -
+          1
+        ) *
+          studentListPageSize +
+        1
+
+  const studentListLastRecord =
+    Math.min(
+      studentListPage *
+        studentListPageSize,
+      studentListTotal
+    )
+
+  const studentListPageItems =
+    useMemo(() => {
+      if (
+        studentListTotalPages <= 7
+      ) {
+        return Array.from(
+          {
+            length:
+              studentListTotalPages
+          },
+          (_, index) =>
+            index + 1
+        )
+      }
+
+      const items = [1]
+
+      const startPage =
+        Math.max(
+          2,
+          studentListPage - 1
+        )
+
+      const endPage =
+        Math.min(
+          studentListTotalPages - 1,
+          studentListPage + 1
+        )
+
+      if (startPage > 2) {
+        items.push(
+          'start-ellipsis'
+        )
+      }
+
+      for (
+        let pageNumber =
+          startPage;
+        pageNumber <= endPage;
+        pageNumber += 1
+      ) {
+        items.push(
+          pageNumber
+        )
+      }
+
+      if (
+        endPage <
+        studentListTotalPages - 1
+      ) {
+        items.push(
+          'end-ellipsis'
+        )
+      }
+
+      items.push(
+        studentListTotalPages
+      )
+
+      return items
+    }, [
+      studentListPage,
+      studentListTotalPages
+    ])
+
+  const changeStudentStatusFilter =
+    (nextStatus) => {
+      setStatusFilter(nextStatus)
+      setStudentListPage(1)
     }
 
-    return true
-  })
+  const clearStudentListFilters =
+    () => {
+      setStudentListSearch('')
+      setStudentListPackageId('')
+      setStudentListTeacherId('')
+      setStudentListSort('newest')
+      setStudentListPage(1)
+    }
 
   const isPackageActive = (item) =>
     item?.isActive !== false &&
@@ -768,6 +984,10 @@ function Students({
    * Paket ayrıntıları öğrenci detay ekranında korunur.
    */
   const getInstrumentsText = (student) => {
+    if (student?.instrumentsText) {
+      return student.instrumentsText
+    }
+
     const activeItems = getActiveStudentPackages(student)
     const items = activeItems.length
       ? activeItems
@@ -787,6 +1007,10 @@ function Students({
   }
 
   const getTeachersText = (student) => {
+    if (student?.teachersText) {
+      return student.teachersText
+    }
+
     const activeItems = getActiveStudentPackages(student)
     const items = activeItems.length
       ? activeItems
@@ -809,13 +1033,19 @@ function Students({
   }
 
   const getTotalFee = (student) =>
-    getActiveStudentPackages(student).reduce(
+    student?.totalFee !== undefined
+      ? Number(student.totalFee || 0)
+      : getActiveStudentPackages(student).reduce(
       (total, item) =>
         total + Number(item.agreedPrice || item.monthlyFee || 0),
       0
     )
 
   const getNearestPaymentDate = (student) => {
+    if (student?.nearestPaymentDate) {
+      return student.nearestPaymentDate
+    }
+
     const dates = getActiveStudentPackages(student)
       .map((item) => item.nextPaymentDate)
       .filter(Boolean)
@@ -851,13 +1081,13 @@ function Students({
   }
 
   const getPackageById = (packageId) =>
-    packages.find(
-      (item) => String(item.id) === String(packageId)
+    packages.find((item) =>
+      areIdsEqual(item.id, packageId)
     )
 
   const getTeacherById = (teacherId) =>
-    teachers.find(
-      (item) => String(item.id) === String(teacherId)
+    teachers.find((item) =>
+      areIdsEqual(item.id, teacherId)
     )
 
   const updatePackageDraftField = (
@@ -920,9 +1150,14 @@ function Students({
       return false
     }
 
+    const agreedPrice = Number(
+      draft.agreedPrice
+    )
+
     if (
       draft.agreedPrice === '' ||
-      Number(draft.agreedPrice) <= 0
+      !Number.isFinite(agreedPrice) ||
+      agreedPrice <= 0
     ) {
       alert('Geçerli bir paket ücreti giriniz.')
       return false
@@ -1344,43 +1579,54 @@ function Students({
     return true
   }
 
-  const handleStudentSubmit = (event) => {
+  const handleStudentSubmit = async (event) => {
     event.preventDefault()
 
-    if (!validateStudentData(studentForm, true)) return
+    if (isSavingStudent) {
+      return
+    }
 
-    const newStudent = syncLegacyFields(
-      {
-        id: Date.now(),
-        ...studentForm,
-        tcNo: studentForm.tcNo.trim(),
-        fullName: studentForm.fullName.trim(),
-        registerDate: studentForm.registerDate.trim(),
-        phone: studentForm.phone.trim(),
-        lessonPlans: [],
-        isActive: true,
-        status: 'Aktif',
-        passiveDate: '',
-        passiveReason: '',
-        isArchived: false,
-        archivedAt: '',
-        archiveReason: '',
-        retentionReviewDate: '',
-        retentionStatus: 'Aktif Kayıt',
-        isAnonymized: false,
-        anonymizedAt: '',
-        reactivatedAt: ''
-      },
-      normalizeStudentPackages(studentForm)
-    )
+    if (!validateStudentData(studentForm, true)) {
+      return
+    }
 
-    setStudents((current) => [...current, newStudent])
-    setStudentForm(emptyStudentForm)
-    setPackageDraft(emptyPackageDraft)
-    setPackageEditingId(null)
-    setPackageEditorOpen(false)
-    clearAllDirtyFlags()
-    setStudentView('list')
+    setIsSavingStudent(true)
+
+    try {
+      const savedStudent =
+        await createStudent(studentForm)
+
+      setStudents((current) => [
+        savedStudent,
+        ...current
+      ])
+
+      setStudentListPage(1)
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
+
+      setStudentForm(emptyStudentForm)
+      setPackageDraft(emptyPackageDraft)
+      setPackageEditingId(null)
+      setPackageEditorOpen(false)
+
+      clearAllDirtyFlags()
+      setStudentView('list')
+    } catch (error) {
+      console.error(
+        'Öğrenci kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingStudent(false)
+    }
   }
 
   const performShowStudentDetail = (student) => {
@@ -1400,8 +1646,30 @@ function Students({
   }
 
   const showStudentDetail = (student) => {
-    runProtectedPageAction(() =>
-      performShowStudentDetail(student)
+    runProtectedPageAction(
+      async () => {
+        try {
+          const fullStudent =
+            await getStudentById(
+              student.id
+            )
+
+          performShowStudentDetail(
+            fullStudent
+          )
+        } catch (error) {
+          console.error(
+            'Öğrenci detayı alınamadı:',
+            error
+          )
+
+          alert(
+            error instanceof Error
+              ? error.message
+              : 'Öğrenci detayı alınamadı.'
+          )
+        }
+      }
     )
   }
 
@@ -1454,7 +1722,11 @@ function Students({
     )
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
+    if (!selectedStudent || isSavingEdit) {
+      return
+    }
+
     if (
       !validateStudentData(
         editForm,
@@ -1464,36 +1736,55 @@ function Students({
       return
     }
 
-    const updatedStudent = syncLegacyFields(
-      {
-        ...editForm,
-        tcNo: String(editForm.tcNo || '').trim(),
-        fullName: String(editForm.fullName || '').trim(),
-        registerDate: String(editForm.registerDate || '').trim(),
-        phone: String(editForm.phone || '').trim()
-      },
-      normalizeStudentPackages(editForm)
-    )
+    setIsSavingEdit(true)
 
-    setStudents((current) =>
-      current.map((student) =>
-        student.id === selectedStudent.id ? updatedStudent : student
+    try {
+      const savedStudent =
+        await updateStudent(
+          selectedStudent.id,
+          editForm
+        )
+
+      setStudents((current) =>
+        current.map((student) =>
+          areIdsEqual(
+            student.id,
+            selectedStudent.id
+          )
+            ? savedStudent
+            : student
+        )
       )
-    )
 
-    setSelectedStudent(updatedStudent)
-    setEditForm(updatedStudent)
-    setEditingSection(null)
-    setEditPackageDraft(emptyPackageDraft)
-    setEditPackageEditingId(null)
-    setEditPackageEditorOpen(false)
+      setSelectedStudent(savedStudent)
+      setEditForm(savedStudent)
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
+      setEditingSection(null)
+      setEditPackageDraft(emptyPackageDraft)
+      setEditPackageEditingId(null)
+      setEditPackageEditorOpen(false)
 
-    updateDirtyFlags({
-      editForm: false,
-      editPackageDraft: false
-    })
+      updateDirtyFlags({
+        editForm: false,
+        editPackageDraft: false
+      })
+    } catch (error) {
+      console.error(
+        'Öğrenci güncelleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci güncellenemedi.'
+      )
+    } finally {
+      setIsSavingEdit(false)
+    }
   }
-
 
   const returnToStudentList = () => {
     runProtectedPageAction(() => {
@@ -1541,7 +1832,7 @@ function Students({
   const saveStudentLifecycleUpdate = (updatedStudent) => {
     setStudents((current) =>
       current.map((student) =>
-        student.id === updatedStudent.id
+        areIdsEqual(student.id, updatedStudent.id)
           ? updatedStudent
           : student
       )
@@ -1549,10 +1840,15 @@ function Students({
 
     updateSelectedStudentState(updatedStudent)
     setEditingSection(null)
+    setStudentListReloadKey(
+      (current) => current + 1
+    )
   }
 
-  const handleToggleStudentStatus = () => {
-    if (!selectedStudent) return
+  const handleToggleStudentStatus = async () => {
+    if (!selectedStudent || changingStudentStatus) {
+      return
+    }
 
     if (isStudentActive(selectedStudent)) {
       const reason = window.prompt(
@@ -1560,24 +1856,67 @@ function Students({
         'Geçici olarak ara verdi'
       )
 
-      if (reason === null) return
-
-      const updatedStudent = {
-        ...selectedStudent,
-        isActive: false,
-        status: 'Pasif',
-        passiveDate: getTodayKey(),
-        passiveReason:
-          reason.trim() || 'Belirtilmedi',
-        isArchived: false,
-        archivedAt: '',
-        archiveReason: '',
-        retentionReviewDate: '',
-        retentionStatus:
-          'Saklama Süresi Devam Ediyor'
+      if (reason === null) {
+        return
       }
 
-      saveStudentLifecycleUpdate(updatedStudent)
+      const cleanReason =
+        reason.trim() || 'Belirtilmedi'
+
+      setChangingStudentStatus(true)
+
+      try {
+        const updatedStudent =
+          await setStudentPassive(
+            selectedStudent.id,
+            cleanReason,
+            getTodayKey()
+          )
+
+        saveStudentLifecycleUpdate(
+          updatedStudent
+        )
+
+        if (
+          typeof setLessonPlans ===
+          'function'
+        ) {
+          setLessonPlans((current) =>
+            current.filter(
+              (lesson) =>
+                !areIdsEqual(
+                  lesson.studentId,
+                  selectedStudent.id
+                )
+            )
+          )
+        }
+
+        if (
+          typeof window !==
+          'undefined'
+        ) {
+          window.dispatchEvent(
+            new CustomEvent(
+              'arti-akademi-lesson-occurrences-stale'
+            )
+          )
+        }
+      } catch (error) {
+        console.error(
+          'Öğrenci pasife alma hatası:',
+          error
+        )
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : 'Öğrenci pasife alınamadı.'
+        )
+      } finally {
+        setChangingStudentStatus(false)
+      }
+
       return
     }
 
@@ -1585,22 +1924,45 @@ function Students({
       `${selectedStudent.fullName} adlı öğrenciyi yeniden aktifleştirmek istediğinize emin misiniz?`
     )
 
-    if (!confirmActivation) return
-
-    const updatedStudent = {
-      ...selectedStudent,
-      isActive: true,
-      status: 'Aktif',
-      isArchived: false,
-      retentionStatus: 'Aktif Kayıt',
-      reactivatedAt: getTodayKey()
+    if (!confirmActivation) {
+      return
     }
 
-    saveStudentLifecycleUpdate(updatedStudent)
+    setChangingStudentStatus(true)
+
+    try {
+      const updatedStudent =
+        await reactivateStudent(
+          selectedStudent.id,
+          getTodayKey()
+        )
+
+      saveStudentLifecycleUpdate(
+        updatedStudent
+      )
+    } catch (error) {
+      console.error(
+        'Öğrenci aktifleştirme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci aktifleştirilemedi.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
-  const handleArchiveStudent = () => {
-    if (!selectedStudent) return
+  const handleArchiveStudent = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
+      return
+    }
 
     if (!isStudentPassive(selectedStudent)) {
       alert(
@@ -1634,33 +1996,59 @@ function Students({
       `${selectedStudent.fullName} adlı öğrenciyi arşive taşımak istediğinize emin misiniz? Geçmiş ders ve tahsilat kayıtları korunacaktır.`
     )
 
-    if (!confirmArchive) return
-
-    const archivedAt = getTodayKey()
-
-    const updatedStudent = {
-      ...selectedStudent,
-      isActive: false,
-      status: 'Arşiv',
-      isArchived: true,
-      archivedAt,
-      archiveReason:
-        selectedStudent.passiveReason ||
-        selectedStudent.archiveReason ||
-        'Pasif öğrenci arşive taşındı',
-      retentionReviewDate: addYearsToDate(
-        archivedAt,
-        RETENTION_REVIEW_YEARS
-      ),
-      retentionStatus:
-        'Saklama Süresi Devam Ediyor'
+    if (!confirmArchive) {
+      return
     }
 
-    saveStudentLifecycleUpdate(updatedStudent)
+    const archivedAt = getTodayKey()
+    const reviewDate = addYearsToDate(
+      archivedAt,
+      RETENTION_REVIEW_YEARS
+    )
+
+    setChangingStudentStatus(true)
+
+    try {
+      const updatedStudent =
+        await archiveStudent(
+          selectedStudent.id,
+          {
+            archivedAt,
+            archiveReason:
+              selectedStudent.passiveReason ||
+              selectedStudent.archiveReason ||
+              'Pasif öğrenci arşive taşındı',
+            retentionReviewDate:
+              reviewDate
+          }
+        )
+
+      saveStudentLifecycleUpdate(
+        updatedStudent
+      )
+    } catch (error) {
+      console.error(
+        'Öğrenci arşivleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci arşive taşınamadı.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
-  const handleExtendRetention = () => {
-    if (!selectedStudent) return
+  const handleExtendRetention = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
+      return
+    }
 
     const currentReviewDate =
       getRetentionReviewDate(selectedStudent)
@@ -1680,17 +2068,45 @@ function Students({
       )} tarihine ertelemek istiyor musunuz?`
     )
 
-    if (!confirmExtend) return
+    if (!confirmExtend) {
+      return
+    }
 
-    saveStudentLifecycleUpdate({
-      ...selectedStudent,
-      retentionReviewDate: newReviewDate,
-      retentionStatus: 'Saklamaya Devam'
-    })
+    setChangingStudentStatus(true)
+
+    try {
+      const updatedStudent =
+        await extendStudentRetention(
+          selectedStudent.id,
+          newReviewDate
+        )
+
+      saveStudentLifecycleUpdate(
+        updatedStudent
+      )
+    } catch (error) {
+      console.error(
+        'Saklama süresi uzatma hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Saklama süresi uzatılamadı.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
-  const handleAnonymizeStudent = () => {
-    if (!selectedStudent) return
+  const handleAnonymizeStudent = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
+      return
+    }
 
     if (!isArchivedStudent(selectedStudent)) {
       alert(
@@ -1706,109 +2122,132 @@ function Students({
       return
     }
 
-    const anonymousName = `Anonim Öğrenci #${selectedStudent.id}`
-
     const confirmAnonymize = window.confirm(
       `${selectedStudent.fullName} adlı öğrencinin kişisel bilgileri anonimleştirilecek. Ders ve finans geçmişi isimsiz olarak korunacaktır. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
     )
 
-    if (!confirmAnonymize) return
-
-    const updatedStudent = {
-      ...selectedStudent,
-      tcNo: '',
-      fullName: anonymousName,
-      gender: '',
-      birthDate: '',
-      phone: '',
-      email: '',
-      address: '',
-      motherName: '',
-      motherPhone: '',
-      fatherName: '',
-      fatherPhone: '',
-      notes: '',
-      isActive: false,
-      status: 'Arşiv',
-      isArchived: true,
-      isAnonymized: true,
-      anonymizedAt: getTodayKey(),
-      retentionStatus: 'Anonimleştirildi'
+    if (!confirmAnonymize) {
+      return
     }
 
-    setStudents((current) =>
-      current.map((student) =>
-        student.id === selectedStudent.id
-          ? updatedStudent
-          : student
-      )
-    )
+    setChangingStudentStatus(true)
 
-    if (typeof setLessonPlans === 'function') {
-      setLessonPlans((current) =>
-        current.map((lesson) =>
-          String(lesson.studentId) ===
-          String(selectedStudent.id)
-            ? {
-                ...lesson,
-                studentName: anonymousName
-              }
-            : lesson
+    try {
+      const updatedStudent =
+        await anonymizeStudent(
+          selectedStudent.id,
+          getTodayKey()
+        )
+
+      setStudents((current) =>
+        current.map((student) =>
+          areIdsEqual(
+            student.id,
+            updatedStudent.id
+          )
+            ? updatedStudent
+            : student
         )
       )
-    }
 
-    if (typeof setPayments === 'function') {
-      setPayments((current) =>
-        current.map((payment) =>
-          String(payment.studentId) ===
-          String(selectedStudent.id)
-            ? {
-                ...payment,
-                studentName: anonymousName
-              }
-            : payment
+      if (
+        typeof setLessonPlans ===
+        'function'
+      ) {
+        setLessonPlans((current) =>
+          current.map((lesson) =>
+            areIdsEqual(
+              lesson.studentId,
+              updatedStudent.id
+            )
+              ? {
+                  ...lesson,
+                  studentName:
+                    updatedStudent.fullName
+                }
+              : lesson
+          )
         )
-      )
-    }
+      }
 
-    updateSelectedStudentState(updatedStudent)
-    setEditingSection(null)
+      updateSelectedStudentState(
+        updatedStudent
+      )
+      setEditingSection(null)
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
+    } catch (error) {
+      console.error(
+        'Öğrenci anonimleştirme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci anonimleştirilemedi.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
-  const handlePermanentDelete = () => {
-    if (!selectedStudent) return
-
-    const blockers =
-      getDeletionBlockers(selectedStudent)
-
-    if (blockers.length > 0) {
-      alert(
-        `Bu öğrenci kalıcı olarak silinemez. Bağlı kayıtlar: ${blockers.join(
-          ', '
-        )}. Öğrenciyi pasife alabilir, arşivleyebilir veya inceleme tarihi geldiğinde anonimleştirebilirsiniz.`
-      )
+  const handlePermanentDelete = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
       return
     }
 
     const confirmDelete = window.confirm(
-      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Bu işlem yalnızca bağlantısız hatalı/test kayıtları için kullanılmalıdır ve geri alınamaz. Devam etmek istiyor musunuz?`
+      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Veritabanında paket, tahsilat, güncel ders veya ders geçmişi bağlantısı varsa işlem otomatik olarak engellenecektir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
     )
 
-    if (!confirmDelete) return
+    if (!confirmDelete) {
+      return
+    }
 
-    setStudents((current) =>
-      current.filter(
-        (student) =>
-          student.id !== selectedStudent.id
+    setChangingStudentStatus(true)
+
+    try {
+      await deleteStudentPermanently(
+        selectedStudent.id
       )
-    )
 
-    setSelectedStudent(null)
-    setEditForm(null)
-    setEditingSection(null)
-    clearAllDirtyFlags()
-    setStudentView('list')
+      setStudents((current) =>
+        current.filter(
+          (student) =>
+            !areIdsEqual(
+              student.id,
+              selectedStudent.id
+            )
+        )
+      )
+
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
+      setSelectedStudent(null)
+      setEditForm(null)
+      setEditingSection(null)
+      clearAllDirtyFlags()
+      setStudentView('list')
+    } catch (error) {
+      console.error(
+        'Öğrenci kalıcı silme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci kalıcı olarak silinemedi.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
   const exportStudentsToExcel = async () => {
@@ -2212,44 +2651,6 @@ function Students({
         return text || '-'
       }
 
-      const getPaymentAmountForPdf = (payment) =>
-        Number(
-          payment?.amount ??
-            payment?.transactionAmount ??
-            payment?.paidAmount ??
-            0
-        )
-
-      const getPaymentDateForPdf = (payment) =>
-        payment?.paymentDate ||
-        payment?.collectionDate ||
-        payment?.date ||
-        ''
-
-      const getPaymentPeriodForPdf = (payment) => {
-        const value =
-          payment?.paymentPeriod ||
-          payment?.period ||
-          payment?.dueDate ||
-          getPaymentDateForPdf(payment)
-
-        const period = String(value || '').slice(0, 7)
-
-        if (!/^\d{4}-\d{2}$/.test(period)) {
-          return '-'
-        }
-
-        const [year, month] = period.split('-').map(Number)
-
-        return new Date(year, month - 1, 1).toLocaleDateString(
-          'tr-TR',
-          {
-            month: 'long',
-            year: 'numeric'
-          }
-        )
-      }
-
       const studentPackages = normalizeStudentPackages(
         selectedStudent
       )
@@ -2290,7 +2691,7 @@ function Students({
 
       const totalCollected = studentPayments.reduce(
         (total, payment) =>
-          total + getPaymentAmountForPdf(payment),
+          total + getPaymentAmount(payment),
         0
       )
 
@@ -2508,15 +2909,36 @@ function Students({
       ])
 
       const paymentRows = studentPayments.map((payment) => [
-        tableBodyCell(formatDate(getPaymentDateForPdf(payment)), {
+        tableBodyCell(formatDate(getPaymentDate(payment)), {
           alignment: 'center'
         }),
         tableBodyCell(payment.packageName),
-        tableBodyCell(getPaymentPeriodForPdf(payment)),
+        tableBodyCell(
+          (() => {
+            const period = getPaymentPeriod(payment)
+
+            if (!/^\d{4}-\d{2}$/.test(period)) {
+              return '-'
+            }
+
+            const [year, month] = period
+              .split('-')
+              .map(Number)
+
+            return new Date(
+              year,
+              month - 1,
+              1
+            ).toLocaleDateString('tr-TR', {
+              month: 'long',
+              year: 'numeric'
+            })
+          })()
+        ),
         tableBodyCell(payment.paymentMethod),
         tableBodyCell(payment.referenceNumber),
         tableBodyCell(
-          `₺${formatPrice(getPaymentAmountForPdf(payment))}`,
+          `₺${formatPrice(getPaymentAmount(payment))}`,
           {
             alignment: 'right',
             bold: true,
@@ -3010,16 +3432,20 @@ function Students({
             className="cancel-button"
             type="button"
             onClick={cancelEdit}
+            disabled={isSavingEdit}
           >
             İptal
           </button>
-          <button
+
+          <LoadingButton
             className="save-button"
             type="button"
+            loading={isSavingEdit}
+            loadingText="Kaydediliyor..."
             onClick={saveEdit}
           >
             Kaydet
-          </button>
+          </LoadingButton>
         </div>
       )
     }
@@ -3446,7 +3872,9 @@ function Students({
           className="manage-button"
           type="button"
           onClick={returnToStudentList}
-        >
+        
+            disabled={isSavingStudent}
+          >
           Listeye Dön
         </button>
       </section>
@@ -3688,9 +4116,14 @@ function Students({
           >
             İptal
           </button>
-          <button type="submit" className="save-button">
+          <LoadingButton
+            type="submit"
+            className="save-button"
+            loading={isSavingStudent}
+            loadingText="Kaydediliyor..."
+          >
             Öğrenciyi Kaydet
-          </button>
+          </LoadingButton>
         </div>
       </form>
     </div>
@@ -3802,19 +4235,32 @@ function Students({
                 </>
               )}
 
-            {canPermanentlyDeleteStudent(selectedStudent) && (
-              <button
-                className="student-permanent-delete-button"
-                type="button"
-                onClick={() =>
-                  runAfterDiscardingDetailDraft(
-                    handlePermanentDelete
-                  )
-                }
-              >
-                Kalıcı Sil
-              </button>
-            )}
+            {canPermanentlyDeleteStudent(
+              selectedStudent
+            ) &&
+              !isArchivedStudent(
+                selectedStudent
+              ) &&
+              !isStudentAnonymized(
+                selectedStudent
+              ) && (
+                <button
+                  className="student-permanent-delete-button"
+                  type="button"
+                  disabled={
+                    changingStudentStatus
+                  }
+                  onClick={() =>
+                    runAfterDiscardingDetailDraft(
+                      handlePermanentDelete
+                    )
+                  }
+                >
+                  {changingStudentStatus
+                    ? 'Kontrol Ediliyor...'
+                    : 'Bağlantısız Test Kaydını Sil'}
+                </button>
+              )}
 
             <button
               className="pdf-button"
@@ -4198,7 +4644,7 @@ function Students({
             <p>Kayıtlı öğrenciler ve temel bilgileri</p>
           </div>
           <button className="lesson-count" type="button">
-            {filteredStudents.length} öğrenci
+            {studentListTotal} öğrenci
           </button>
         </div>
 
@@ -4209,10 +4655,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'active' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('active')}
+              onClick={() => changeStudentStatusFilter('active')}
             >
               Aktif
-              <span>{activeStudentCount}</span>
+              <span>{studentListCounts.active}</span>
             </button>
 
             <button
@@ -4220,10 +4666,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'passive' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('passive')}
+              onClick={() => changeStudentStatusFilter('passive')}
             >
               Pasif
-              <span>{passiveStudentCount}</span>
+              <span>{studentListCounts.passive}</span>
             </button>
 
             <button
@@ -4231,10 +4677,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'archived' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('archived')}
+              onClick={() => changeStudentStatusFilter('archived')}
             >
               Arşiv
-              <span>{archivedStudentCount - reviewStudentCount}</span>
+              <span>{studentListCounts.archived}</span>
             </button>
 
             <button
@@ -4242,10 +4688,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'review' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('review')}
+              onClick={() => changeStudentStatusFilter('review')}
             >
               İnceleme
-              <span>{reviewStudentCount}</span>
+              <span>{studentListCounts.review}</span>
             </button>
 
             <button
@@ -4253,16 +4699,165 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'all' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('all')}
+              onClick={() => changeStudentStatusFilter('all')}
             >
               Tümü
-              <span>{students.length}</span>
+              <span>{studentListCounts.all}</span>
             </button>
           </div>
 
           <p>
             Pasif kayıtlar 6 ay sonra arşivlenmeye uygun olur. Arşiv kayıtları 2 yıl sonra incelemeye düşer; sistem otomatik silme yapmaz.
           </p>
+        </div>
+
+        <div className="student-list-query-panel">
+          <div className="student-list-query-grid">
+            <div className="form-group">
+              <label>
+                Öğrenci Ara
+              </label>
+              <input
+                value={
+                  studentListSearch
+                }
+                onChange={(event) => {
+                  setStudentListSearch(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+                placeholder="Ad, TC, telefon veya e-posta"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Paket</label>
+              <select
+                value={
+                  studentListPackageId
+                }
+                onChange={(event) => {
+                  setStudentListPackageId(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="">
+                  Tüm paketler
+                </option>
+                {packages.map(
+                  (packageItem) => (
+                    <option
+                      key={packageItem.id}
+                      value={packageItem.id}
+                    >
+                      {packageItem.name}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Öğretmen</label>
+              <select
+                value={
+                  studentListTeacherId
+                }
+                onChange={(event) => {
+                  setStudentListTeacherId(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="">
+                  Tüm öğretmenler
+                </option>
+                {teachers.map(
+                  (teacher) => (
+                    <option
+                      key={teacher.id}
+                      value={teacher.id}
+                    >
+                      {getTeacherName(
+                        teacher
+                      )}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Sırala</label>
+              <select
+                value={studentListSort}
+                onChange={(event) => {
+                  setStudentListSort(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="newest">
+                  En yeni kayıt
+                </option>
+                <option value="oldest">
+                  En eski kayıt
+                </option>
+                <option value="nameAsc">
+                  Ad Soyad A-Z
+                </option>
+                <option value="nameDesc">
+                  Ad Soyad Z-A
+                </option>
+                <option value="paymentAsc">
+                  Ödeme tarihi yakın
+                </option>
+                <option value="paymentDesc">
+                  Ödeme tarihi uzak
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div className="student-list-query-actions">
+            <div className="student-page-size-box">
+              <label>
+                Sayfa başına
+              </label>
+              <select
+                value={
+                  studentListPageSize
+                }
+                onChange={(event) => {
+                  setStudentListPageSize(
+                    Number(
+                      event.target.value
+                    )
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              className="cancel-button"
+              onClick={
+                clearStudentListFilters
+              }
+            >
+              Filtreleri Temizle
+            </button>
+          </div>
         </div>
 
         <div className="payment-table-wrapper">
@@ -4281,8 +4876,20 @@ function Students({
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.length ? (
-                filteredStudents.map((student) => (
+              {studentListLoading ? (
+                <tr>
+                  <td colSpan="9" className="empty-table">
+                    Öğrenci listesi yükleniyor...
+                  </td>
+                </tr>
+              ) : studentListError ? (
+                <tr>
+                  <td colSpan="9" className="empty-table">
+                    {studentListError}
+                  </td>
+                </tr>
+              ) : studentListRows.length ? (
+                studentListRows.map((student) => (
                   <tr key={student.id}>
                     <td>{student.tcNo || '-'}</td>
                     <td>{student.fullName}</td>
@@ -4320,6 +4927,91 @@ function Students({
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="student-list-pagination">
+          <div className="student-list-pagination-summary">
+            {studentListTotal === 0
+              ? 'Gösterilecek kayıt yok'
+              : `${studentListFirstRecord}–${studentListLastRecord} / ${studentListTotal} öğrenci`}
+          </div>
+
+          <div className="student-list-pagination-controls">
+            <button
+              type="button"
+              className="student-page-button"
+              onClick={() =>
+                setStudentListPage(
+                  (current) =>
+                    Math.max(
+                      1,
+                      current - 1
+                    )
+                )
+              }
+              disabled={
+                studentListPage === 1 ||
+                studentListLoading
+              }
+            >
+              Önceki
+            </button>
+
+            {studentListPageItems.map(
+              (item) =>
+                typeof item === 'number' ? (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`student-page-button ${
+                      studentListPage ===
+                      item
+                        ? 'active'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      setStudentListPage(
+                        item
+                      )
+                    }
+                    disabled={
+                      studentListLoading
+                    }
+                  >
+                    {item}
+                  </button>
+                ) : (
+                  <span
+                    key={item}
+                    className="student-page-ellipsis"
+                  >
+                    …
+                  </span>
+                )
+            )}
+
+            <button
+              type="button"
+              className="student-page-button"
+              onClick={() =>
+                setStudentListPage(
+                  (current) =>
+                    Math.min(
+                      studentListTotalPages,
+                      current + 1
+                    )
+                )
+              }
+              disabled={
+                studentListPage ===
+                  studentListTotalPages ||
+                studentListLoading ||
+                studentListTotal === 0
+              }
+            >
+              Sonraki
+            </button>
+          </div>
         </div>
       </section>
     </div>

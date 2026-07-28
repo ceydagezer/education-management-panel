@@ -1500,3 +1500,148 @@
   opacity: 0.65;
   transform: none;
 }
+
+/* =========================================================
+   ÖĞRENCİ LİSTESİ - SUNUCU TARAFINDA SAYFALAMA
+   ========================================================= */
+
+.student-list-query-panel {
+  padding: 18px 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.student-list-query-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 1.7fr)
+    repeat(3, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.student-list-query-grid
+  .form-group {
+  min-width: 0;
+  margin: 0;
+}
+
+.student-list-query-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.student-page-size-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-page-size-box label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-page-size-box select {
+  width: 78px;
+  padding: 9px 28px 9px 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f8fafc;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+}
+
+.student-list-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-top: 1px solid #e7edf5;
+}
+
+.student-list-pagination-summary {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.student-list-pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.student-page-button {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 8px 12px;
+  color: #475569;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.student-page-button:hover:not(:disabled) {
+  color: #0369a1;
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+
+.student-page-button.active {
+  color: #ffffff;
+  background: linear-gradient(
+    135deg,
+    #09a6d3,
+    #12b8ad
+  );
+  border-color: transparent;
+}
+
+.student-page-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.student-page-ellipsis {
+  min-width: 24px;
+  color: #94a3b8;
+  text-align: center;
+  font-weight: 800;
+}
+
+@media (max-width: 1150px) {
+  .student-list-query-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .student-list-query-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-list-query-actions,
+  .student-list-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .student-list-pagination-controls {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 3px;
+  }
+}

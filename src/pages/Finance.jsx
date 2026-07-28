@@ -1,6 +1,34 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
 import '../styles/finance.css'
+
+
+import {
+  cancelExpense as cancelExpenseFromDb,
+  cancelOtherIncome,
+  createExpense,
+  createOtherIncome,
+  createTeacherPayment,
+  getFinanceIncomePage,
+  getFinanceIncomeSummary,
+  getExpensesPage,
+  getFinanceExpenseSummary,
+  getTeacherEarningsSummary,
+  getTeacherEarningLessons,
+  getTeacherPaymentsPage
+} from '../services/financeService'
+
+import {
+  formatDate,
+  formatPrice,
+  getTodayKey
+} from '../utils/dateHelpers'
+
+
+import {
+  matchesSearchQuery,
+  normalizeStatusText as normalizeText
+} from '../utils/textHelpers'
 
 const incomeCategories = [
   'Kayıt Ücreti',
@@ -36,11 +64,7 @@ const paymentMethods = [
 ]
 
 function Finance({
-  students = [],
-  payments = [],
   teachers = [],
-  packages = [],
-  lessonPlans = [],
   otherIncomes = [],
   setOtherIncomes = () => {},
   expenses = [],
@@ -49,9 +73,32 @@ function Finance({
   setTeacherPayments = () => {},
   unsavedChanges
 }) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayKey()
 
-  const [activeTab, setActiveTab] = useState('overview')
+  const financeTabs = [
+    'overview',
+    'incomes',
+    'expenses',
+    'teacher-payments'
+  ]
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const savedTab = localStorage.getItem(
+      'arti-akademi-finance-active-tab'
+    )
+
+    return financeTabs.includes(savedTab)
+      ? savedTab
+      : 'overview'
+  })
+  useEffect(() => {
+    localStorage.setItem(
+      'arti-akademi-finance-active-tab',
+      activeTab
+    )
+  }, [activeTab])
+
+
   const [showIncomeForm, setShowIncomeForm] = useState(false)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showTeacherPaymentForm, setShowTeacherPaymentForm] = useState(false)
@@ -59,8 +106,595 @@ function Finance({
     useState(false)
 
   const [incomeSearch, setIncomeSearch] = useState('')
-  const [expenseSearch, setExpenseSearch] = useState('')
-  const [teacherSearch, setTeacherSearch] = useState('')
+
+  const [incomeSourceFilter, setIncomeSourceFilter] =
+    useState('')
+  const [incomeMethodFilter, setIncomeMethodFilter] =
+    useState('')
+  const [incomeStartDate, setIncomeStartDate] =
+    useState('')
+  const [incomeEndDate, setIncomeEndDate] =
+    useState('')
+  const [incomeSort, setIncomeSort] =
+    useState('newest')
+  const [incomePage, setIncomePage] =
+    useState(1)
+  const [incomePageSize, setIncomePageSize] =
+    useState(10)
+  const [incomeRows, setIncomeRows] =
+    useState([])
+  const [incomeTotal, setIncomeTotal] =
+    useState(0)
+  const [incomeLoading, setIncomeLoading] =
+    useState(false)
+  const [incomeError, setIncomeError] =
+    useState('')
+  const [incomeReloadKey, setIncomeReloadKey] =
+    useState(0)
+  const [incomeSummary, setIncomeSummary] =
+    useState({
+      studentIncome: 0,
+      otherIncome: 0,
+      totalIncome: 0,
+      recordCount: 0
+    })
+  const [expenseSearch, setExpenseSearch] =
+    useState('')
+  const [
+    expenseCategoryFilter,
+    setExpenseCategoryFilter
+  ] = useState('')
+  const [
+    expenseMethodFilter,
+    setExpenseMethodFilter
+  ] = useState('')
+  const [
+    expenseStartDate,
+    setExpenseStartDate
+  ] = useState('')
+  const [
+    expenseEndDate,
+    setExpenseEndDate
+  ] = useState('')
+  const [expenseSort, setExpenseSort] =
+    useState('newest')
+  const [expensePage, setExpensePage] =
+    useState(1)
+  const [
+    expensePageSize,
+    setExpensePageSize
+  ] = useState(10)
+  const [expenseRows, setExpenseRows] =
+    useState([])
+  const [expenseTotal, setExpenseTotal] =
+    useState(0)
+  const [
+    expenseLoading,
+    setExpenseLoading
+  ] = useState(false)
+  const [expenseError, setExpenseError] =
+    useState('')
+  const [
+    expenseReloadKey,
+    setExpenseReloadKey
+  ] = useState(0)
+  const [
+    expenseSummary,
+    setExpenseSummary
+  ] = useState({
+    totalExpense: 0,
+    recordCount: 0
+  })
+  const [teacherSearch, setTeacherSearch] =
+    useState('')
+
+  const [
+    teacherSummaries,
+    setTeacherSummaries
+  ] = useState([])
+
+  const [
+    teacherEarningsLoading,
+    setTeacherEarningsLoading
+  ] = useState(false)
+
+  const [
+    teacherEarningsError,
+    setTeacherEarningsError
+  ] = useState('')
+
+  const [
+    teacherEarningsReloadKey,
+    setTeacherEarningsReloadKey
+  ] = useState(0)
+
+  const [
+    teacherLessonLoading,
+    setTeacherLessonLoading
+  ] = useState(false)
+
+
+  const [
+    teacherHistorySearch,
+    setTeacherHistorySearch
+  ] = useState('')
+
+  const [
+    teacherHistoryMethod,
+    setTeacherHistoryMethod
+  ] = useState('')
+
+  const [
+    teacherHistoryStartDate,
+    setTeacherHistoryStartDate
+  ] = useState('')
+
+  const [
+    teacherHistoryEndDate,
+    setTeacherHistoryEndDate
+  ] = useState('')
+
+  const [
+    teacherHistorySort,
+    setTeacherHistorySort
+  ] = useState('newest')
+
+  const [
+    teacherHistoryPage,
+    setTeacherHistoryPage
+  ] = useState(1)
+
+  const [
+    teacherHistoryPageSize,
+    setTeacherHistoryPageSize
+  ] = useState(10)
+
+  const [
+    teacherHistoryRows,
+    setTeacherHistoryRows
+  ] = useState([])
+
+  const [
+    teacherHistoryTotal,
+    setTeacherHistoryTotal
+  ] = useState(0)
+
+  const [
+    teacherHistoryLoading,
+    setTeacherHistoryLoading
+  ] = useState(false)
+
+  const [
+    teacherHistoryError,
+    setTeacherHistoryError
+  ] = useState('')
+
+  const [
+    teacherHistoryReloadKey,
+    setTeacherHistoryReloadKey
+  ] = useState(0)
+
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadIncomeSummary = async () => {
+      try {
+        const result =
+          await getFinanceIncomeSummary()
+
+        if (isMounted) {
+          setIncomeSummary(result)
+        }
+      } catch (error) {
+        console.error(
+          'Gelir özeti alınamadı:',
+          error
+        )
+      }
+    }
+
+    loadIncomeSummary()
+
+    return () => {
+      isMounted = false
+    }
+  }, [incomeReloadKey])
+
+  useEffect(() => {
+    if (activeTab !== 'incomes') {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const timeoutId = window.setTimeout(
+      async () => {
+        setIncomeLoading(true)
+        setIncomeError('')
+
+        try {
+          const result =
+            await getFinanceIncomePage({
+              page: incomePage,
+              pageSize: incomePageSize,
+              searchText: incomeSearch,
+              sourceType:
+                incomeSourceFilter,
+              paymentMethod:
+                incomeMethodFilter,
+              startDate: incomeStartDate,
+              endDate: incomeEndDate,
+              sortOption: incomeSort
+            })
+
+          if (!isMounted) return
+
+          const totalPages = Math.max(
+            1,
+            Math.ceil(
+              result.total /
+                incomePageSize
+            )
+          )
+
+          if (incomePage > totalPages) {
+            setIncomePage(totalPages)
+            return
+          }
+
+          setIncomeRows(result.data)
+          setIncomeTotal(result.total)
+        } catch (error) {
+          console.error(
+            'Gelir listesi alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            setIncomeError(
+              error instanceof Error
+                ? error.message
+                : 'Gelir listesi alınamadı.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setIncomeLoading(false)
+          }
+        }
+      },
+      incomeSearch.trim() ? 350 : 0
+    )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [
+    activeTab,
+    incomePage,
+    incomePageSize,
+    incomeSearch,
+    incomeSourceFilter,
+    incomeMethodFilter,
+    incomeStartDate,
+    incomeEndDate,
+    incomeSort,
+    incomeReloadKey
+  ])
+
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadExpenseSummary =
+      async () => {
+        try {
+          const result =
+            await getFinanceExpenseSummary()
+
+          if (isMounted) {
+            setExpenseSummary(result)
+          }
+        } catch (error) {
+          console.error(
+            'Gider özeti alınamadı:',
+            error
+          )
+        }
+      }
+
+    loadExpenseSummary()
+
+    return () => {
+      isMounted = false
+    }
+  }, [expenseReloadKey])
+
+  useEffect(() => {
+    if (activeTab !== 'expenses') {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setExpenseLoading(true)
+          setExpenseError('')
+
+          try {
+            const result =
+              await getExpensesPage({
+                page: expensePage,
+                pageSize:
+                  expensePageSize,
+                searchText:
+                  expenseSearch,
+                category:
+                  expenseCategoryFilter,
+                paymentMethod:
+                  expenseMethodFilter,
+                startDate:
+                  expenseStartDate,
+                endDate:
+                  expenseEndDate,
+                sortOption:
+                  expenseSort
+              })
+
+            if (!isMounted) {
+              return
+            }
+
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  result.total /
+                    expensePageSize
+                )
+              )
+
+            if (
+              expensePage >
+              totalPages
+            ) {
+              setExpensePage(
+                totalPages
+              )
+              return
+            }
+
+            setExpenseRows(
+              result.data
+            )
+            setExpenseTotal(
+              result.total
+            )
+          } catch (error) {
+            console.error(
+              'Gider listesi alınamadı:',
+              error
+            )
+
+            if (isMounted) {
+              setExpenseError(
+                error instanceof Error
+                  ? error.message
+                  : 'Gider listesi alınamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setExpenseLoading(false)
+            }
+          }
+        },
+        expenseSearch.trim()
+          ? 350
+          : 0
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(
+        timeoutId
+      )
+    }
+  }, [
+    activeTab,
+    expensePage,
+    expensePageSize,
+    expenseSearch,
+    expenseCategoryFilter,
+    expenseMethodFilter,
+    expenseStartDate,
+    expenseEndDate,
+    expenseSort,
+    expenseReloadKey
+  ])
+
+
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadTeacherEarnings =
+      async () => {
+        setTeacherEarningsLoading(
+          true
+        )
+        setTeacherEarningsError('')
+
+        try {
+          const result =
+            await getTeacherEarningsSummary()
+
+          if (isMounted) {
+            setTeacherSummaries(
+              result
+            )
+          }
+        } catch (error) {
+          console.error(
+            'Öğretmen hakedişleri alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            setTeacherEarningsError(
+              error instanceof Error
+                ? error.message
+                : 'Öğretmen hakedişleri alınamadı.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setTeacherEarningsLoading(
+              false
+            )
+          }
+        }
+      }
+
+    loadTeacherEarnings()
+
+    return () => {
+      isMounted = false
+    }
+  }, [teacherEarningsReloadKey])
+
+
+useEffect(() => {
+    if (
+      activeTab !==
+      'teacher-payments'
+    ) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setTeacherHistoryLoading(
+            true
+          )
+          setTeacherHistoryError('')
+
+          try {
+            const result =
+              await getTeacherPaymentsPage(
+                {
+                  page:
+                    teacherHistoryPage,
+                  pageSize:
+                    teacherHistoryPageSize,
+                  searchText:
+                    teacherHistorySearch,
+                  paymentMethod:
+                    teacherHistoryMethod,
+                  startDate:
+                    teacherHistoryStartDate,
+                  endDate:
+                    teacherHistoryEndDate,
+                  sortOption:
+                    teacherHistorySort
+                }
+              )
+
+            if (!isMounted) {
+              return
+            }
+
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  result.total /
+                    teacherHistoryPageSize
+                )
+              )
+
+            if (
+              teacherHistoryPage >
+              totalPages
+            ) {
+              setTeacherHistoryPage(
+                totalPages
+              )
+              return
+            }
+
+            setTeacherHistoryRows(
+              result.data
+            )
+
+            setTeacherHistoryTotal(
+              result.total
+            )
+          } catch (error) {
+            console.error(
+              'Öğretmen ödeme geçmişi alınamadı:',
+              error
+            )
+
+            if (isMounted) {
+              setTeacherHistoryError(
+                error instanceof Error
+                  ? error.message
+                  : 'Öğretmen ödeme geçmişi alınamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setTeacherHistoryLoading(
+                false
+              )
+            }
+          }
+        },
+        teacherHistorySearch.trim()
+          ? 350
+          : 0
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(
+        timeoutId
+      )
+    }
+  }, [
+    activeTab,
+    teacherHistoryPage,
+    teacherHistoryPageSize,
+    teacherHistorySearch,
+    teacherHistoryMethod,
+    teacherHistoryStartDate,
+    teacherHistoryEndDate,
+    teacherHistorySort,
+    teacherHistoryReloadKey
+  ])
+
+  const [isSavingIncome, setIsSavingIncome] =
+    useState(false)
+
+  const [isSavingExpense, setIsSavingExpense] =
+    useState(false)
+
+  const [isSavingTeacherPayment, setIsSavingTeacherPayment] =
+    useState(false)
+
+  const [cancellingIncomeId, setCancellingIncomeId] =
+    useState(null)
+
+  const [cancellingExpenseId, setCancellingExpenseId] =
+    useState(null)
 
   const [incomeForm, setIncomeForm] = useState({
     title: '',
@@ -173,608 +807,238 @@ function Finance({
     action()
   }
 
-  const formatPrice = (value) =>
-    Number(value || 0).toLocaleString('tr-TR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    })
-
-  const formatDate = (dateValue) => {
-    if (!dateValue) return '-'
-
-    const date = new Date(`${dateValue}T00:00:00`)
-    return Number.isNaN(date.getTime())
-      ? dateValue
-      : date.toLocaleDateString('tr-TR')
-  }
-
-  const normalizeText = (value) =>
-    String(value || '')
-      .trim()
-      .toLocaleLowerCase('tr-TR')
-
-  const normalizeLessonStatus = (status) => {
-    if (status === 'Telafi') return 'Telafi yapılacak'
-    if (status === 'İptal') return 'İptal edildi'
-    return status || 'Planlandı'
-  }
-
-  const isCompletedLesson = (lesson) => {
-    const status = normalizeLessonStatus(lesson?.status)
-
-    return (
-      status === 'Yapıldı' ||
-      status === 'Telafi yapıldı'
-    )
-  }
-
   const getTeacherName = (teacher) =>
-    teacher?.fullName ?? teacher?.name ?? ''
+    teacher?.fullName ??
+    teacher?.name ??
+    ''
 
-  const getTeacherBranch = (teacher) => {
-    if (teacher?.branch) return teacher.branch
-    if (Array.isArray(teacher?.specialties)) {
-      return teacher.specialties.join(', ')
-    }
-    return '-'
-  }
+  const getTeacherBranch = (teacher) =>
+    teacher?.branch || '-'
 
-  const getTeacherCommissionRate = (teacher) =>
-    Number(
-      teacher?.commissionRate ??
-        teacher?.commissionPercentage ??
-        teacher?.commission ??
-        teacher?.hakEdisYuzdesi ??
-        teacher?.hakedisYuzdesi ??
-        0
+  const incomeTotalPages = Math.max(
+    1,
+    Math.ceil(
+      incomeTotal / incomePageSize
     )
+  )
 
-  const findTeacherByIdOrName = (teacherId, teacherName) => {
-    const normalizedTeacherName = normalizeText(teacherName)
-
-    return teachers.find((teacher) => {
-      const idMatches =
-        teacherId !== '' &&
-        teacherId !== null &&
-        teacherId !== undefined &&
-        String(teacher.id) === String(teacherId)
-
-      const nameMatches =
-        normalizedTeacherName !== '' &&
-        normalizeText(getTeacherName(teacher)) === normalizedTeacherName
-
-      return idMatches || nameMatches
-    })
-  }
-
-  const getPackageFromCatalog = (packageId, packageName) => {
-    const normalizedPackageName = normalizeText(packageName)
-
-    return packages.find((packageItem) => {
-      const idMatches =
-        packageId !== '' &&
-        packageId !== null &&
-        packageId !== undefined &&
-        String(packageItem.id) === String(packageId)
-
-      const nameMatches =
-        normalizedPackageName !== '' &&
-        normalizeText(packageItem.name) === normalizedPackageName
-
-      return idMatches || nameMatches
-    })
-  }
-
-  const normalizeOneStudentPackage = (
-    student,
-    packageItem,
-    index
-  ) => {
-    const packageId =
-      packageItem?.packageId ??
-      packageItem?.id ??
-      student.packageId ??
-      `package-${index}`
-
-    const catalogPackage = getPackageFromCatalog(
-      packageId,
-      packageItem?.packageName ??
-        packageItem?.name ??
-        student.packageName
-    )
-
-    const rawTeacher =
-      packageItem?.teacher ??
-      packageItem?.teacherName ??
-      student.teacher ??
-      student.teacherName ??
-      ''
-
-    const teacherId =
-      packageItem?.teacherId ??
-      packageItem?.teacher?.id ??
-      student.teacherId ??
-      student.teacher?.id ??
-      ''
-
-    const teacherName =
-      packageItem?.teacherName ??
-      (typeof rawTeacher === 'string'
-        ? rawTeacher
-        : rawTeacher?.fullName ?? rawTeacher?.name) ??
-      ''
-
-    const matchedTeacher = findTeacherByIdOrName(
-      teacherId,
-      teacherName
-    )
-
-    const studentPackageId =
-      packageItem?.studentPackageId ??
-      packageItem?.enrollmentId ??
-      packageItem?.assignmentId ??
-      `${student.id}-${packageId}-${index}`
-
-    const agreedPrice = Number(
-      packageItem?.agreedPrice ??
-        packageItem?.monthlyFee ??
-        packageItem?.totalPrice ??
-        packageItem?.packagePrice ??
-        student.agreedPrice ??
-        student.monthlyFee ??
-        student.totalPrice ??
-        student.packagePrice ??
-        catalogPackage?.totalPrice ??
-        0
-    )
-
-    const lessonCount = Number(
-      packageItem?.lessonCount ??
-        student.lessonCount ??
-        catalogPackage?.lessonCount ??
+  const incomeFirstRecord =
+    incomeTotal === 0
+      ? 0
+      : (incomePage - 1) *
+          incomePageSize +
         1
-    ) || 1
 
-    const unitPrice =
-      lessonCount > 0
-        ? agreedPrice / lessonCount
-        : Number(catalogPackage?.unitPrice ?? agreedPrice)
+  const incomeLastRecord = Math.min(
+    incomePage * incomePageSize,
+    incomeTotal
+  )
 
-    return {
-      studentPackageId: String(studentPackageId),
-      packageId: String(packageId),
-      packageName:
-        packageItem?.packageName ??
-        packageItem?.name ??
-        student.packageName ??
-        catalogPackage?.name ??
-        'Tanımsız Paket',
-      instrument:
-        packageItem?.instrument ??
-        student.instrument ??
-        catalogPackage?.instrument ??
-        '',
-      teacherId: String(matchedTeacher?.id ?? teacherId ?? ''),
-      teacherName:
-        getTeacherName(matchedTeacher) || teacherName || '',
-      agreedPrice,
-      lessonCount,
-      unitPrice
+  const incomePageItems = useMemo(() => {
+    if (incomeTotalPages <= 7) {
+      return Array.from(
+        { length: incomeTotalPages },
+        (_, index) => index + 1
+      )
     }
-  }
 
-  const normalizeStudentPackages = (student) => {
-    const possiblePackageLists = [
-      student.enrolledPackages,
-      student.studentPackages,
-      student.assignedPackages,
-      student.selectedPackages
-    ]
-
-    const packageList = possiblePackageLists.find(
-      (list) => Array.isArray(list) && list.length > 0
+    const items = [1]
+    const startPage = Math.max(
+      2,
+      incomePage - 1
+    )
+    const endPage = Math.min(
+      incomeTotalPages - 1,
+      incomePage + 1
     )
 
-    if (packageList) {
-      return packageList.map((packageItem, index) =>
-        normalizeOneStudentPackage(student, packageItem, index)
-      )
+    if (startPage > 2) {
+      items.push('start-ellipsis')
     }
 
-    if (Array.isArray(student.packageIds) && student.packageIds.length > 0) {
-      return student.packageIds.map((packageId, index) => {
-        const catalogPackage = packages.find(
-          (item) => String(item.id) === String(packageId)
-        )
-
-        return normalizeOneStudentPackage(
-          student,
-          catalogPackage
-            ? {
-                packageId: catalogPackage.id,
-                packageName: catalogPackage.name,
-                totalPrice: catalogPackage.totalPrice
-              }
-            : { packageId },
-          index
-        )
-      })
+    for (
+      let pageNumber = startPage;
+      pageNumber <= endPage;
+      pageNumber += 1
+    ) {
+      items.push(pageNumber)
     }
 
-    if (student.packageId || student.packageName) {
-      return [normalizeOneStudentPackage(student, student, 0)]
+    if (endPage < incomeTotalPages - 1) {
+      items.push('end-ellipsis')
     }
 
-    return []
+    items.push(incomeTotalPages)
+    return items
+  }, [incomePage, incomeTotalPages])
+
+  const clearIncomeFilters = () => {
+    setIncomeSearch('')
+    setIncomeSourceFilter('')
+    setIncomeMethodFilter('')
+    setIncomeStartDate('')
+    setIncomeEndDate('')
+    setIncomeSort('newest')
+    setIncomePage(1)
   }
 
-  const assignedPackageRecords = useMemo(() => {
-    return students.flatMap((student) =>
-      normalizeStudentPackages(student).map((packageItem) => ({
-        ...packageItem,
-        studentId: String(student.id),
-        studentName:
-          student.fullName ?? student.name ?? 'Öğrenci'
-      }))
+  const expenseTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        expenseTotal /
+          expensePageSize
+      )
     )
-  }, [students, packages, teachers])
 
-  /*
-   * Öğretmen hakedişi artık paket öğrenciye tanımlandığı anda oluşmaz.
-   * Yalnızca Ders Durum Takibi ekranında "Yapıldı" veya
-   * "Telafi yapıldı" olarak işaretlenen dersler hakedişe dahil edilir.
-   *
-   * Her dersin brüt değeri:
-   * öğrenciyle anlaşılan paket ücreti / paketteki ders adedi
-   *
-   * Öğretmenin o dersten hakedişi:
-   * ders brüt değeri × öğretmenin hakediş yüzdesi
-   *
-   * Geçici öğretmen değişikliğinde hakediş, paketin varsayılan
-   * öğretmenine değil ders kaydındaki gerçek teacherId değerine yazılır.
-   */
-  const completedLessonRecords = useMemo(() => {
-    return lessonPlans
-      .filter(isCompletedLesson)
-      .map((lesson, index) => {
-        const lessonTeacher = findTeacherByIdOrName(
-          lesson.teacherId,
-          lesson.teacherName ?? lesson.teacher
+  const expenseFirstRecord =
+    expenseTotal === 0
+      ? 0
+      : (expensePage - 1) *
+          expensePageSize +
+        1
+
+  const expenseLastRecord =
+    expenseTotal === 0
+      ? 0
+      : Math.min(
+          expensePage *
+            expensePageSize,
+          expenseTotal
         )
 
-        if (!lessonTeacher) {
-          return null
-        }
-
-        const lessonStudentId = String(lesson.studentId ?? '')
-        const lessonPackageId = String(lesson.packageId ?? '')
-        const lessonStudentPackageId = String(
-          lesson.studentPackageId ??
-            lesson.enrollmentId ??
-            lesson.assignmentId ??
-            ''
+  const expensePageItems =
+    useMemo(() => {
+      if (expenseTotalPages <= 7) {
+        return Array.from(
+          {
+            length:
+              expenseTotalPages
+          },
+          (_, index) =>
+            index + 1
         )
-
-        const studentPackage =
-          assignedPackageRecords.find(
-            (item) =>
-              lessonStudentPackageId !== '' &&
-              String(item.studentId) === lessonStudentId &&
-              String(item.studentPackageId) ===
-                lessonStudentPackageId
-          ) ??
-          assignedPackageRecords.find(
-            (item) =>
-              lessonPackageId !== '' &&
-              String(item.studentId) === lessonStudentId &&
-              String(item.packageId) === lessonPackageId
-          ) ??
-          assignedPackageRecords.find(
-            (item) =>
-              String(item.studentId) === lessonStudentId &&
-              normalizeText(item.packageName) ===
-                normalizeText(lesson.packageName)
-          )
-
-        const catalogPackage = getPackageFromCatalog(
-          lesson.packageId,
-          lesson.packageName
-        )
-
-        const agreedPrice = Number(
-          studentPackage?.agreedPrice ??
-            catalogPackage?.totalPrice ??
-            lesson.packagePrice ??
-            lesson.totalPrice ??
-            0
-        )
-
-        const lessonCount = Number(
-          studentPackage?.lessonCount ??
-            catalogPackage?.lessonCount ??
-            lesson.lessonCount ??
-            1
-        ) || 1
-
-        const unitPrice = Number(
-          studentPackage?.unitPrice ??
-            (lessonCount > 0
-              ? agreedPrice / lessonCount
-              : catalogPackage?.unitPrice ?? agreedPrice)
-        )
-
-        const commissionRate =
-          getTeacherCommissionRate(lessonTeacher)
-
-        const teacherEarning =
-          unitPrice * (commissionRate / 100)
-
-        return {
-          earningRecordId: String(
-            lesson.id ??
-              `completed-lesson-${index}`
-          ),
-          lessonId: lesson.id,
-          teacherId: String(lessonTeacher.id),
-          teacherName: getTeacherName(lessonTeacher),
-          studentId: lessonStudentId,
-          studentName:
-            lesson.studentName ??
-            students.find(
-              (student) =>
-                String(student.id) === lessonStudentId
-            )?.fullName ??
-            'Öğrenci',
-          studentPackageId:
-            studentPackage?.studentPackageId ??
-            lessonStudentPackageId,
-          packageId:
-            studentPackage?.packageId ??
-            lesson.packageId ??
-            catalogPackage?.id ??
-            '',
-          packageName:
-            studentPackage?.packageName ??
-            lesson.packageName ??
-            catalogPackage?.name ??
-            'Tanımsız Paket',
-          instrument:
-            lesson.instrument ??
-            studentPackage?.instrument ??
-            catalogPackage?.instrument ??
-            '',
-          day: lesson.day ?? '',
-          time: lesson.time ?? '',
-          lessonDate:
-            lesson.lessonDate ??
-            lesson.date ??
-            lesson.completedAt ??
-            '',
-          status: normalizeLessonStatus(lesson.status),
-          agreedPrice,
-          lessonCount,
-          unitPrice,
-          commissionRate,
-          teacherEarning
-        }
-      })
-      .filter(Boolean)
-  }, [
-    lessonPlans,
-    assignedPackageRecords,
-    packages,
-    teachers,
-    students
-  ])
-
-  const teacherSummaries = useMemo(() => {
-    return teachers.map((teacher) => {
-      const teacherName = getTeacherName(teacher)
-
-      const completedLessons = completedLessonRecords.filter(
-        (lessonRecord) => {
-          const idMatches =
-            lessonRecord.teacherId !== '' &&
-            String(lessonRecord.teacherId) ===
-              String(teacher.id)
-
-          const nameMatches =
-            lessonRecord.teacherName !== '' &&
-            normalizeText(lessonRecord.teacherName) ===
-              normalizeText(teacherName)
-
-          return idMatches || nameMatches
-        }
-      )
-
-      const commissionRate =
-        getTeacherCommissionRate(teacher)
-
-      const totalLessonAmount =
-        completedLessons.reduce(
-          (total, lessonRecord) =>
-            total + Number(lessonRecord.unitPrice || 0),
-          0
-        )
-
-      const totalEarning =
-        completedLessons.reduce(
-          (total, lessonRecord) =>
-            total +
-            Number(lessonRecord.teacherEarning || 0),
-          0
-        )
-
-      const paymentRecords = teacherPayments.filter(
-        (payment) =>
-          String(payment.teacherId) ===
-          String(teacher.id)
-      )
-
-      const totalPaid = paymentRecords.reduce(
-        (total, payment) =>
-          total + Number(payment.amount || 0),
-        0
-      )
-
-      return {
-        teacher,
-        completedLessons,
-        completedLessonCount: completedLessons.length,
-        totalLessonAmount,
-        commissionRate,
-        totalEarning,
-        totalPaid,
-        remainingPayment: Math.max(
-          0,
-          totalEarning - totalPaid
-        ),
-        paymentRecords
       }
-    })
-  }, [
-    teachers,
-    completedLessonRecords,
-    teacherPayments
-  ])
 
-  const getPaymentAmount = (payment) =>
-    Number(
-      payment.amount ??
-        payment.transactionAmount ??
-        payment.paidAmount ??
-        0
-    )
+      const items = [1]
+      const startPage =
+        Math.max(
+          2,
+          expensePage - 1
+        )
+      const endPage =
+        Math.min(
+          expenseTotalPages - 1,
+          expensePage + 1
+        )
 
-  const getPaymentDate = (payment) =>
-    payment.paymentDate ?? payment.collectionDate ?? ''
+      if (startPage > 2) {
+        items.push(
+          'expense-start-ellipsis'
+        )
+      }
 
-  const automaticStudentIncomes = useMemo(
-    () =>
-      payments.map((payment) => ({
-        id: `student-payment-${payment.id}`,
-        sourceId: payment.id,
-        sourceType: 'student-payment',
-        title: payment.studentName || 'Öğrenci tahsilatı',
-        category: 'Öğrenci Tahsilatı',
-        description: payment.packageName || '',
-        amount: getPaymentAmount(payment),
-        date: getPaymentDate(payment),
-        paymentMethod: payment.paymentMethod || '-',
-        relatedParty: payment.studentName || '-',
-        documentNumber: payment.referenceNumber || '',
-        sourceLabel: 'Otomatik Kayıt',
-        status: 'Aktif'
-      })),
-    [payments]
-  )
+      for (
+        let pageNumber =
+          startPage;
+        pageNumber <= endPage;
+        pageNumber += 1
+      ) {
+        items.push(pageNumber)
+      }
 
-  const activeOtherIncomes = otherIncomes.filter(
-    (income) => income.status !== 'İptal'
-  )
+      if (
+        endPage <
+        expenseTotalPages - 1
+      ) {
+        items.push(
+          'expense-end-ellipsis'
+        )
+      }
 
-  const activeExpenses = expenses.filter(
-    (expense) => expense.status !== 'İptal'
-  )
+      items.push(
+        expenseTotalPages
+      )
 
-  const allIncomeRecords = [
-    ...automaticStudentIncomes,
-    ...activeOtherIncomes.map((income) => ({
-      ...income,
-      sourceType: 'other-income',
-      sourceLabel: 'Ek Gelir'
-    }))
-  ].sort(
-    (firstItem, secondItem) =>
-      new Date(secondItem.date) - new Date(firstItem.date)
-  )
+      return items
+    }, [
+      expensePage,
+      expenseTotalPages
+    ])
 
-  const filteredIncomeRecords = allIncomeRecords.filter((income) => {
-    const search = normalizeText(incomeSearch)
-    if (!search) return true
-
-    return normalizeText(
-      [
-        income.title,
-        income.category,
-        income.description,
-        income.relatedParty,
-        income.paymentMethod,
-        income.documentNumber
-      ]
-        .filter(Boolean)
-        .join(' ')
-    ).includes(search)
-  })
-
-  const filteredExpenseRecords = activeExpenses.filter((expense) => {
-    const search = normalizeText(expenseSearch)
-    if (!search) return true
-
-    return normalizeText(
-      [
-        expense.title,
-        expense.category,
-        expense.payee,
-        expense.paymentMethod,
-        expense.documentNumber,
-        expense.note
-      ]
-        .filter(Boolean)
-        .join(' ')
-    ).includes(search)
-  })
+  const clearExpenseFilters =
+    () => {
+      setExpenseSearch('')
+      setExpenseCategoryFilter('')
+      setExpenseMethodFilter('')
+      setExpenseStartDate('')
+      setExpenseEndDate('')
+      setExpenseSort('newest')
+      setExpensePage(1)
+    }
 
   const filteredTeacherSummaries = teacherSummaries.filter(
-    (summary) => {
-      const search = normalizeText(teacherSearch)
-      if (!search) return true
-
-      return normalizeText(
-        `${getTeacherName(summary.teacher)} ${getTeacherBranch(
-          summary.teacher
-        )}`
-      ).includes(search)
-    }
+    (summary) =>
+      matchesSearchQuery(
+        [
+          getTeacherName(summary.teacher),
+          getTeacherBranch(summary.teacher)
+        ],
+        teacherSearch
+      )
   )
 
-  const totalStudentIncome = automaticStudentIncomes.reduce(
-    (total, income) => total + Number(income.amount || 0),
-    0
-  )
+  const totalStudentIncome =
+    incomeSummary.studentIncome
 
-  const totalOtherIncome = activeOtherIncomes.reduce(
-    (total, income) => total + Number(income.amount || 0),
-    0
-  )
+  const totalOtherIncome =
+    incomeSummary.otherIncome
 
-  const totalIncome = totalStudentIncome + totalOtherIncome
+  const totalIncome =
+    incomeSummary.totalIncome
 
-  const totalInstitutionExpenses = activeExpenses.reduce(
-    (total, expense) => total + Number(expense.amount || 0),
-    0
-  )
+  const totalInstitutionExpenses =
+    expenseSummary.totalExpense
 
-  const totalTeacherEarning = teacherSummaries.reduce(
-    (total, summary) => total + summary.totalEarning,
-    0
-  )
+  const totalTeacherEarning =
+    teacherSummaries.reduce(
+      (total, summary) =>
+        total +
+        Number(
+          summary.totalEarning || 0
+        ),
+      0
+    )
 
-  const totalTeacherPaid = teacherPayments.reduce(
-    (total, payment) => total + Number(payment.amount || 0),
-    0
-  )
+  const totalTeacherPaid =
+    teacherSummaries.reduce(
+      (total, summary) =>
+        total +
+        Number(
+          summary.totalPaid || 0
+        ),
+      0
+    )
 
-  const totalTeacherRemaining = teacherSummaries.reduce(
-    (total, summary) => total + summary.remainingPayment,
-    0
-  )
+  const totalTeacherRemaining =
+    teacherSummaries.reduce(
+      (total, summary) =>
+        total +
+        Number(
+          summary.remainingPayment || 0
+        ),
+      0
+    )
 
-  const totalCompletedLessonCount = teacherSummaries.reduce(
-    (total, summary) =>
-      total + summary.completedLessonCount,
-    0
-  )
+  const totalCompletedLessonCount =
+    teacherSummaries.reduce(
+      (total, summary) =>
+        total +
+        Number(
+          summary.completedLessonCount || 0
+        ),
+      0
+    )
 
   const totalExpense = totalInstitutionExpenses + totalTeacherPaid
   const netCash = totalIncome - totalExpense
@@ -879,6 +1143,72 @@ function Finance({
 
     setShowTeacherLessonDetails(false)
   }
+
+  const toggleTeacherLessonDetails =
+    async () => {
+      if (!selectedTeacherSummary) {
+        return
+      }
+
+      if (showTeacherLessonDetails) {
+        setShowTeacherLessonDetails(false)
+        return
+      }
+
+      if (
+        selectedTeacherSummary
+          .completedLessons
+          .length > 0
+      ) {
+        setShowTeacherLessonDetails(true)
+        return
+      }
+
+      setTeacherLessonLoading(true)
+
+      try {
+        const lessonRows =
+          await getTeacherEarningLessons(
+            selectedTeacherSummary
+              .teacher.id
+          )
+
+        setTeacherSummaries(
+          (current) =>
+            current.map(
+              (summary) =>
+                String(
+                  summary.teacher.id
+                ) ===
+                String(
+                  selectedTeacherSummary
+                    .teacher.id
+                )
+                  ? {
+                      ...summary,
+                      completedLessons:
+                        lessonRows
+                    }
+                  : summary
+            )
+        )
+
+        setShowTeacherLessonDetails(true)
+      } catch (error) {
+        console.error(
+          'Öğretmen hakediş dersleri alınamadı:',
+          error
+        )
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : 'Öğretmen hakediş dersleri alınamadı.'
+        )
+      } finally {
+        setTeacherLessonLoading(false)
+      }
+    }
 
   const applyRemainingTeacherPayment = () => {
     updateTeacherPaymentDraftDirty(true)
@@ -1017,8 +1347,12 @@ function Finance({
     })
   }
 
-  const saveIncome = (event) => {
+  const saveIncome = async (event) => {
     event.preventDefault()
+
+    if (isSavingIncome) {
+      return
+    }
 
     if (!incomeForm.title.trim()) {
       alert('Gelir başlığı zorunludur.')
@@ -1030,7 +1364,9 @@ function Finance({
       return
     }
 
-    if (Number(incomeForm.amount) <= 0) {
+    const incomeAmount = Number(incomeForm.amount)
+
+    if (!Number.isFinite(incomeAmount) || incomeAmount <= 0) {
       alert('Gelir tutarı 0’dan büyük olmalıdır.')
       return
     }
@@ -1040,26 +1376,51 @@ function Finance({
       return
     }
 
-    setOtherIncomes((current) => [
-      ...current,
-      {
-        id: Date.now(),
+    setIsSavingIncome(true)
+
+    try {
+      const savedIncome = await createOtherIncome({
         ...incomeForm,
         title: incomeForm.title.trim(),
-        amount: Number(incomeForm.amount),
+        amount: incomeAmount,
         relatedParty: incomeForm.relatedParty.trim(),
         documentNumber: incomeForm.documentNumber.trim(),
-        note: incomeForm.note.trim(),
-        status: 'Aktif',
-        createdAt: new Date().toISOString()
-      }
-    ])
+        note: incomeForm.note.trim()
+      })
 
-    performCloseIncomeForm()
+      setOtherIncomes((current) => [
+        ...current,
+        savedIncome
+      ])
+
+      setIncomePage(1)
+      setIncomeReloadKey(
+        (current) => current + 1
+      )
+
+      performCloseIncomeForm()
+    } catch (error) {
+      console.error(
+        'Ek gelir kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ek gelir kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingIncome(false)
+    }
   }
 
-  const saveExpense = (event) => {
+  const saveExpense = async (event) => {
     event.preventDefault()
+
+    if (isSavingExpense) {
+      return
+    }
 
     if (!expenseForm.title.trim()) {
       alert('Gider başlığı zorunludur.')
@@ -1071,7 +1432,9 @@ function Finance({
       return
     }
 
-    if (Number(expenseForm.amount) <= 0) {
+    const expenseAmount = Number(expenseForm.amount)
+
+    if (!Number.isFinite(expenseAmount) || expenseAmount <= 0) {
       alert('Gider tutarı 0’dan büyük olmalıdır.')
       return
     }
@@ -1081,26 +1444,51 @@ function Finance({
       return
     }
 
-    setExpenses((current) => [
-      ...current,
-      {
-        id: Date.now(),
+    setIsSavingExpense(true)
+
+    try {
+      const savedExpense = await createExpense({
         ...expenseForm,
         title: expenseForm.title.trim(),
-        amount: Number(expenseForm.amount),
+        amount: expenseAmount,
         payee: expenseForm.payee.trim(),
         documentNumber: expenseForm.documentNumber.trim(),
-        note: expenseForm.note.trim(),
-        status: 'Aktif',
-        createdAt: new Date().toISOString()
-      }
-    ])
+        note: expenseForm.note.trim()
+      })
 
-    performCloseExpenseForm()
+      setExpenses((current) => [
+        ...current,
+        savedExpense
+      ])
+
+      setExpensePage(1)
+      setExpenseReloadKey(
+        (current) => current + 1
+      )
+
+      performCloseExpenseForm()
+    } catch (error) {
+      console.error(
+        'Gider kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Gider kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingExpense(false)
+    }
   }
 
-  const saveTeacherPayment = (event) => {
+  const saveTeacherPayment = async (event) => {
     event.preventDefault()
+
+    if (isSavingTeacherPayment) {
+      return
+    }
 
     if (!teacherPaymentForm.teacherId) {
       alert('Öğretmen seçiniz.')
@@ -1109,7 +1497,7 @@ function Finance({
 
     const amount = Number(teacherPaymentForm.amount)
 
-    if (amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       alert('Ödeme tutarı 0’dan büyük olmalıdır.')
       return
     }
@@ -1148,59 +1536,138 @@ function Finance({
       return
     }
 
-    setTeacherPayments((current) => [
-      ...current,
-      {
-        id: Date.now(),
+    setIsSavingTeacherPayment(true)
+
+    try {
+      const savedPayment = await createTeacherPayment({
         teacherId: teacher.id,
-        teacherName: getTeacherName(teacher),
         amount,
         paymentDate: teacherPaymentForm.paymentDate,
         paymentMethod: teacherPaymentForm.paymentMethod,
         referenceNumber:
           teacherPaymentForm.referenceNumber.trim(),
-        note: teacherPaymentForm.note.trim(),
-        createdAt: new Date().toISOString()
-      }
-    ])
+        note: teacherPaymentForm.note.trim()
+      })
 
-    performCloseTeacherPaymentForm()
+      setTeacherPayments((current) => [
+        ...current,
+        savedPayment
+      ])
+
+      setTeacherHistoryPage(1)
+      setTeacherHistoryReloadKey(
+        (current) => current + 1
+      )
+
+      setTeacherEarningsReloadKey(
+        (current) => current + 1
+      )
+
+      performCloseTeacherPaymentForm()
+    } catch (error) {
+      console.error(
+        'Öğretmen ödemesi kaydetme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğretmen ödemesi kaydedilemedi.'
+      )
+    } finally {
+      setIsSavingTeacherPayment(false)
+    }
   }
 
-  const cancelIncome = (incomeId) => {
+  const cancelIncome = async (incomeId) => {
+    if (
+      String(cancellingIncomeId) ===
+      String(incomeId)
+    ) {
+      return
+    }
+
     if (!window.confirm('Bu ek gelir kaydını iptal etmek istediğinize emin misiniz?')) {
       return
     }
 
-    setOtherIncomes((current) =>
-      current.map((income) =>
-        income.id === incomeId
-          ? {
-              ...income,
-              status: 'İptal',
-              cancelledAt: new Date().toISOString()
-            }
-          : income
+    setCancellingIncomeId(incomeId)
+
+    try {
+      const cancelledIncome =
+        await cancelOtherIncome(incomeId)
+
+      setOtherIncomes((current) =>
+        current.map((income) =>
+          String(income.id) === String(incomeId)
+            ? cancelledIncome
+            : income
+        )
       )
-    )
+
+      setIncomeReloadKey(
+        (current) => current + 1
+      )
+    } catch (error) {
+      console.error(
+        'Ek gelir iptal etme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ek gelir iptal edilemedi.'
+      )
+    } finally {
+      setCancellingIncomeId(null)
+    }
   }
 
-  const cancelExpense = (expenseId) => {
+  const cancelExpense = async (expenseId) => {
+    if (
+      String(cancellingExpenseId) ===
+      String(expenseId)
+    ) {
+      return
+    }
+
     if (!window.confirm('Bu gider kaydını iptal etmek istediğinize emin misiniz?')) {
       return
     }
 
-    setExpenses((current) =>
-      current.map((expense) =>
-        expense.id === expenseId
-          ? {
-              ...expense,
-              status: 'İptal',
-              cancelledAt: new Date().toISOString()
-            }
-          : expense
+    setCancellingExpenseId(expenseId)
+
+    try {
+      const cancelledExpense =
+        await cancelExpenseFromDb(expenseId)
+
+      setExpenses((current) =>
+        current.map((expense) =>
+          String(expense.id) === String(expenseId)
+            ? cancelledExpense
+            : expense
+        )
       )
-    )
+
+      setExpenseReloadKey(
+        (current) => current + 1
+      )
+    } catch (error) {
+      console.error(
+        'Gider iptal etme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Gider iptal edilemedi.'
+      )
+    } finally {
+      setCancellingExpenseId(null)
+    }
   }
 
   const renderTopMetrics = () => (
@@ -1490,29 +1957,169 @@ function Finance({
             >
               İptal
             </button>
-            <button type="submit" className="save-button">
-              Geliri Kaydet
+            <button
+              type="submit"
+              className="save-button"
+              disabled={isSavingIncome}
+            >
+              {isSavingIncome
+                ? 'Kaydediliyor...'
+                : 'Geliri Kaydet'}
             </button>
           </div>
         </form>
       )}
 
-      <div className="finance-list-controls">
-        <div className="finance-search-box">
-          <label>Gelir Kaydı Ara</label>
-          <input
-            value={incomeSearch}
-            onChange={(event) => setIncomeSearch(event.target.value)}
-            placeholder="Başlık, kategori veya kişi ara"
-          />
+      <div className="finance-income-filter-panel">
+        <div className="finance-income-filter-grid">
+          <div className="form-group">
+            <label>Gelir Kaydı Ara</label>
+            <input
+              value={incomeSearch}
+              onChange={(event) => {
+                setIncomeSearch(
+                  event.target.value
+                )
+                setIncomePage(1)
+              }}
+              placeholder="Başlık, öğrenci, kategori veya belge"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Kaynak</label>
+            <select
+              value={incomeSourceFilter}
+              onChange={(event) => {
+                setIncomeSourceFilter(
+                  event.target.value
+                )
+                setIncomePage(1)
+              }}
+            >
+              <option value="">Tüm kaynaklar</option>
+              <option value="student-payment">
+                Öğrenci Tahsilatı
+              </option>
+              <option value="other-income">
+                Ek Gelir
+              </option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Ödeme Yöntemi</label>
+            <select
+              value={incomeMethodFilter}
+              onChange={(event) => {
+                setIncomeMethodFilter(
+                  event.target.value
+                )
+                setIncomePage(1)
+              }}
+            >
+              <option value="">Tüm yöntemler</option>
+              {paymentMethods.map((method) => (
+                <option key={method} value={method}>
+                  {method}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Başlangıç Tarihi</label>
+            <input
+              type="date"
+              value={incomeStartDate}
+              onChange={(event) => {
+                setIncomeStartDate(
+                  event.target.value
+                )
+                setIncomePage(1)
+              }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Bitiş Tarihi</label>
+            <input
+              type="date"
+              value={incomeEndDate}
+              onChange={(event) => {
+                setIncomeEndDate(
+                  event.target.value
+                )
+                setIncomePage(1)
+              }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Sırala</label>
+            <select
+              value={incomeSort}
+              onChange={(event) => {
+                setIncomeSort(
+                  event.target.value
+                )
+                setIncomePage(1)
+              }}
+            >
+              <option value="newest">En yeni</option>
+              <option value="oldest">En eski</option>
+              <option value="amountDesc">
+                Tutar yüksekten düşüğe
+              </option>
+              <option value="amountAsc">
+                Tutar düşükten yükseğe
+              </option>
+              <option value="titleAsc">
+                Başlık A-Z
+              </option>
+              <option value="titleDesc">
+                Başlık Z-A
+              </option>
+            </select>
+          </div>
         </div>
+
+        <div className="finance-income-filter-actions">
+          <div className="finance-income-page-size">
+            <label>Sayfa başına</label>
+            <select
+              value={incomePageSize}
+              onChange={(event) => {
+                setIncomePageSize(
+                  Number(event.target.value)
+                )
+                setIncomePage(1)
+              }}
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="cancel-button"
+            onClick={clearIncomeFilters}
+          >
+            Filtreleri Temizle
+          </button>
+        </div>
+      </div>
+
+      <div className="finance-list-controls finance-income-count-row">
         <span className="finance-record-count">
-          {filteredIncomeRecords.length} kayıt
+          {incomeTotal} kayıt
         </span>
       </div>
 
       <div className="finance-table-wrapper">
-        <table className="lesson-table finance-table">
+        <table className="lesson-table finance-table finance-income-table">
           <thead>
             <tr>
               <th>Tarih</th>
@@ -1526,14 +2133,26 @@ function Finance({
             </tr>
           </thead>
           <tbody>
-            {filteredIncomeRecords.length === 0 ? (
+            {incomeLoading ? (
+              <tr>
+                <td colSpan="8" className="empty-table">
+                  Gelir kayıtları yükleniyor...
+                </td>
+              </tr>
+            ) : incomeError ? (
+              <tr>
+                <td colSpan="8" className="empty-table">
+                  {incomeError}
+                </td>
+              </tr>
+            ) : incomeRows.length === 0 ? (
               <tr>
                 <td colSpan="8" className="empty-table">
                   Gelir kaydı bulunmamaktadır.
                 </td>
               </tr>
             ) : (
-              filteredIncomeRecords.map((income) => (
+              incomeRows.map((income) => (
                 <tr key={income.id}>
                   <td>{formatDate(income.date)}</td>
                   <td>{income.title}</td>
@@ -1541,7 +2160,8 @@ function Finance({
                   <td>
                     <span
                       className={
-                        income.sourceType === 'student-payment'
+                        income.sourceType ===
+                        'student-payment'
                           ? 'finance-source-badge automatic'
                           : 'finance-source-badge manual'
                       }
@@ -1553,7 +2173,8 @@ function Finance({
                   <td>{income.paymentMethod || '-'}</td>
                   <td>₺{formatPrice(income.amount)}</td>
                   <td>
-                    {income.sourceType === 'student-payment' ? (
+                    {income.sourceType ===
+                    'student-payment' ? (
                       <span className="finance-readonly-label">
                         Tahsilatlardan gelir
                       </span>
@@ -1561,9 +2182,18 @@ function Finance({
                       <button
                         type="button"
                         className="cancel-mini-button"
-                        onClick={() => cancelIncome(income.id)}
+                        onClick={() =>
+                          cancelIncome(income.sourceId)
+                        }
+                        disabled={
+                          String(cancellingIncomeId) ===
+                          String(income.sourceId)
+                        }
                       >
-                        İptal Et
+                        {String(cancellingIncomeId) ===
+                        String(income.sourceId)
+                          ? 'İptal Ediliyor...'
+                          : 'İptal Et'}
                       </button>
                     )}
                   </td>
@@ -1572,6 +2202,77 @@ function Finance({
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="finance-income-pagination">
+        <div className="finance-income-pagination-summary">
+          {incomeTotal === 0
+            ? 'Gösterilecek kayıt yok'
+            : `${incomeFirstRecord}–${incomeLastRecord} / ${incomeTotal} gelir kaydı`}
+        </div>
+
+        <div className="finance-income-pagination-controls">
+          <button
+            type="button"
+            className="finance-income-page-button"
+            onClick={() =>
+              setIncomePage((current) =>
+                Math.max(1, current - 1)
+              )
+            }
+            disabled={
+              incomePage === 1 ||
+              incomeLoading
+            }
+          >
+            Önceki
+          </button>
+
+          {incomePageItems.map((item) =>
+            typeof item === 'number' ? (
+              <button
+                key={item}
+                type="button"
+                className={`finance-income-page-button ${
+                  incomePage === item
+                    ? 'active'
+                    : ''
+                }`}
+                onClick={() => setIncomePage(item)}
+                disabled={incomeLoading}
+              >
+                {item}
+              </button>
+            ) : (
+              <span
+                key={item}
+                className="finance-income-page-ellipsis"
+              >
+                …
+              </span>
+            )
+          )}
+
+          <button
+            type="button"
+            className="finance-income-page-button"
+            onClick={() =>
+              setIncomePage((current) =>
+                Math.min(
+                  incomeTotalPages,
+                  current + 1
+                )
+              )
+            }
+            disabled={
+              incomePage === incomeTotalPages ||
+              incomeLoading ||
+              incomeTotal === 0
+            }
+          >
+            Sonraki
+          </button>
+        </div>
       </div>
     </section>
   )
@@ -1745,29 +2446,192 @@ function Finance({
             >
               İptal
             </button>
-            <button type="submit" className="save-button">
-              Gideri Kaydet
+            <button
+              type="submit"
+              className="save-button"
+              disabled={isSavingExpense}
+            >
+              {isSavingExpense
+                ? 'Kaydediliyor...'
+                : 'Gideri Kaydet'}
             </button>
           </div>
         </form>
       )}
 
-      <div className="finance-list-controls">
-        <div className="finance-search-box">
-          <label>Gider Kaydı Ara</label>
-          <input
-            value={expenseSearch}
-            onChange={(event) => setExpenseSearch(event.target.value)}
-            placeholder="Başlık, kategori veya firma ara"
-          />
+      <div className="finance-income-filter-panel">
+        <div className="finance-income-filter-grid">
+          <div className="form-group">
+            <label>Gider Kaydı Ara</label>
+            <input
+              value={expenseSearch}
+              onChange={(event) => {
+                setExpenseSearch(
+                  event.target.value
+                )
+                setExpensePage(1)
+              }}
+              placeholder="Başlık, kategori, firma veya belge"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Kategori</label>
+            <select
+              value={
+                expenseCategoryFilter
+              }
+              onChange={(event) => {
+                setExpenseCategoryFilter(
+                  event.target.value
+                )
+                setExpensePage(1)
+              }}
+            >
+              <option value="">
+                Tüm kategoriler
+              </option>
+              {expenseCategories.map(
+                (category) => (
+                  <option
+                    key={category}
+                    value={category}
+                  >
+                    {category}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Ödeme Yöntemi</label>
+            <select
+              value={
+                expenseMethodFilter
+              }
+              onChange={(event) => {
+                setExpenseMethodFilter(
+                  event.target.value
+                )
+                setExpensePage(1)
+              }}
+            >
+              <option value="">
+                Tüm yöntemler
+              </option>
+              {paymentMethods.map(
+                (method) => (
+                  <option
+                    key={method}
+                    value={method}
+                  >
+                    {method}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Başlangıç Tarihi</label>
+            <input
+              type="date"
+              value={expenseStartDate}
+              onChange={(event) => {
+                setExpenseStartDate(
+                  event.target.value
+                )
+                setExpensePage(1)
+              }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Bitiş Tarihi</label>
+            <input
+              type="date"
+              value={expenseEndDate}
+              onChange={(event) => {
+                setExpenseEndDate(
+                  event.target.value
+                )
+                setExpensePage(1)
+              }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Sırala</label>
+            <select
+              value={expenseSort}
+              onChange={(event) => {
+                setExpenseSort(
+                  event.target.value
+                )
+                setExpensePage(1)
+              }}
+            >
+              <option value="newest">
+                En yeni
+              </option>
+              <option value="oldest">
+                En eski
+              </option>
+              <option value="amountDesc">
+                Tutar yüksekten düşüğe
+              </option>
+              <option value="amountAsc">
+                Tutar düşükten yükseğe
+              </option>
+              <option value="titleAsc">
+                Başlık A-Z
+              </option>
+              <option value="titleDesc">
+                Başlık Z-A
+              </option>
+            </select>
+          </div>
         </div>
+
+        <div className="finance-income-filter-actions">
+          <div className="finance-income-page-size">
+            <label>Sayfa başına</label>
+            <select
+              value={expensePageSize}
+              onChange={(event) => {
+                setExpensePageSize(
+                  Number(
+                    event.target.value
+                  )
+                )
+                setExpensePage(1)
+              }}
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="cancel-button"
+            onClick={clearExpenseFilters}
+          >
+            Filtreleri Temizle
+          </button>
+        </div>
+      </div>
+
+      <div className="finance-list-controls finance-income-count-row">
         <span className="finance-record-count">
-          {filteredExpenseRecords.length} kayıt
+          {expenseTotal} kayıt
         </span>
       </div>
 
       <div className="finance-table-wrapper">
-        <table className="lesson-table finance-table">
+        <table className="lesson-table finance-table finance-expense-table">
           <thead>
             <tr>
               <th>Tarih</th>
@@ -1781,39 +2645,285 @@ function Finance({
             </tr>
           </thead>
           <tbody>
-            {filteredExpenseRecords.length === 0 ? (
+            {expenseLoading ? (
               <tr>
-                <td colSpan="8" className="empty-table">
+                <td
+                  colSpan="8"
+                  className="empty-table"
+                >
+                  Gider kayıtları yükleniyor...
+                </td>
+              </tr>
+            ) : expenseError ? (
+              <tr>
+                <td
+                  colSpan="8"
+                  className="empty-table"
+                >
+                  {expenseError}
+                </td>
+              </tr>
+            ) : expenseRows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan="8"
+                  className="empty-table"
+                >
                   Gider kaydı bulunmamaktadır.
                 </td>
               </tr>
             ) : (
-              filteredExpenseRecords.map((expense) => (
-                <tr key={expense.id}>
-                  <td>{formatDate(expense.date)}</td>
-                  <td>{expense.title}</td>
-                  <td>{expense.category}</td>
-                  <td>{expense.payee || '-'}</td>
-                  <td>{expense.paymentMethod || '-'}</td>
-                  <td>{expense.documentNumber || '-'}</td>
-                  <td>₺{formatPrice(expense.amount)}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="cancel-mini-button"
-                      onClick={() => cancelExpense(expense.id)}
-                    >
-                      İptal Et
-                    </button>
-                  </td>
-                </tr>
-              ))
+              expenseRows.map(
+                (expense) => (
+                  <tr key={expense.id}>
+                    <td>
+                      {formatDate(
+                        expense.date
+                      )}
+                    </td>
+                    <td>
+                      {expense.title}
+                    </td>
+                    <td>
+                      {expense.category}
+                    </td>
+                    <td>
+                      {expense.payee || '-'}
+                    </td>
+                    <td>
+                      {expense.paymentMethod ||
+                        '-'}
+                    </td>
+                    <td>
+                      {expense.documentNumber ||
+                        '-'}
+                    </td>
+                    <td>
+                      ₺
+                      {formatPrice(
+                        expense.amount
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="cancel-mini-button"
+                        onClick={() =>
+                          cancelExpense(
+                            expense.id
+                          )
+                        }
+                        disabled={
+                          String(
+                            cancellingExpenseId
+                          ) ===
+                          String(expense.id)
+                        }
+                      >
+                        {String(
+                          cancellingExpenseId
+                        ) ===
+                        String(expense.id)
+                          ? 'İptal Ediliyor...'
+                          : 'İptal Et'}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              )
             )}
           </tbody>
         </table>
       </div>
+
+      <div className="finance-income-pagination">
+        <div className="finance-income-pagination-summary">
+          {expenseTotal === 0
+            ? 'Gösterilecek kayıt yok'
+            : `${expenseFirstRecord}–${expenseLastRecord} / ${expenseTotal} gider kaydı`}
+        </div>
+
+        <div className="finance-income-pagination-controls">
+          <button
+            type="button"
+            className="finance-income-page-button"
+            onClick={() =>
+              setExpensePage(
+                (current) =>
+                  Math.max(
+                    1,
+                    current - 1
+                  )
+              )
+            }
+            disabled={
+              expensePage === 1 ||
+              expenseLoading
+            }
+          >
+            Önceki
+          </button>
+
+          {expensePageItems.map(
+            (item) =>
+              typeof item ===
+              'number' ? (
+                <button
+                  key={item}
+                  type="button"
+                  className={`finance-income-page-button ${
+                    expensePage === item
+                      ? 'active'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    setExpensePage(item)
+                  }
+                  disabled={
+                    expenseLoading
+                  }
+                >
+                  {item}
+                </button>
+              ) : (
+                <span
+                  key={item}
+                  className="finance-income-page-ellipsis"
+                >
+                  …
+                </span>
+              )
+          )}
+
+          <button
+            type="button"
+            className="finance-income-page-button"
+            onClick={() =>
+              setExpensePage(
+                (current) =>
+                  Math.min(
+                    expenseTotalPages,
+                    current + 1
+                  )
+              )
+            }
+            disabled={
+              expensePage ===
+                expenseTotalPages ||
+              expenseLoading ||
+              expenseTotal === 0
+            }
+          >
+            Sonraki
+          </button>
+        </div>
+      </div>
     </section>
   )
+
+  const teacherHistoryTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        teacherHistoryTotal /
+          teacherHistoryPageSize
+      )
+    )
+
+  const teacherHistoryFirstRecord =
+    teacherHistoryTotal === 0
+      ? 0
+      : (
+          teacherHistoryPage -
+          1
+        ) *
+          teacherHistoryPageSize +
+        1
+
+  const teacherHistoryLastRecord =
+    Math.min(
+      teacherHistoryPage *
+        teacherHistoryPageSize,
+      teacherHistoryTotal
+    )
+
+  const teacherHistoryPageItems =
+    useMemo(() => {
+      if (
+        teacherHistoryTotalPages <=
+        7
+      ) {
+        return Array.from(
+          {
+            length:
+              teacherHistoryTotalPages
+          },
+          (_, index) =>
+            index + 1
+        )
+      }
+
+      const items = [1]
+
+      const startPage =
+        Math.max(
+          2,
+          teacherHistoryPage - 1
+        )
+
+      const endPage =
+        Math.min(
+          teacherHistoryTotalPages - 1,
+          teacherHistoryPage + 1
+        )
+
+      if (startPage > 2) {
+        items.push(
+          'start-ellipsis'
+        )
+      }
+
+      for (
+        let pageNumber =
+          startPage;
+        pageNumber <= endPage;
+        pageNumber += 1
+      ) {
+        items.push(
+          pageNumber
+        )
+      }
+
+      if (
+        endPage <
+        teacherHistoryTotalPages - 1
+      ) {
+        items.push(
+          'end-ellipsis'
+        )
+      }
+
+      items.push(
+        teacherHistoryTotalPages
+      )
+
+      return items
+    }, [
+      teacherHistoryPage,
+      teacherHistoryTotalPages
+    ])
+
+  const clearTeacherHistoryFilters =
+    () => {
+      setTeacherHistorySearch('')
+      setTeacherHistoryMethod('')
+      setTeacherHistoryStartDate('')
+      setTeacherHistoryEndDate('')
+      setTeacherHistorySort(
+        'newest'
+      )
+      setTeacherHistoryPage(1)
+    }
 
   const renderTeacherPayments = () => (
     <>
@@ -1839,12 +2949,15 @@ function Finance({
         </div>
       </section>
 
-      <section className="finance-table-card">
+      <section className="finance-table-card finance-teacher-current-card">
         <div className="finance-section-heading">
           <div>
-            <h2>Öğretmen Ödemeleri</h2>
+            <span className="finance-section-kicker">
+              Güncel Durum
+            </span>
+            <h2>Öğretmen Hakediş Durumu</h2>
             <p>
-              Ders Durum Takibi ekranında yapılan olarak işaretlenen derslerden oluşan hakedişleri ve ödemeleri takip edin.
+              Yapılan derslere göre oluşan toplam hakedişleri, ödenen ve bekleyen tutarları görüntüleyin.
             </p>
           </div>
 
@@ -1971,11 +3084,12 @@ function Finance({
                     <button
                       type="button"
                       className="teacher-package-toggle"
-                      onClick={() =>
-                        setShowTeacherLessonDetails(
-                          (current) => !current
-                        )
-                      }
+                            disabled={
+                              teacherLessonLoading
+                            }
+                      onClick={
+                              toggleTeacherLessonDetails
+                            }
                     >
                       {showTeacherLessonDetails
                         ? 'Ders Detaylarını Gizle'
@@ -2180,14 +3294,26 @@ function Finance({
                 className="save-button"
                 disabled={
                   !selectedTeacherSummary ||
-                  selectedTeacherRemaining <= 0
+                  selectedTeacherRemaining <= 0 ||
+                  isSavingTeacherPayment
                 }
               >
-                Ödemeyi Kaydet
+                {isSavingTeacherPayment
+                  ? 'Kaydediliyor...'
+                  : 'Ödemeyi Kaydet'}
               </button>
             </div>
           </form>
         )}
+
+        <div className="finance-subsection-heading">
+          <div>
+            <h3>Güncel Hakediş Özeti</h3>
+            <p>
+              Her öğretmenin mevcut hakediş ve ödeme durumunu toplu olarak inceleyin.
+            </p>
+          </div>
+        </div>
 
         <div className="finance-list-controls">
           <div className="finance-search-box">
@@ -2204,7 +3330,7 @@ function Finance({
         </div>
 
         <div className="finance-table-wrapper">
-          <table className="lesson-table finance-table">
+          <table className="lesson-table finance-table finance-teacher-earnings-table">
             <thead>
               <tr>
                 <th>Öğretmen</th>
@@ -2264,16 +3390,179 @@ function Finance({
           </table>
         </div>
 
-        <div className="finance-payment-history">
-          <div className="finance-section-heading">
+        </section>
+
+      <section className="finance-table-card finance-payment-history finance-teacher-history-card">
+          <div className="finance-section-heading finance-history-heading">
             <div>
-              <h3>Öğretmen Ödeme Geçmişi</h3>
-              <p>Öğretmenlere yapılan ödeme hareketleri</p>
+              <span className="finance-section-kicker">
+                İşlem Geçmişi
+              </span>
+              <h2>Yapılan Öğretmen Ödemeleri</h2>
+              <p>
+                Öğretmenlere gerçekleştirilen ödeme işlemlerini tarih, yöntem ve dekont bilgileriyle görüntüleyin.
+              </p>
+            </div>
+
+            <span className="finance-record-count">
+              {teacherHistoryTotal} kayıt
+            </span>
+          </div>
+
+          <div className="teacher-history-filter-panel">
+            <div className="teacher-history-filter-grid">
+              <div className="form-group">
+                <label>
+                  Öğretmen / Dekont / Not Ara
+                </label>
+                <input
+                  value={
+                    teacherHistorySearch
+                  }
+                  onChange={(event) => {
+                    setTeacherHistorySearch(
+                      event.target.value
+                    )
+                    setTeacherHistoryPage(1)
+                  }}
+                  placeholder="Arama yapın"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>
+                  Ödeme Yöntemi
+                </label>
+                <select
+                  value={
+                    teacherHistoryMethod
+                  }
+                  onChange={(event) => {
+                    setTeacherHistoryMethod(
+                      event.target.value
+                    )
+                    setTeacherHistoryPage(1)
+                  }}
+                >
+                  <option value="">
+                    Tümü
+                  </option>
+                  {paymentMethods.map(
+                    (method) => (
+                      <option
+                        key={method}
+                        value={method}
+                      >
+                        {method}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>
+                  Başlangıç Tarihi
+                </label>
+                <input
+                  type="date"
+                  value={
+                    teacherHistoryStartDate
+                  }
+                  onChange={(event) => {
+                    setTeacherHistoryStartDate(
+                      event.target.value
+                    )
+                    setTeacherHistoryPage(1)
+                  }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>
+                  Bitiş Tarihi
+                </label>
+                <input
+                  type="date"
+                  value={
+                    teacherHistoryEndDate
+                  }
+                  onChange={(event) => {
+                    setTeacherHistoryEndDate(
+                      event.target.value
+                    )
+                    setTeacherHistoryPage(1)
+                  }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Sırala</label>
+                <select
+                  value={
+                    teacherHistorySort
+                  }
+                  onChange={(event) => {
+                    setTeacherHistorySort(
+                      event.target.value
+                    )
+                    setTeacherHistoryPage(1)
+                  }}
+                >
+                  <option value="newest">
+                    En yeni tarih
+                  </option>
+                  <option value="oldest">
+                    En eski tarih
+                  </option>
+                  <option value="amountDesc">
+                    Tutar yüksek-düşük
+                  </option>
+                  <option value="amountAsc">
+                    Tutar düşük-yüksek
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div className="teacher-history-filter-actions">
+              <div className="teacher-history-page-size">
+                <label>
+                  Sayfa başına
+                </label>
+                <select
+                  value={
+                    teacherHistoryPageSize
+                  }
+                  onChange={(event) => {
+                    setTeacherHistoryPageSize(
+                      Number(
+                        event.target.value
+                      )
+                    )
+                    setTeacherHistoryPage(1)
+                  }}
+                >
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={
+                  clearTeacherHistoryFilters
+                }
+              >
+                Filtreleri Temizle
+              </button>
             </div>
           </div>
 
           <div className="finance-table-wrapper">
-            <table className="lesson-table finance-table">
+            <table className="lesson-table finance-table finance-teacher-history-table">
               <thead>
                 <tr>
                   <th>Tarih</th>
@@ -2283,34 +3572,155 @@ function Finance({
                   <th>Tutar</th>
                 </tr>
               </thead>
+
               <tbody>
-                {teacherPayments.length === 0 ? (
+                {teacherHistoryLoading ? (
                   <tr>
-                    <td colSpan="5" className="empty-table">
-                      Henüz öğretmen ödeme kaydı bulunmamaktadır.
+                    <td
+                      colSpan="5"
+                      className="empty-table"
+                    >
+                      Öğretmen ödeme geçmişi yükleniyor...
+                    </td>
+                  </tr>
+                ) : teacherHistoryError ? (
+                  <tr>
+                    <td
+                      colSpan="5"
+                      className="empty-table"
+                    >
+                      {teacherHistoryError}
+                    </td>
+                  </tr>
+                ) : teacherHistoryRows.length ===
+                  0 ? (
+                  <tr>
+                    <td
+                      colSpan="5"
+                      className="empty-table"
+                    >
+                      Filtrelere uygun öğretmen ödeme kaydı bulunmamaktadır.
                     </td>
                   </tr>
                 ) : (
-                  [...teacherPayments]
-                    .sort(
-                      (firstPayment, secondPayment) =>
-                        new Date(secondPayment.paymentDate) -
-                        new Date(firstPayment.paymentDate)
-                    )
-                    .map((payment) => (
+                  teacherHistoryRows.map(
+                    (payment) => (
                       <tr key={payment.id}>
-                        <td>{formatDate(payment.paymentDate)}</td>
-                        <td>{payment.teacherName}</td>
-                        <td>{payment.paymentMethod || '-'}</td>
-                        <td>{payment.referenceNumber || '-'}</td>
-                        <td>₺{formatPrice(payment.amount)}</td>
+                        <td>
+                          {formatDate(
+                            payment.paymentDate
+                          )}
+                        </td>
+                        <td>
+                          {payment.teacherName}
+                        </td>
+                        <td>
+                          {payment.paymentMethod ||
+                            '-'}
+                        </td>
+                        <td>
+                          {payment.referenceNumber ||
+                            '-'}
+                        </td>
+                        <td>
+                          ₺
+                          {formatPrice(
+                            payment.amount
+                          )}
+                        </td>
                       </tr>
-                    ))
+                    )
+                  )
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+
+          <div className="finance-history-pagination">
+            <div className="finance-history-pagination-summary">
+              {teacherHistoryTotal === 0
+                ? 'Gösterilecek kayıt yok'
+                : `${teacherHistoryFirstRecord}–${teacherHistoryLastRecord} / ${teacherHistoryTotal} kayıt`}
+            </div>
+
+            <div className="finance-history-pagination-controls">
+              <button
+                type="button"
+                className="finance-history-page-button"
+                onClick={() =>
+                  setTeacherHistoryPage(
+                    (current) =>
+                      Math.max(
+                        1,
+                        current - 1
+                      )
+                  )
+                }
+                disabled={
+                  teacherHistoryPage === 1 ||
+                  teacherHistoryLoading
+                }
+              >
+                Önceki
+              </button>
+
+              {teacherHistoryPageItems.map(
+                (item) =>
+                  typeof item ===
+                  'number' ? (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`finance-history-page-button ${
+                        teacherHistoryPage ===
+                        item
+                          ? 'active'
+                          : ''
+                      }`}
+                      onClick={() =>
+                        setTeacherHistoryPage(
+                          item
+                        )
+                      }
+                      disabled={
+                        teacherHistoryLoading
+                      }
+                    >
+                      {item}
+                    </button>
+                  ) : (
+                    <span
+                      key={item}
+                      className="finance-history-page-ellipsis"
+                    >
+                      …
+                    </span>
+                  )
+              )}
+
+              <button
+                type="button"
+                className="finance-history-page-button"
+                onClick={() =>
+                  setTeacherHistoryPage(
+                    (current) =>
+                      Math.min(
+                        teacherHistoryTotalPages,
+                        current + 1
+                      )
+                  )
+                }
+                disabled={
+                  teacherHistoryPage ===
+                    teacherHistoryTotalPages ||
+                  teacherHistoryLoading ||
+                  teacherHistoryTotal === 0
+                }
+              >
+                Sonraki
+              </button>
+            </div>
+          </div>
       </section>
     </>
   )
