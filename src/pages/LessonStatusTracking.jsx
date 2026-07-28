@@ -1968,8 +1968,8 @@ function LessonStatusTracking({
             </button>
           </div>
         ) : (
-          <div className="payment-table-wrapper">
-            <table className="lesson-table status-detail-table">
+          <div className="status-history-table-wrapper">
+            <table className="lesson-table status-history-table">
               <thead>
                 <tr>
                   <th>Tarih</th>
@@ -1997,7 +1997,7 @@ function LessonStatusTracking({
                   historyRows.map(
                     (lesson) => (
                       <tr key={lesson.id}>
-                        <td>
+                        <td className="status-history-date-cell">
                           <span className="status-date-text">
                             {lesson.lessonDate
                               ? new Date(
@@ -2009,19 +2009,19 @@ function LessonStatusTracking({
                           </span>
                         </td>
 
-                        <td>
+                        <td className="status-history-day-cell">
                           <span className="status-day-text">
                             {lesson.day}
                           </span>
                         </td>
 
-                        <td>
+                        <td className="status-history-time-cell">
                           <strong className="status-time-text">
                             {lesson.time}
                           </strong>
                         </td>
 
-                        <td>
+                        <td className="status-history-teacher-cell">
                           <span
                             className="status-person-text"
                             title={getTeacherName(
@@ -2034,7 +2034,7 @@ function LessonStatusTracking({
                           </span>
                         </td>
 
-                        <td>
+                        <td className="status-history-student-cell">
                           <span
                             className="status-person-text"
                             title={getStudentName(
@@ -2047,7 +2047,7 @@ function LessonStatusTracking({
                           </span>
                         </td>
 
-                        <td>
+                        <td className="status-history-lesson-cell">
                           <div
                             className="status-lesson-detail"
                             title={getLessonTitle(
@@ -2067,7 +2067,7 @@ function LessonStatusTracking({
                           </div>
                         </td>
 
-                        <td>
+                        <td className="status-history-status-cell">
                           <span
                             className={getLessonStatusBadgeClass(
                               lesson.status
@@ -2080,7 +2080,7 @@ function LessonStatusTracking({
                         </td>
 
                         <td
-                          className={`status-note-cell ${
+                          className={`status-history-note-cell status-note-cell ${
                             lesson.note
                               ? 'has-note'
                               : 'empty-note'
