@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 
@@ -27,6 +28,15 @@ import {
 
 const PACKAGE_DRAFT_KEY =
   'arti-akademi-package-draft'
+
+const EMPTY_PACKAGE_FORM = {
+  name: '',
+  specialtyId: '',
+  instrument: '',
+  duration: '60 dk',
+  lessonCount: 1,
+  totalPrice: ''
+}
 
 const getSpecialtyId = (specialty) =>
   typeof specialty === 'string'
@@ -59,14 +69,13 @@ function Packages({
   packagesLoading = false,
   unsavedChanges
 }) {
-  const emptyForm = {
-    name: '',
-    specialtyId: '',
-    instrument: '',
-    duration: '60 dk',
-    lessonCount: 1,
-    totalPrice: ''
-  }
+  const unsavedChangesRef =
+    useRef(unsavedChanges)
+
+  useEffect(() => {
+    unsavedChangesRef.current =
+      unsavedChanges
+  }, [unsavedChanges])
 
   const [showForm, setShowForm] =
     useState(false)
@@ -77,7 +86,7 @@ function Packages({
   ] = useState(null)
 
   const [packageForm, setPackageForm] =
-    useState(emptyForm)
+    useState(EMPTY_PACKAGE_FORM)
 
   const [isSaving, setIsSaving] =
     useState(false)
@@ -184,7 +193,7 @@ function Packages({
       }
 
       const restoredForm = {
-        ...emptyForm,
+        ...EMPTY_PACKAGE_FORM,
         ...parsedDraft.packageForm
       }
 
@@ -199,7 +208,8 @@ function Packages({
       )
 
       setShowForm(true)
-      unsavedChanges?.markDirty?.()
+      unsavedChangesRef.current
+        ?.markDirty?.()
     } catch (error) {
       console.error(
         'Paket taslağı okunamadı:',
@@ -422,7 +432,7 @@ function Packages({
     unsavedChanges?.markClean?.()
     clearPackageDraft()
 
-    setPackageForm(emptyForm)
+    setPackageForm(EMPTY_PACKAGE_FORM)
     setSpecialtyInput('')
     setEditingPackageId(null)
     setActionError('')
@@ -507,7 +517,7 @@ function Packages({
     unsavedChanges?.markClean?.()
     clearPackageDraft()
 
-    setPackageForm(emptyForm)
+    setPackageForm(EMPTY_PACKAGE_FORM)
     setSpecialtyInput('')
     setEditingPackageId(null)
     setActionError('')

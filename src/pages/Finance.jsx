@@ -26,8 +26,7 @@ import {
 
 
 import {
-  matchesSearchQuery,
-  normalizeStatusText as normalizeText
+  matchesSearchQuery
 } from '../utils/textHelpers'
 
 const incomeCategories = [
@@ -204,7 +203,7 @@ function Finance({
   ] = useState(true)
 
   const [
-    teacherEarningsError,
+    ,
     setTeacherEarningsError
   ] = useState('')
 

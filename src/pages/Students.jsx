@@ -19,6 +19,10 @@ import {
   updateStudent
 } from '../services/studentService'
 
+import {
+  getPaymentsByStudentPackage
+} from '../services/paymentService'
+
 import '../styles/students.css'
 
 import {
@@ -26,7 +30,6 @@ import {
   addYearsToDate,
   formatDate,
   formatPrice,
-  getDateKey,
   getTodayKey
 } from '../utils/dateHelpers'
 
@@ -2680,13 +2683,73 @@ function Students({
         selectedStudent
       )
 
-      const studentPayments = getStudentPayments(
-        selectedStudent
-      ).sort((first, second) =>
-        String(getPaymentDateForPdf(second)).localeCompare(
-          String(getPaymentDateForPdf(first))
+      /*
+       * Öğrenci listesi artık bütün tahsilatları bellekte tutmuyor.
+       * PDF hazırlanırken öğrencinin her paketine ait aktif
+       * tahsilatlar doğrudan veritabanından alınır.
+       */
+      const studentPackageIds =
+        studentPackages
+          .map(
+            (packageItem) =>
+              packageItem.studentPackageId ??
+              packageItem.enrollmentId ??
+              packageItem.assignmentId ??
+              ''
+          )
+          .map(
+            (studentPackageId) =>
+              String(
+                studentPackageId || ''
+              ).trim()
+          )
+          .filter(Boolean)
+
+      const paymentGroups =
+        await Promise.all(
+          studentPackageIds.map(
+            (studentPackageId) =>
+              getPaymentsByStudentPackage(
+                studentPackageId
+              )
+          )
         )
-      )
+
+      const paymentMap =
+        new Map()
+
+      paymentGroups
+        .flat()
+        .forEach((payment) => {
+          const paymentKey =
+            payment?.id
+              ? String(payment.id)
+              : [
+                  getPaymentDate(payment),
+                  getPaymentPeriod(payment),
+                  getPaymentAmount(payment),
+                  payment?.referenceNumber || ''
+                ].join('-')
+
+          paymentMap.set(
+            paymentKey,
+            payment
+          )
+        })
+
+      const studentPayments =
+        Array.from(
+          paymentMap.values()
+        ).sort(
+          (first, second) =>
+            String(
+              getPaymentDate(second)
+            ).localeCompare(
+              String(
+                getPaymentDate(first)
+              )
+            )
+        )
 
       const dayOrder = {
         Pazartesi: 1,

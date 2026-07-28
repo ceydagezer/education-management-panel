@@ -11,7 +11,6 @@ import {
 } from '../services/paymentService'
 
 import {
-  createDueDate,
   formatDate,
   formatPeriod,
   formatPrice,
@@ -67,15 +66,19 @@ function Payments({
       [students]
     )
 
-  const emptyPaymentForm = {
-    studentId: '',
-    studentPackageId: '',
-    amount: '',
-    paymentDate: today,
-    paymentMethod: '',
-    referenceNumber: '',
-    note: ''
-  }
+  const emptyPaymentForm =
+    useMemo(
+      () => ({
+        studentId: '',
+        studentPackageId: '',
+        amount: '',
+        paymentDate: today,
+        paymentMethod: '',
+        referenceNumber: '',
+        note: ''
+      }),
+      [today]
+    )
 
   const emptyFilters = {
     searchText: '',
@@ -242,6 +245,7 @@ function Payments({
     }
   }, [
     activeStudents,
+    emptyPaymentForm,
     paymentForm.studentId
   ])
 

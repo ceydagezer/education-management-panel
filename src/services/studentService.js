@@ -1206,7 +1206,7 @@ export async function createStudent(form) {
     } = await supabase
       .from('students')
       .delete()
-      .eq('id', cleanStudentId)
+      .eq('id', studentId)
 
     if (rollbackError) {
       console.error(
@@ -1230,7 +1230,7 @@ export async function createStudent(form) {
     )
   }
 
-  return getStudentById(cleanStudentId)
+  return getStudentById(studentId)
 }
 
 export async function setStudentPassive(

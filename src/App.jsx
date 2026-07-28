@@ -285,6 +285,7 @@ function App() {
     }
 
     let isMounted = true
+    let timeoutId
 
     const loadPanelData =
       async () => {
@@ -305,8 +306,6 @@ function App() {
 
           return
         }
-
-        let timeoutId
 
         try {
           const panelDataPromise =
@@ -661,6 +660,10 @@ function App() {
           )
           setAuthError('')
           setAuthLoading(false)
+
+          if (!currentSession) {
+            clearAppData()
+          }
         }
       )
 
@@ -1070,10 +1073,18 @@ function App() {
           return
         }
 
+        /*
+         * Oturum kapandıktan sonra giriş ekranına geçişi
+         * bekletmeden ve boş ekran oluşturmadan tamamla.
+         */
+        setSession(null)
+        setAuthLoading(false)
+        setAuthError('')
+        setDataLoading(false)
+        setDataError('')
+
         clearAllUnsavedSources()
         clearAppData()
-
-        setSession(null)
 
         localStorage.removeItem(
           'arti-akademi-active-page'
