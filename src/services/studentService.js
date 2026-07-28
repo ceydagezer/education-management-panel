@@ -289,6 +289,48 @@ function syncLegacyPackageFields(
   }
 }
 
+
+function mapStudentSummaryFromDb(row) {
+  return {
+    id: row.id,
+    tcNo: row.tc_no || '',
+    fullName: row.full_name || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    status: row.status || 'Aktif',
+    isActive: row.is_active !== false,
+    isArchived: row.is_archived === true,
+    isAnonymized: row.is_anonymized === true,
+    retentionStatus:
+      row.retention_status || 'Aktif Kayıt',
+    retentionReviewDate:
+      row.retention_review_date || '',
+    listStatus:
+      row.list_status || 'active',
+    instrumentsText:
+      row.instrument_names || '-',
+    teachersText:
+      row.teacher_names || '-',
+    packagesText:
+      row.package_names || '-',
+    totalFee: Number(
+      row.total_fee || 0
+    ),
+    nearestPaymentDate:
+      row.nearest_payment_date || '',
+    packageIds:
+      Array.isArray(row.package_ids)
+        ? row.package_ids
+        : [],
+    teacherIds:
+      Array.isArray(row.teacher_ids)
+        ? row.teacher_ids
+        : [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
 function mapStudentFromDb(row) {
   const enrolledPackages = (
     row.student_packages || []
@@ -686,6 +728,223 @@ function normalizeStudentForm(form) {
     },
 
     packageRows
+  }
+}
+
+
+export async function getStudentsPage({
+  page = 1,
+  pageSize = 10,
+  status = 'active',
+  searchText = '',
+  packageId = '',
+  teacherId = '',
+  sortOption = 'newest'
+} = {}) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  const to =
+    from +
+    safePageSize -
+    1
+
+  let query = supabase
+    .from('student_list_view')
+    .select('*', {
+      count: 'exact'
+    })
+
+  if (
+    status &&
+    status !== 'all'
+  ) {
+    query = query.eq(
+      'list_status',
+      status
+    )
+  }
+
+  const cleanSearchText = String(
+    searchText || ''
+  )
+    .trim()
+    .replace(/[(),]/g, ' ')
+
+  if (cleanSearchText) {
+    const searchPattern =
+      `%${cleanSearchText}%`
+
+    query = query.or(
+      [
+        `full_name.ilike.${searchPattern}`,
+        `tc_no.ilike.${searchPattern}`,
+        `phone.ilike.${searchPattern}`,
+        `email.ilike.${searchPattern}`,
+        `package_names.ilike.${searchPattern}`,
+        `instrument_names.ilike.${searchPattern}`,
+        `teacher_names.ilike.${searchPattern}`
+      ].join(',')
+    )
+  }
+
+  if (packageId) {
+    query = query.contains(
+      'package_ids',
+      [packageId]
+    )
+  }
+
+  if (teacherId) {
+    query = query.contains(
+      'teacher_ids',
+      [teacherId]
+    )
+  }
+
+  const sortSettings = {
+    newest: {
+      column: 'created_at',
+      ascending: false
+    },
+    oldest: {
+      column: 'created_at',
+      ascending: true
+    },
+    nameAsc: {
+      column: 'full_name',
+      ascending: true
+    },
+    nameDesc: {
+      column: 'full_name',
+      ascending: false
+    },
+    paymentAsc: {
+      column: 'nearest_payment_date',
+      ascending: true
+    },
+    paymentDesc: {
+      column: 'nearest_payment_date',
+      ascending: false
+    }
+  }
+
+  const selectedSort =
+    sortSettings[sortOption] ||
+    sortSettings.newest
+
+  query = query
+    .order(
+      selectedSort.column,
+      {
+        ascending:
+          selectedSort.ascending,
+        nullsFirst: false
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+    .range(from, to)
+
+  const {
+    data,
+    error,
+    count
+  } = await query
+
+  if (error) {
+    throw new Error(
+      `Öğrenci listesi alınamadı: ${error.message}`
+    )
+  }
+
+  return {
+    data: (data || []).map(
+      mapStudentSummaryFromDb
+    ),
+    total: Number(count || 0),
+    page: safePage,
+    pageSize: safePageSize
+  }
+}
+
+export async function getStudentListCounts() {
+  const statuses = [
+    'active',
+    'passive',
+    'archived',
+    'review'
+  ]
+
+  const results =
+    await Promise.all(
+      statuses.map(
+        async (status) => {
+          const {
+            count,
+            error
+          } = await supabase
+            .from('student_list_view')
+            .select('id', {
+              count: 'exact',
+              head: true
+            })
+            .eq(
+              'list_status',
+              status
+            )
+
+          if (error) {
+            throw error
+          }
+
+          return [
+            status,
+            Number(count || 0)
+          ]
+        }
+      )
+    )
+
+  const counts =
+    Object.fromEntries(results)
+
+  return {
+    active: counts.active || 0,
+    passive: counts.passive || 0,
+    archived: counts.archived || 0,
+    review: counts.review || 0,
+    all:
+      (counts.active || 0) +
+      (counts.passive || 0) +
+      (counts.archived || 0) +
+      (counts.review || 0)
   }
 }
 

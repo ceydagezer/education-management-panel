@@ -1,6 +1,21 @@
 import { supabase } from '../lib/supabase'
 
-const lessonSelect = `
+const LESSON_OCCURRENCES_STALE_EVENT =
+  'arti-akademi-lesson-occurrences-stale'
+
+function notifyLessonOccurrencesStale() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(
+      LESSON_OCCURRENCES_STALE_EVENT
+    )
+  )
+}
+
+const lessonPlanSelect = `
   id,
   student_id,
   package_id,
@@ -12,6 +27,65 @@ const lessonSelect = `
   note,
   is_makeup,
   related_lesson_id,
+  is_active,
+  created_at,
+  updated_at,
+
+  student:students (
+    id,
+    full_name
+  ),
+
+  package:packages (
+    id,
+    name,
+    duration_minutes,
+
+    specialty:specialties (
+      id,
+      name
+    )
+  ),
+
+  teacher:teachers (
+    id,
+    full_name
+  )
+`
+
+const lessonOccurrenceListSelect = `
+  id,
+  lesson_plan_id,
+  student_id,
+  package_id,
+  teacher_id,
+  lesson_date,
+  day,
+  start_time,
+  duration_minutes,
+  status,
+  note,
+  is_makeup,
+  related_occurrence_id,
+  is_active,
+  created_at,
+  updated_at
+`
+
+const lessonOccurrenceSelect = `
+  id,
+  lesson_plan_id,
+  student_id,
+  package_id,
+  teacher_id,
+  lesson_date,
+  day,
+  start_time,
+  duration_minutes,
+  status,
+  note,
+  is_makeup,
+  related_occurrence_id,
   is_active,
   created_at,
   updated_at,
@@ -68,7 +142,7 @@ function normalizeTime(value) {
   return time.slice(0, 5)
 }
 
-function mapLessonFromDb(row) {
+function mapCommonLesson(row) {
   const durationMinutes = Number(
     row.duration_minutes || 60
   )
@@ -120,9 +194,6 @@ function mapLessonFromDb(row) {
     isMakeup:
       row.is_makeup === true,
 
-    relatedLessonId:
-      row.related_lesson_id || null,
-
     isActive:
       row.is_active !== false,
 
@@ -131,6 +202,33 @@ function mapLessonFromDb(row) {
 
     updatedAt:
       row.updated_at
+  }
+}
+
+function mapLessonPlanFromDb(row) {
+  return {
+    ...mapCommonLesson(row),
+
+    relatedLessonId:
+      row.related_lesson_id || null
+  }
+}
+
+function mapLessonOccurrenceFromDb(row) {
+  return {
+    ...mapCommonLesson(row),
+
+    lessonPlanId:
+      row.lesson_plan_id || null,
+
+    lessonDate:
+      row.lesson_date || '',
+
+    relatedLessonId:
+      row.related_occurrence_id || null,
+
+    relatedOccurrenceId:
+      row.related_occurrence_id || null
   }
 }
 
@@ -205,8 +303,6 @@ function validateLessonInput(form) {
       null,
     is_makeup:
       form.isMakeup === true,
-    related_lesson_id:
-      form.relatedLessonId || null,
     is_active: true
   }
 }
@@ -214,7 +310,8 @@ function validateLessonInput(form) {
 export async function getLessonPlans() {
   const { data, error } = await supabase
     .from('lesson_plans')
-    .select(lessonSelect)
+    .select(lessonPlanSelect)
+    .eq('is_active', true)
     .order('day')
     .order('start_time')
 
@@ -225,15 +322,38 @@ export async function getLessonPlans() {
   }
 
   return (data || []).map(
-    mapLessonFromDb
+    mapLessonPlanFromDb
+  )
+}
+
+export async function getLessonOccurrences() {
+  const { data, error } = await supabase
+    .from('lesson_occurrences')
+    .select(lessonOccurrenceListSelect)
+    .eq('is_active', true)
+    .order('day')
+    .order('start_time')
+    .order('created_at')
+
+  if (error) {
+    throw new Error(
+      `Ders durum kayıtları alınamadı: ${error.message}`
+    )
+  }
+
+  return (data || []).map(
+    mapLessonOccurrenceFromDb
   )
 }
 
 export async function createLessonPlan(
   form
 ) {
-  const row =
-    validateLessonInput(form)
+  const row = {
+    ...validateLessonInput(form),
+    related_lesson_id:
+      form.relatedLessonId || null
+  }
 
   const {
     data,
@@ -241,7 +361,7 @@ export async function createLessonPlan(
   } = await supabase
     .from('lesson_plans')
     .insert(row)
-    .select(lessonSelect)
+    .select(lessonPlanSelect)
     .single()
 
   if (error) {
@@ -261,38 +381,110 @@ export async function createLessonPlan(
     )
   }
 
-  return mapLessonFromDb(data)
+  const savedLesson =
+    mapLessonPlanFromDb(data)
+
+  notifyLessonOccurrencesStale()
+
+  return savedLesson
+}
+
+export async function createLessonOccurrence(
+  form
+) {
+  const row = {
+    ...validateLessonInput(form),
+    lesson_plan_id:
+      form.lessonPlanId || null,
+    lesson_date:
+      form.lessonDate || null,
+    related_occurrence_id:
+      form.relatedOccurrenceId ||
+      form.relatedLessonId ||
+      null
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('lesson_occurrences')
+    .insert(row)
+    .select(lessonOccurrenceSelect)
+    .single()
+
+  if (error) {
+    throw new Error(
+      `Ders durum kaydı oluşturulamadı: ${error.message}`
+    )
+  }
+
+  return mapLessonOccurrenceFromDb(data)
 }
 
 export async function deleteLessonPlan(
   lessonId
 ) {
-  if (!lessonId) {
+  const cleanLessonId = String(
+    lessonId || ''
+  ).trim()
+
+  if (!cleanLessonId) {
     throw new Error(
       'Ders planı kimliği bulunamadı.'
     )
   }
 
-  const { error } = await supabase
-    .from('lesson_plans')
-    .delete()
-    .eq('id', lessonId)
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'delete_lesson_plan_safely',
+    {
+      p_lesson_plan_id:
+        cleanLessonId
+    }
+  )
 
   if (error) {
     throw new Error(
       `Ders planı silinemedi: ${error.message}`
     )
   }
+
+  notifyLessonOccurrencesStale()
+
+  return data?.[0] || data || null
 }
 
+export async function deleteLessonOccurrence(
+  occurrenceId
+) {
+  if (!occurrenceId) {
+    throw new Error(
+      'Ders durum kaydı kimliği bulunamadı.'
+    )
+  }
 
-export async function updateLessonPlanStatus(
-  lessonId,
+  const { error } = await supabase
+    .from('lesson_occurrences')
+    .delete()
+    .eq('id', occurrenceId)
+
+  if (error) {
+    throw new Error(
+      `Ders durum kaydı silinemedi: ${error.message}`
+    )
+  }
+}
+
+export async function updateLessonOccurrenceStatus(
+  occurrenceId,
   status
 ) {
-  if (!lessonId) {
+  if (!occurrenceId) {
     throw new Error(
-      'Ders planı kimliği bulunamadı.'
+      'Ders durum kaydı kimliği bulunamadı.'
     )
   }
 
@@ -310,12 +502,12 @@ export async function updateLessonPlanStatus(
     data,
     error
   } = await supabase
-    .from('lesson_plans')
+    .from('lesson_occurrences')
     .update({
       status: cleanStatus
     })
-    .eq('id', lessonId)
-    .select(lessonSelect)
+    .eq('id', occurrenceId)
+    .select(lessonOccurrenceSelect)
     .single()
 
   if (error) {
@@ -324,5 +516,5 @@ export async function updateLessonPlanStatus(
     )
   }
 
-  return mapLessonFromDb(data)
+  return mapLessonOccurrenceFromDb(data)
 }

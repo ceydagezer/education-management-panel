@@ -119,6 +119,86 @@ function mapPaymentFromDb(row) {
   }
 }
 
+function mapPaymentMovementFromDb(row) {
+  return {
+    id: row.id,
+
+    studentId:
+      row.student_id || '',
+
+    studentName:
+      row.student_name || '',
+
+    studentPackageId:
+      row.student_package_id || '',
+
+    packageId:
+      row.package_id || '',
+
+    packageName:
+      row.package_name || 'Tanımsız Paket',
+
+    instrument:
+      row.instrument || '',
+
+    teacherId:
+      row.teacher_id || '',
+
+    teacher:
+      row.teacher_name || '',
+
+    teacherName:
+      row.teacher_name || '',
+
+    packagePrice: Number(
+      row.package_price || 0
+    ),
+
+    amount:
+      Number(row.amount || 0),
+
+    paymentPeriod:
+      row.payment_period || '',
+
+    dueDate:
+      row.due_date || '',
+
+    paymentDate:
+      row.payment_date || '',
+
+    paymentMethod:
+      row.payment_method || '',
+
+    referenceNumber:
+      row.reference_number || '',
+
+    note:
+      row.note || '',
+
+    isActive:
+      row.is_active !== false,
+
+    periodCollectedAmount:
+      Number(
+        row.period_collected_amount || 0
+      ),
+
+    remainingAmount:
+      Number(
+        row.remaining_amount || 0
+      ),
+
+    collectionStatus:
+      row.collection_status || 'Kısmi Ödeme',
+
+    createdAt:
+      row.created_at,
+
+    updatedAt:
+      row.updated_at
+  }
+}
+
 function validatePaymentInput(form) {
   const studentId = String(
     form.studentId || ''
@@ -224,6 +304,92 @@ function validatePaymentInput(form) {
   }
 }
 
+
+export async function getDashboardPayments({
+  monthsBack = 18
+} = {}) {
+  const safeMonthsBack = Math.max(
+    1,
+    Number(monthsBack) || 18
+  )
+
+  const cutoffDate = new Date()
+  cutoffDate.setMonth(
+    cutoffDate.getMonth() -
+      safeMonthsBack
+  )
+
+  const cutoffKey = cutoffDate
+    .toISOString()
+    .slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('payments')
+    .select(paymentSelect)
+    .eq('is_active', true)
+    .gte('payment_date', cutoffKey)
+    .order('payment_date', {
+      ascending: false
+    })
+    .order('created_at', {
+      ascending: false
+    })
+
+  if (error) {
+    throw new Error(
+      `Dashboard tahsilatları alınamadı: ${error.message}`
+    )
+  }
+
+  return (data || []).map(
+    mapPaymentFromDb
+  )
+}
+
+export async function getStudentPaymentCount(
+  studentId
+) {
+  if (!studentId) return 0
+
+  const { count, error } = await supabase
+    .from('payments')
+    .select('id', {
+      count: 'exact',
+      head: true
+    })
+    .eq('student_id', studentId)
+
+  if (error) {
+    throw new Error(
+      `Öğrenci tahsilat bağlantıları kontrol edilemedi: ${error.message}`
+    )
+  }
+
+  return Number(count || 0)
+}
+
+export async function getTeacherPaymentReferenceCount(
+  teacherId
+) {
+  if (!teacherId) return 0
+
+  const { count, error } = await supabase
+    .from('payments')
+    .select('id', {
+      count: 'exact',
+      head: true
+    })
+    .eq('teacher_id', teacherId)
+
+  if (error) {
+    throw new Error(
+      `Öğretmen tahsilat bağlantıları kontrol edilemedi: ${error.message}`
+    )
+  }
+
+  return Number(count || 0)
+}
+
 export async function getPayments() {
   const {
     data,
@@ -248,6 +414,208 @@ export async function getPayments() {
   return (data || []).map(
     mapPaymentFromDb
   )
+}
+
+
+export async function getPaymentsByStudentPackage(
+  studentPackageId
+) {
+  const cleanStudentPackageId = String(
+    studentPackageId || ''
+  ).trim()
+
+  if (!cleanStudentPackageId) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('payments')
+    .select(paymentSelect)
+    .eq(
+      'student_package_id',
+      cleanStudentPackageId
+    )
+    .eq('is_active', true)
+    .order('payment_date', {
+      ascending: true
+    })
+    .order('created_at', {
+      ascending: true
+    })
+
+  if (error) {
+    throw new Error(
+      `Seçilen paketin tahsilat geçmişi alınamadı: ${error.message}`
+    )
+  }
+
+  return (data || []).map(
+    mapPaymentFromDb
+  )
+}
+
+export async function getPaymentMovementsPage({
+  page = 1,
+  pageSize = 10,
+  filters = {},
+  sortOption = 'newest'
+} = {}) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  const to =
+    from +
+    safePageSize -
+    1
+
+  let query = supabase
+    .from('payment_movements_view')
+    .select('*', {
+      count: 'exact'
+    })
+
+  const searchText = String(
+    filters.searchText || ''
+  )
+    .trim()
+    .replace(/[(),]/g, ' ')
+
+  if (searchText) {
+    const searchPattern =
+      `%${searchText}%`
+
+    query = query.or(
+      [
+        `student_name.ilike.${searchPattern}`,
+        `package_name.ilike.${searchPattern}`,
+        `teacher_name.ilike.${searchPattern}`,
+        `reference_number.ilike.${searchPattern}`,
+        `payment_period.ilike.${searchPattern}`
+      ].join(',')
+    )
+  }
+
+  if (filters.status) {
+    query = query.eq(
+      'collection_status',
+      filters.status
+    )
+  }
+
+  if (filters.paymentMethod) {
+    query = query.eq(
+      'payment_method',
+      filters.paymentMethod
+    )
+  }
+
+  if (filters.startDate) {
+    query = query.gte(
+      'payment_date',
+      filters.startDate
+    )
+  }
+
+  if (filters.endDate) {
+    query = query.lte(
+      'payment_date',
+      filters.endDate
+    )
+  }
+
+  const sortSettings = {
+    newest: {
+      column: 'payment_date',
+      ascending: false
+    },
+    oldest: {
+      column: 'payment_date',
+      ascending: true
+    },
+    studentAsc: {
+      column: 'student_name',
+      ascending: true
+    },
+    studentDesc: {
+      column: 'student_name',
+      ascending: false
+    },
+    amountDesc: {
+      column: 'amount',
+      ascending: false
+    },
+    amountAsc: {
+      column: 'amount',
+      ascending: true
+    }
+  }
+
+  const selectedSort =
+    sortSettings[sortOption] ||
+    sortSettings.newest
+
+  query = query
+    .order(
+      selectedSort.column,
+      {
+        ascending:
+          selectedSort.ascending,
+        nullsFirst: false
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+    .range(from, to)
+
+  const {
+    data,
+    error,
+    count
+  } = await query
+
+  if (error) {
+    throw new Error(
+      `Tahsilat hareketleri alınamadı: ${error.message}`
+    )
+  }
+
+  return {
+    data: (data || []).map(
+      mapPaymentMovementFromDb
+    ),
+    total: Number(count || 0),
+    page: safePage,
+    pageSize: safePageSize
+  }
 }
 
 export async function createPayment(

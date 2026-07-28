@@ -22,16 +22,12 @@ import {
 } from './services/studentService'
 
 import {
-  getLessonPlans
+  getLessonPlans,
+  getLessonOccurrences
 } from './services/lessonService'
 
-import {
-  getPayments
-} from './services/paymentService'
 
 import {
-  getExpenses,
-  getOtherIncomes,
   getTeacherPayments
 } from './services/financeService'
 
@@ -185,9 +181,30 @@ function App() {
   ] = useState([])
 
   const [
-    payments,
-    setPayments
+    lessonOccurrences,
+    setLessonOccurrences
   ] = useState([])
+
+  const [
+    lessonOccurrencesLoaded,
+    setLessonOccurrencesLoaded
+  ] = useState(false)
+
+  const [
+    lessonOccurrencesLoading,
+    setLessonOccurrencesLoading
+  ] = useState(false)
+
+  const [
+    lessonOccurrencesError,
+    setLessonOccurrencesError
+  ] = useState('')
+
+  const [
+    lessonOccurrencesReloadKey,
+    setLessonOccurrencesReloadKey
+  ] = useState(0)
+
 
   const [
     otherIncomes,
@@ -210,7 +227,11 @@ function App() {
     setTeachers([])
     setStudents([])
     setLessonPlans([])
-    setPayments([])
+    setLessonOccurrences([])
+    setLessonOccurrencesLoaded(false)
+    setLessonOccurrencesLoading(false)
+    setLessonOccurrencesError('')
+    setLessonOccurrencesReloadKey(0)
     setOtherIncomes([])
     setExpenses([])
     setTeacherPayments([])
@@ -243,9 +264,6 @@ function App() {
             teachersResult,
             studentsResult,
             lessonPlansResult,
-            paymentsResult,
-            otherIncomesResult,
-            expensesResult,
             teacherPaymentsResult
           ] = await Promise.all([
             getSpecialties(),
@@ -253,9 +271,6 @@ function App() {
             getTeachers(),
             getStudents(),
             getLessonPlans(),
-            getPayments(),
-            getOtherIncomes(),
-            getExpenses(),
             getTeacherPayments()
           ])
 
@@ -281,18 +296,6 @@ function App() {
 
           setLessonPlans(
             lessonPlansResult
-          )
-
-          setPayments(
-            paymentsResult
-          )
-
-          setOtherIncomes(
-            otherIncomesResult
-          )
-
-          setExpenses(
-            expensesResult
           )
 
           setTeacherPayments(
@@ -335,6 +338,82 @@ function App() {
           current + 1
       )
     }
+
+  useEffect(() => {
+    const markOccurrencesStale = () => {
+      setLessonOccurrencesLoaded(false)
+    }
+
+    window.addEventListener(
+      'arti-akademi-lesson-occurrences-stale',
+      markOccurrencesStale
+    )
+
+    return () => {
+      window.removeEventListener(
+        'arti-akademi-lesson-occurrences-stale',
+        markOccurrencesStale
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    if (
+      !session ||
+      activePage !== 'lesson-status' ||
+      lessonOccurrencesLoaded
+    ) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadLessonOccurrences =
+      async () => {
+        setLessonOccurrencesLoading(true)
+        setLessonOccurrencesError('')
+
+        try {
+          const result =
+            await getLessonOccurrences()
+
+          if (!isMounted) {
+            return
+          }
+
+          setLessonOccurrences(result)
+          setLessonOccurrencesLoaded(true)
+        } catch (error) {
+          console.error(
+            'Ders durum kayıtları alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            setLessonOccurrencesError(
+              error instanceof Error
+                ? error.message
+                : 'Ders durum kayıtları alınamadı.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setLessonOccurrencesLoading(false)
+          }
+        }
+      }
+
+    loadLessonOccurrences()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    session,
+    activePage,
+    lessonOccurrencesLoaded,
+    lessonOccurrencesReloadKey
+  ])
 
   /*
    * =========================================================
@@ -898,9 +977,6 @@ function App() {
             lessonPlans={
               lessonPlans
             }
-            payments={
-              payments
-            }
             otherIncomes={
               otherIncomes
             }
@@ -933,12 +1009,6 @@ function App() {
             }
             teachers={
               teachers
-            }
-            payments={
-              payments
-            }
-            setPayments={
-              setPayments
             }
             unsavedChanges={createUnsavedPageApi(
               'students',
@@ -990,9 +1060,6 @@ function App() {
             lessonPlans={
               lessonPlans
             }
-            payments={
-              payments
-            }
             teacherPayments={
               teacherPayments
             }
@@ -1030,27 +1097,52 @@ function App() {
 
         {activePage ===
           'lesson-status' && (
-          <LessonStatusTracking
-            lessons={
-              lessonPlans
-            }
-            setLessons={
-              setLessonPlans
-            }
-            teachers={
-              teachers
-            }
-            students={
-              students
-            }
-            packages={
-              packages
-            }
-            unsavedChanges={createUnsavedPageApi(
-              'lesson-status',
-              'Ders durumu işlemleri'
-            )}
-          />
+          lessonOccurrencesLoading &&
+          !lessonOccurrencesLoaded ? (
+            <LoadingState
+              text="Ders durum kayıtları yükleniyor..."
+            />
+          ) : lessonOccurrencesError &&
+            !lessonOccurrencesLoaded ? (
+            <ErrorState
+              title="Ders durum kayıtları yüklenemedi"
+              message={
+                lessonOccurrencesError
+              }
+              onRetry={() => {
+                setLessonOccurrencesError('')
+                setLessonOccurrencesLoaded(false)
+                setLessonOccurrencesReloadKey(
+                  (current) => current + 1
+                )
+              }}
+            />
+          ) : (
+            <LessonStatusTracking
+              lessons={
+                lessonOccurrences
+              }
+              setLessons={
+                setLessonOccurrences
+              }
+              lessonPlans={
+                lessonPlans
+              }
+              teachers={
+                teachers
+              }
+              students={
+                students
+              }
+              packages={
+                packages
+              }
+              unsavedChanges={createUnsavedPageApi(
+                'lesson-status',
+                'Ders durumu işlemleri'
+              )}
+            />
+          )
         )}
 
         {activePage ===
@@ -1061,12 +1153,6 @@ function App() {
             }
             setStudents={
               setStudents
-            }
-            payments={
-              payments
-            }
-            setPayments={
-              setPayments
             }
             unsavedChanges={createUnsavedPageApi(
               'payments',
@@ -1080,9 +1166,6 @@ function App() {
           <Finance
             students={
               students
-            }
-            payments={
-              payments
             }
             teachers={
               teachers

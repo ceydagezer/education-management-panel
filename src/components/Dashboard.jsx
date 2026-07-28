@@ -1,5 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import '../styles/dashboard.css'
+
+import {
+  getDashboardSummary,
+  getDashboardReceivables
+} from '../services/dashboardService'
 
 import {
   addYearsToDate,
@@ -8,14 +13,6 @@ import {
   getDateKey,
   getTodayKey
 } from '../utils/dateHelpers'
-
-import {
-  findCurrentDueRecord,
-  getDueStatus,
-  getPaymentAmount,
-  getPaymentDate,
-  isActivePayment
-} from '../utils/paymentSchedule'
 
 import {
   getLessonStatusClass,
@@ -34,11 +31,38 @@ function Dashboard({
   teachers = [],
   packages = [],
   lessonPlans = [],
-  payments = [],
   otherIncomes = [],
   teacherPayments = [],
   onNavigate = () => {}
 }) {
+  const [dashboardSummary, setDashboardSummary] =
+    useState({
+      activeStudentCount: 0,
+      activeTeacherCount: 0,
+      monthlyStudentIncome: 0,
+      monthlyOtherIncome: 0,
+      monthlyIncome: 0,
+      totalIncome: 0,
+      totalInstitutionExpense: 0,
+      totalTeacherPaid: 0,
+      totalExpense: 0,
+      netCash: 0,
+      totalOutstanding: 0,
+      overdueCount: 0,
+      upcomingCount: 0,
+      teacherRemaining: 0,
+      todayLessonCount: 0
+    })
+
+  const [receivableRecords, setReceivableRecords] =
+    useState([])
+
+  const [dashboardLoading, setDashboardLoading] =
+    useState(true)
+
+  const [dashboardError, setDashboardError] =
+    useState('')
+
   const now = new Date()
   const todayKey = getTodayKey()
 
@@ -51,6 +75,76 @@ function Dashboard({
     month: 'long',
     year: 'numeric'
   })
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadDashboardData = async () => {
+      setDashboardLoading(true)
+      setDashboardError('')
+
+      try {
+        const [
+          summaryResult,
+          receivableResult
+        ] = await Promise.all([
+          getDashboardSummary({
+            todayKey,
+            currentDayName,
+            upcomingDays:
+              UPCOMING_DAYS,
+            graceDays:
+              GRACE_DAYS
+          }),
+          getDashboardReceivables({
+            todayKey,
+            upcomingDays:
+              UPCOMING_DAYS,
+            graceDays:
+              GRACE_DAYS,
+            limit: 30
+          })
+        ])
+
+        if (!isMounted) {
+          return
+        }
+
+        setDashboardSummary(
+          summaryResult
+        )
+        setReceivableRecords(
+          receivableResult
+        )
+      } catch (error) {
+        console.error(
+          'Dashboard özetleri alınamadı:',
+          error
+        )
+
+        if (isMounted) {
+          setDashboardError(
+            error instanceof Error
+              ? error.message
+              : 'Dashboard özetleri alınamadı.'
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setDashboardLoading(false)
+        }
+      }
+    }
+
+    loadDashboardData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    todayKey,
+    currentDayName
+  ])
 
   const getTeacherName = (teacher) =>
     teacher?.fullName ?? teacher?.name ?? ''
@@ -105,247 +199,26 @@ function Dashboard({
     })
   }
 
-  const packageFinancialRecords = useMemo(() => {
-    return students.flatMap((student) => {
-      let studentPackages = []
+  const packageFinancialRecords =
+    receivableRecords
 
-      const possiblePackageLists = [
-        student.enrolledPackages,
-        student.studentPackages,
-        student.assignedPackages,
-        student.selectedPackages
-      ]
+  const activeStudentCount =
+    dashboardSummary.activeStudentCount
 
-      const packageList = possiblePackageLists.find(
-        (list) => Array.isArray(list) && list.length > 0
-      )
+  const activeTeacherCount =
+    dashboardSummary.activeTeacherCount
 
-      if (packageList) {
-        studentPackages = packageList
-      } else if (
-        Array.isArray(student.packageIds) &&
-        student.packageIds.length > 0
-      ) {
-        studentPackages = student.packageIds.map((packageId) => {
-          const catalogPackage = packages.find(
-            (item) => String(item.id) === String(packageId)
-          )
+  const monthlyStudentIncome =
+    dashboardSummary.monthlyStudentIncome
 
-          return (
-            catalogPackage || {
-              packageId,
-              packageName: 'Tanımsız Paket'
-            }
-          )
-        })
-      } else if (student.packageId || student.packageName) {
-        studentPackages = [student]
-      }
-
-      return studentPackages.map((packageItem, index) => {
-        const packageId =
-          packageItem?.packageId ??
-          packageItem?.id ??
-          student.packageId ??
-          `package-${index}`
-
-        const catalogPackage = getPackageFromCatalog(
-          packageId,
-          packageItem?.packageName ??
-            packageItem?.name ??
-            student.packageName
-        )
-
-        const studentPackageId = String(
-          packageItem?.studentPackageId ??
-            packageItem?.enrollmentId ??
-            packageItem?.assignmentId ??
-            `${student.id}-${packageId}-${index}`
-        )
-
-        const teacherValue =
-          packageItem?.teacher ??
-          packageItem?.teacherName ??
-          student.teacher ??
-          student.teacherName ??
-          ''
-
-        const teacherName =
-          packageItem?.teacherName ??
-          (typeof teacherValue === 'string'
-            ? teacherValue
-            : teacherValue?.fullName ?? teacherValue?.name) ??
-          ''
-
-        const teacherId =
-          packageItem?.teacherId ??
-          packageItem?.teacher?.id ??
-          student.teacherId ??
-          student.teacher?.id ??
-          ''
-
-        const monthlyFee = Number(
-          packageItem?.monthlyFee ??
-            packageItem?.agreedPrice ??
-            packageItem?.totalPrice ??
-            packageItem?.packagePrice ??
-            student.monthlyFee ??
-            student.agreedPrice ??
-            student.totalPrice ??
-            student.packagePrice ??
-            catalogPackage?.totalPrice ??
-            0
-        )
-
-        const lessonCount =
-          Number(
-            packageItem?.lessonCount ??
-              student.lessonCount ??
-              catalogPackage?.lessonCount ??
-              1
-          ) || 1
-
-        const unitPrice =
-          lessonCount > 0
-            ? monthlyFee / lessonCount
-            : Number(
-                catalogPackage?.unitPrice ??
-                  monthlyFee
-              )
-
-        const firstPaymentDate = getDateKey(
-          packageItem?.firstPaymentDate ??
-            packageItem?.nextPaymentDate ??
-            packageItem?.dueDate ??
-            student.firstPaymentDate ??
-            student.nextPaymentDate ??
-            ''
-        )
-
-        const paymentDay = Number(
-          packageItem?.paymentDay ??
-            student.paymentDay ??
-            (firstPaymentDate
-              ? firstPaymentDate.slice(8, 10)
-              : 1)
-        )
-
-        const dueRecord = findCurrentDueRecord(
-          {
-            studentPackageId,
-            agreedPrice: monthlyFee,
-            monthlyFee,
-            firstPaymentDate,
-            nextPaymentDate:
-              packageItem?.nextPaymentDate ??
-              student.nextPaymentDate ??
-              firstPaymentDate,
-            paymentDay
-          },
-          payments
-        )
-
-        const {
-          dueDate,
-          period,
-          collectedAmount,
-          remainingAmount: remainingDebt
-        } = dueRecord
-
-        const dueStatus = getDueStatus({
-          dueDate,
-          expectedAmount: monthlyFee,
-          collectedAmount,
-          todayKey
-        })
-
-        const daysUntilDue = dueStatus.daysUntilDue
-        const daysLate = dueStatus.daysLate
-
-        return {
-          studentPackageId,
-          studentId: String(student.id),
-          studentName:
-            getStudentName(student) || 'Öğrenci',
-          packageId: String(packageId),
-          packageName:
-            packageItem?.packageName ??
-            packageItem?.name ??
-            student.packageName ??
-            catalogPackage?.name ??
-            'Tanımsız Paket',
-          instrument:
-            packageItem?.instrument ??
-            student.instrument ??
-            catalogPackage?.instrument ??
-            '',
-          teacherId: String(teacherId || ''),
-          teacherName,
-          agreedPrice: monthlyFee,
-          monthlyFee,
-          lessonCount,
-          unitPrice,
-          firstPaymentDate,
-          paymentDay,
-          dueDate,
-          period,
-          collectedAmount,
-          remainingDebt,
-          daysUntilDue,
-          daysLate
-        }
-      })
-    })
-  }, [students, packages, payments, teachers, todayKey])
-
-  const activeStudentCount = students.filter(
-    (student) =>
-      student.isActive !== false &&
-      normalizeText(student.status) !== 'pasif' &&
-      normalizeText(student.status) !== 'arşiv' &&
-      student.isArchived !== true
-  ).length
-
-  const activeTeacherCount = teachers.filter(
-    (teacher) =>
-      teacher.isActive !== false &&
-      normalizeText(teacher.status) !== 'pasif'
-  ).length
-
-  const monthlyStudentIncome = payments
-    .filter(
-      (payment) =>
-        isActivePayment(payment) &&
-        getPaymentDate(payment).slice(0, 7) ===
-          currentMonthKey
-    )
-    .reduce(
-      (total, payment) =>
-        total + getPaymentAmount(payment),
-      0
-    )
-
-  const monthlyOtherIncome = otherIncomes
-    .filter(
-      (income) =>
-        income.status !== 'İptal' &&
-        getDateKey(income.date).slice(0, 7) ===
-          currentMonthKey
-    )
-    .reduce(
-      (total, income) =>
-        total + Number(income.amount || 0),
-      0
-    )
+  const monthlyOtherIncome =
+    dashboardSummary.monthlyOtherIncome
 
   const monthlyIncome =
-    monthlyStudentIncome + monthlyOtherIncome
+    dashboardSummary.monthlyIncome
 
-  const totalOutstanding = packageFinancialRecords.reduce(
-    (total, record) =>
-      total + Number(record.remainingDebt || 0),
-    0
-  )
+  const totalOutstanding =
+    dashboardSummary.totalOutstanding
 
   const todayLessons = lessonPlans
     .filter(
@@ -359,30 +232,27 @@ function Dashboard({
       )
     )
 
-  const upcomingReceivables = packageFinancialRecords
-    .filter(
-      (record) =>
-        record.remainingDebt > 0 &&
-        record.dueDate &&
-        record.daysUntilDue !== null &&
-        record.daysUntilDue <= UPCOMING_DAYS &&
-        record.daysLate <= GRACE_DAYS
-    )
-    .sort((first, second) =>
-      first.dueDate.localeCompare(second.dueDate)
-    )
-    .slice(0, 4)
+  const upcomingReceivables =
+    packageFinancialRecords
+      .filter(
+        (record) =>
+          record.receivableStatus ===
+          'Yaklaşıyor'
+      )
+      .slice(0, 4)
 
   const criticalOverdueRecords =
     packageFinancialRecords.filter(
       (record) =>
-        record.remainingDebt > 0 &&
-        record.daysLate > GRACE_DAYS
+        record.receivableStatus ===
+        'Gecikmiş'
     )
 
   const missingPaymentDates =
     packageFinancialRecords.filter(
-      (record) => !record.dueDate
+      (record) =>
+        record.receivableStatus ===
+        'Tarih Eksik'
     )
 
   const waitingMakeupLessons = lessonPlans.filter(
@@ -641,18 +511,10 @@ function Dashboard({
   ])
 
   const totalTeacherRemaining =
-    teacherEarningSummaries.reduce(
-      (total, summary) =>
-        total + summary.remainingPayment,
-      0
-    )
+    dashboardSummary.teacherRemaining
 
   const totalCompletedEarningLessonCount =
-    teacherEarningSummaries.reduce(
-      (total, summary) =>
-        total + summary.completedLessonCount,
-      0
-    )
+    dashboardSummary.completedLessonCount || 0
 
 
   const retentionReviewStudents = students.filter(

@@ -1838,3 +1838,17 @@
   position: relative;
   z-index: 1;
 }
+
+/* =========================================================
+   GÜNCEL PROGRAM / GEÇMİŞ AYRIMI
+   ========================================================= */
+
+.status-history-card {
+  margin-top: 24px;
+}
+
+.status-history-date {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}

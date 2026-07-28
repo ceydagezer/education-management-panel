@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
-  createLessonPlan,
-  deleteLessonPlan,
-  updateLessonPlanStatus
+  createLessonOccurrence,
+  deleteLessonOccurrence,
+  updateLessonOccurrenceStatus
 } from '../services/lessonService'
 import '../styles/status.css'
 
@@ -25,6 +25,7 @@ import {
 
 function LessonStatusTracking({
   lessons = [],
+  lessonPlans = [],
   setLessons,
   teachers = [],
   students = [],
@@ -414,63 +415,185 @@ function LessonStatusTracking({
     return []
   }
 
-  const filteredLessons = lessons.filter(
-    (lesson) => {
-      const lessonStatus =
-        normalizeLessonStatus(lesson.status)
+  const matchesCurrentFilters = (lesson) => {
+    const lessonStatus =
+      normalizeLessonStatus(lesson.status)
 
-      const teacherMatch =
-        selectedTeacher === 'all' ||
-        areIdsEqual(
-          getTeacherId(lesson),
-          selectedTeacher
-        )
-
-      const lessonStudent = students.find(
-        (student) =>
-          areIdsEqual(student.id, lesson.studentId)
+    const teacherMatch =
+      selectedTeacher === 'all' ||
+      areIdsEqual(
+        getTeacherId(lesson),
+        selectedTeacher
       )
 
-      const lessonStudentSearchValue =
-        normalizeSearchText(
-          [
-            getStudentName(lesson),
-            lessonStudent?.phone,
-            lessonStudent?.motherPhone,
-            lessonStudent?.fatherPhone,
-            lessonStudent?.tcNo,
-            lessonStudent?.email
-          ]
-            .filter(Boolean)
-            .join(' ')
+    const lessonStudent = students.find(
+      (student) =>
+        areIdsEqual(
+          student.id,
+          lesson.studentId
         )
+    )
 
-      const studentMatch =
-        selectedStudent !== 'all'
-          ? areIdsEqual(
+    const lessonStudentSearchValue =
+      normalizeSearchText(
+        [
+          getStudentName(lesson),
+          lessonStudent?.phone,
+          lessonStudent?.motherPhone,
+          lessonStudent?.fatherPhone,
+          lessonStudent?.tcNo,
+          lessonStudent?.email
+        ]
+          .filter(Boolean)
+          .join(' ')
+      )
+
+    const studentMatch =
+      selectedStudent !== 'all'
+        ? areIdsEqual(
             lesson.studentId,
             selectedStudent
           )
-          : !normalizedStudentSearch ||
-            lessonStudentSearchValue.includes(
-              normalizedStudentSearch
-            )
+        : !normalizedStudentSearch ||
+          lessonStudentSearchValue.includes(
+            normalizedStudentSearch
+          )
 
-      const statusMatch =
-        selectedStatus === 'all' ||
-        lessonStatus === selectedStatus
+    const statusMatch =
+      selectedStatus === 'all' ||
+      lessonStatus === selectedStatus
 
-      return (
-        teacherMatch &&
-        studentMatch &&
-        statusMatch
+    return (
+      teacherMatch &&
+      studentMatch &&
+      statusMatch
+    )
+  }
+
+  /*
+   * Üst haftalık tablo güncel lesson_plans kayıtlarını gösterir.
+   * Occurrence kaydı varsa yalnızca dersin güncel durumunu ekler.
+   * Programdan silinen plan bu tablodan hemen çıkar.
+   */
+  const occurrenceByPlanId = new Map(
+    lessons
+      .filter(
+        (lesson) =>
+          lesson.lessonPlanId
       )
-    }
+      .map(
+        (lesson) => [
+          String(
+            lesson.lessonPlanId
+          ),
+          lesson
+        ]
+      )
   )
 
-  const sortedLessons = [
-    ...filteredLessons
+  const currentScheduleLessons =
+    lessonPlans
+      .filter(
+        (lesson) =>
+          lesson.isActive !== false
+      )
+      .map((lesson) => {
+        const occurrence =
+          occurrenceByPlanId.get(
+            String(lesson.id)
+          )
+
+        return {
+          ...lesson,
+          occurrenceId:
+            occurrence?.id || '',
+          lessonPlanId:
+            lesson.id,
+          status:
+            occurrence?.status ||
+            'Planlandı',
+          note:
+            occurrence?.note ||
+            lesson.note ||
+            '',
+          isMakeup:
+            occurrence?.isMakeup === true
+        }
+      })
+
+  /*
+   * Plan tablosunda yer almayan ve henüz sonuçlanmamış telafi
+   * dersleri de güncel haftalık takip tablosunda gösterilir.
+   */
+  const pendingMakeupLessons =
+    lessons.filter((lesson) => {
+      const status =
+        normalizeLessonStatus(
+          lesson.status
+        )
+
+      return (
+        isMakeupLesson(lesson) &&
+        (
+          status ===
+            'Telafi yapılacak' ||
+          status === 'Planlandı'
+        )
+      )
+    })
+
+  const weeklyLessons = [
+    ...currentScheduleLessons,
+    ...pendingMakeupLessons
+  ].filter(matchesCurrentFilters)
+
+  /*
+   * Alt tablo yalnızca sonuçlanmış ders geçmişini gösterir.
+   * Program kaydı daha sonra silinse bile occurrence burada kalır.
+   */
+  const historyLessons =
+    lessons.filter((lesson) => {
+      const status =
+        normalizeLessonStatus(
+          lesson.status
+        )
+
+      return [
+        'Yapıldı',
+        'Telafi yapıldı',
+        'İptal edildi'
+      ].includes(status)
+    })
+
+  const filteredHistoryLessons =
+    historyLessons.filter(
+      matchesCurrentFilters
+    )
+
+  const sortedHistoryLessons = [
+    ...filteredHistoryLessons
   ].sort((firstLesson, secondLesson) => {
+    const firstDate =
+      firstLesson.lessonDate ||
+      firstLesson.createdAt ||
+      ''
+
+    const secondDate =
+      secondLesson.lessonDate ||
+      secondLesson.createdAt ||
+      ''
+
+    if (
+      firstDate &&
+      secondDate &&
+      firstDate !== secondDate
+    ) {
+      return String(secondDate)
+        .localeCompare(
+          String(firstDate)
+        )
+    }
+
     const firstDayOrder =
       dayOrder[firstLesson.day] ?? 99
 
@@ -478,7 +601,8 @@ function LessonStatusTracking({
       dayOrder[secondLesson.day] ?? 99
 
     const dayDifference =
-      firstDayOrder - secondDayOrder
+      firstDayOrder -
+      secondDayOrder
 
     if (dayDifference !== 0) {
       return dayDifference
@@ -487,7 +611,9 @@ function LessonStatusTracking({
     return String(
       firstLesson.time || ''
     ).localeCompare(
-      String(secondLesson.time || '')
+      String(
+        secondLesson.time || ''
+      )
     )
   })
 
@@ -495,17 +621,25 @@ function LessonStatusTracking({
     day,
     hour
   ) => {
-    return filteredLessons
+    return weeklyLessons
       .filter(
         (lesson) =>
           lesson.day === day &&
           lesson.time === hour
       )
-      .sort((firstLesson, secondLesson) =>
-        getTeacherName(firstLesson).localeCompare(
-          getTeacherName(secondLesson),
-          'tr'
-        )
+      .sort(
+        (
+          firstLesson,
+          secondLesson
+        ) =>
+          getTeacherName(
+            firstLesson
+          ).localeCompare(
+            getTeacherName(
+              secondLesson
+            ),
+            'tr'
+          )
       )
   }
 
@@ -561,13 +695,25 @@ function LessonStatusTracking({
       return
     }
 
-    const currentLesson = lessons.find(
-      (lesson) =>
-        areIdsEqual(
-          lesson.id,
-          lessonId
-        )
-    )
+    const currentLesson =
+      lessons.find(
+        (lesson) =>
+          areIdsEqual(
+            lesson.id,
+            lessonId
+          )
+      ) ||
+      weeklyLessons.find(
+        (lesson) =>
+          areIdsEqual(
+            lesson.occurrenceId,
+            lessonId
+          ) ||
+          areIdsEqual(
+            lesson.id,
+            lessonId
+          )
+      )
 
     if (!currentLesson) {
       return
@@ -586,7 +732,7 @@ function LessonStatusTracking({
 
     try {
       const updatedLesson =
-        await updateLessonPlanStatus(
+        await updateLessonOccurrenceStatus(
           lessonId,
           statusToSave
         )
@@ -638,7 +784,7 @@ function LessonStatusTracking({
     setDeletingLessonId(lessonId)
 
     try {
-      await deleteLessonPlan(lessonId)
+      await deleteLessonOccurrence(lessonId)
 
       setLessons((currentLessons) =>
         currentLessons.filter(
@@ -837,7 +983,7 @@ function LessonStatusTracking({
 
     try {
       const savedLesson =
-        await createLessonPlan({
+        await createLessonOccurrence({
           teacherId:
             makeupForm.teacherId,
           studentId:
@@ -1301,7 +1447,7 @@ function LessonStatusTracking({
             <h2>Haftalık Program</h2>
 
             <p>
-              Haftalık ders programı ve ders
+              Güncel haftalık program ve ders
               durumları.
             </p>
           </div>
@@ -1319,7 +1465,7 @@ function LessonStatusTracking({
               className="lesson-count"
               type="button"
             >
-              {filteredLessons.length} ders
+              {weeklyLessons.length} ders
             </button>
           </div>
         </div>
@@ -1395,7 +1541,7 @@ function LessonStatusTracking({
 
                                 return (
                                   <div
-                                    key={lesson.id}
+                                    key={(lesson.occurrenceId || lesson.id)}
                                     className={`${getLessonStatusClass(
                                       lesson.status,
                                       'status-lesson-card'
@@ -1406,7 +1552,7 @@ function LessonStatusTracking({
                                     } ${
                                       areIdsEqual(
                                         openMenuId,
-                                        lesson.id
+                                        (lesson.occurrenceId || lesson.id)
                                       )
                                         ? 'menu-open'
                                         : ''
@@ -1426,20 +1572,20 @@ function LessonStatusTracking({
                                             event.stopPropagation()
 
                                             deleteMakeupLesson(
-                                              lesson.id
+                                              (lesson.occurrenceId || lesson.id)
                                             )
                                           }}
                                           disabled={
                                             areIdsEqual(
                                               deletingLessonId,
-                                              lesson.id
+                                              (lesson.occurrenceId || lesson.id)
                                             )
                                           }
                                           title="Telafi dersini kaldır"
                                         >
                                           {areIdsEqual(
                                             deletingLessonId,
-                                            lesson.id
+                                            (lesson.occurrenceId || lesson.id)
                                           )
                                             ? '…'
                                             : '×'}
@@ -1495,10 +1641,10 @@ function LessonStatusTracking({
                                             setOpenMenuId(
                                               areIdsEqual(
                                                 openMenuId,
-                                                lesson.id
+                                                (lesson.occurrenceId || lesson.id)
                                               )
                                                 ? null
-                                                : lesson.id
+                                                : (lesson.occurrenceId || lesson.id)
                                             )
                                           }}
                                           aria-label="Ders işlemleri"
@@ -1508,7 +1654,7 @@ function LessonStatusTracking({
 
                                         {areIdsEqual(
                                           openMenuId,
-                                          lesson.id
+                                          (lesson.occurrenceId || lesson.id)
                                         ) && (
                                           <div className="lesson-action-menu">
                                             {lessonActions.map(
@@ -1520,20 +1666,21 @@ function LessonStatusTracking({
                                                   type="button"
                                                   onClick={() =>
                                                     updateLessonStatus(
-                                                      lesson.id,
+                                                      lesson.occurrenceId ||
+                                                        lesson.id,
                                                       action
                                                     )
                                                   }
                                                   disabled={
                                                     areIdsEqual(
                                                       updatingLessonId,
-                                                      lesson.id
+                                                      (lesson.occurrenceId || lesson.id)
                                                     )
                                                   }
                                                 >
                                                   {areIdsEqual(
                                                     updatingLessonId,
-                                                    lesson.id
+                                                    (lesson.occurrenceId || lesson.id)
                                                   )
                                                     ? 'Kaydediliyor...'
                                                     : action}
@@ -1583,14 +1730,14 @@ function LessonStatusTracking({
         </div>
       </section>
 
-      <section className="lesson-table-card">
+      <section className="lesson-table-card status-history-card">
         <div className="table-head">
           <div>
-            <h2>Ders Durum Listesi</h2>
+            <h2>Ders Geçmişi</h2>
 
             <p>
-              Seçili filtrelere göre derslerin
-              detaylı listesi
+              Yapılan, telafisi tamamlanan ve
+              iptal edilen ders kayıtları.
             </p>
           </div>
 
@@ -1598,7 +1745,7 @@ function LessonStatusTracking({
             type="button"
             className="lesson-count"
           >
-            {sortedLessons.length} ders
+            {sortedHistoryLessons.length} kayıt
           </button>
         </div>
 
@@ -1617,8 +1764,8 @@ function LessonStatusTracking({
             </thead>
 
             <tbody>
-              {sortedLessons.length > 0 ? (
-                sortedLessons.map(
+              {sortedHistoryLessons.length > 0 ? (
+                sortedHistoryLessons.map(
                   (lesson) => (
                     <tr key={lesson.id}>
                       <td>
@@ -1713,7 +1860,7 @@ function LessonStatusTracking({
                     className="empty-table"
                   >
                     Seçili filtrelere uygun
-                    ders bulunamadı.
+                    geçmiş ders kaydı bulunamadı.
                   </td>
                 </tr>
               )}

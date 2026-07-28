@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
 
 import {
   createPayment,
   deletePayment as deletePaymentFromDb,
+  getPaymentMovementsPage,
+  getPaymentsByStudentPackage,
   updatePayment,
   updateStudentPackageNextPaymentDate
 } from '../services/paymentService'
@@ -35,8 +37,6 @@ import {
 function Payments({
   students = [],
   setStudents = () => {},
-  payments = [],
-  setPayments,
   unsavedChanges
 }) {
   const today = getTodayKey()
@@ -63,9 +63,48 @@ function Payments({
     useState(emptyPaymentForm)
   const [filters, setFilters] = useState(emptyFilters)
   const [sortOption, setSortOption] = useState('newest')
+
+  const [payments, setPayments] =
+    useState([])
+
+  const [
+    paymentContextLoading,
+    setPaymentContextLoading
+  ] = useState(false)
+
+  const [
+    paymentContextError,
+    setPaymentContextError
+  ] = useState('')
+
+  const [
+    paymentContextReloadKey,
+    setPaymentContextReloadKey
+  ] = useState(0)
+
+  const [movementPayments, setMovementPayments] =
+    useState([])
+  const [movementTotal, setMovementTotal] =
+    useState(0)
+  const [movementPage, setMovementPage] =
+    useState(1)
+  const [movementPageSize, setMovementPageSize] =
+    useState(10)
+  const [movementLoading, setMovementLoading] =
+    useState(false)
+  const [movementError, setMovementError] =
+    useState('')
+  const [movementReloadKey, setMovementReloadKey] =
+    useState(0)
+
   const [editingPaymentId, setEditingPaymentId] =
     useState(null)
   const [editForm, setEditForm] = useState(null)
+
+  const [
+    expandedPaymentId,
+    setExpandedPaymentId
+  ] = useState(null)
 
   const [isSavingPayment, setIsSavingPayment] =
     useState(false)
@@ -149,6 +188,88 @@ function Payments({
 
     action()
   }
+
+  useEffect(() => {
+    let isMounted = true
+
+    const timeoutId = window.setTimeout(
+      async () => {
+        setMovementLoading(true)
+        setMovementError('')
+
+        try {
+          const result =
+            await getPaymentMovementsPage({
+              page: movementPage,
+              pageSize: movementPageSize,
+              filters,
+              sortOption
+            })
+
+          if (!isMounted) {
+            return
+          }
+
+          const calculatedTotalPages =
+            Math.max(
+              1,
+              Math.ceil(
+                result.total /
+                  movementPageSize
+              )
+            )
+
+          if (
+            movementPage >
+            calculatedTotalPages
+          ) {
+            setMovementPage(
+              calculatedTotalPages
+            )
+            return
+          }
+
+          setMovementPayments(
+            result.data
+          )
+          setMovementTotal(
+            result.total
+          )
+        } catch (error) {
+          console.error(
+            'Tahsilat hareketleri alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            setMovementError(
+              error instanceof Error
+                ? error.message
+                : 'Tahsilat hareketleri alınamadı.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setMovementLoading(false)
+          }
+        }
+      },
+      filters.searchText.trim()
+        ? 350
+        : 0
+    )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [
+    movementPage,
+    movementPageSize,
+    filters,
+    sortOption,
+    movementReloadKey
+  ])
 
   const normalizeStudentPackages = (student) => {
     if (
@@ -316,27 +437,52 @@ function Payments({
   )
 
   const packageFinancialRecords = useMemo(
-    () =>
-      studentPackageRecords.map((packageRecord) => {
-        const dueRecord = findCurrentDueRecord(
-          packageRecord,
-          payments
+    () => {
+      if (!paymentForm.studentPackageId) {
+        return []
+      }
+
+      return studentPackageRecords
+        .filter(
+          (packageRecord) =>
+            String(
+              packageRecord.studentPackageId
+            ) ===
+            String(
+              paymentForm.studentPackageId
+            )
         )
+        .map((packageRecord) => {
+          const dueRecord =
+            findCurrentDueRecord(
+              packageRecord,
+              payments
+            )
 
-        const dueStatus = getDueStatus({
-          dueDate: dueRecord.dueDate,
-          expectedAmount: dueRecord.expectedAmount,
-          collectedAmount: dueRecord.collectedAmount,
-          todayKey: today
+          const dueStatus =
+            getDueStatus({
+              dueDate:
+                dueRecord.dueDate,
+              expectedAmount:
+                dueRecord.expectedAmount,
+              collectedAmount:
+                dueRecord.collectedAmount,
+              todayKey: today
+            })
+
+          return {
+            ...packageRecord,
+            ...dueRecord,
+            dueStatus
+          }
         })
-
-        return {
-          ...packageRecord,
-          ...dueRecord,
-          dueStatus
-        }
-      }),
-    [studentPackageRecords, payments, today]
+    },
+    [
+      studentPackageRecords,
+      paymentForm.studentPackageId,
+      payments,
+      today
+    ]
   )
 
   const selectedStudent = students.find(
@@ -355,6 +501,64 @@ function Payments({
         String(packageItem.studentPackageId) ===
         String(paymentForm.studentPackageId)
     )
+
+  useEffect(() => {
+    const studentPackageId =
+      paymentForm.studentPackageId
+
+    if (!studentPackageId) {
+      setPayments([])
+      setPaymentContextError('')
+      setPaymentContextLoading(false)
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadSelectedPackagePayments =
+      async () => {
+        setPaymentContextLoading(true)
+        setPaymentContextError('')
+
+        try {
+          const result =
+            await getPaymentsByStudentPackage(
+              studentPackageId
+            )
+
+          if (isMounted) {
+            setPayments(result)
+          }
+        } catch (error) {
+          console.error(
+            'Seçilen paket tahsilatları alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            setPayments([])
+            setPaymentContextError(
+              error instanceof Error
+                ? error.message
+                : 'Seçilen paket tahsilatları alınamadı.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setPaymentContextLoading(false)
+          }
+        }
+      }
+
+    loadSelectedPackagePayments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    paymentForm.studentPackageId,
+    paymentContextReloadKey
+  ])
 
   const selectedPackageRecord =
     packageFinancialRecords.find(
@@ -629,16 +833,26 @@ function Payments({
       ]
 
       setPayments(updatedPayments)
+      setMovementReloadKey(
+        (current) => current + 1
+      )
+
+      setPaymentContextReloadKey(
+        (current) => current + 1
+      )
 
       await updateStoredNextPaymentDate(
         selectedStudentPackage.studentPackageId,
         updatedPayments
       )
 
-      setPaymentForm({
+      setPaymentForm((current) => ({
         ...emptyPaymentForm,
+        studentId: current.studentId,
+        studentPackageId:
+          current.studentPackageId,
         paymentDate: today
-      })
+      }))
 
       updatePaymentFormDirty(false)
     } catch (error) {
@@ -657,8 +871,104 @@ function Payments({
     }
   }
 
+  const formatDateInputValue = (date) => {
+    const year = date.getFullYear()
+    const month = String(
+      date.getMonth() + 1
+    ).padStart(2, '0')
+    const day = String(
+      date.getDate()
+    ).padStart(2, '0')
+
+    return `${year}-${month}-${day}`
+  }
+
+  const applyQuickDateFilter = (rangeName) => {
+    const currentDate = new Date(
+      `${today}T12:00:00`
+    )
+
+    let startDate = ''
+    let endDate = ''
+
+    if (rangeName === 'today') {
+      startDate = today
+      endDate = today
+    }
+
+    if (rangeName === 'thisWeek') {
+      const dayOfWeek =
+        currentDate.getDay() || 7
+
+      const weekStart =
+        new Date(currentDate)
+
+      weekStart.setDate(
+        currentDate.getDate() -
+          dayOfWeek +
+          1
+      )
+
+      startDate =
+        formatDateInputValue(
+          weekStart
+        )
+      endDate = today
+    }
+
+    if (rangeName === 'thisMonth') {
+      const monthStart =
+        new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          1
+        )
+
+      startDate =
+        formatDateInputValue(
+          monthStart
+        )
+      endDate = today
+    }
+
+    if (rangeName === 'lastMonth') {
+      const lastMonthStart =
+        new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth() - 1,
+          1
+        )
+
+      const lastMonthEnd =
+        new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          0
+        )
+
+      startDate =
+        formatDateInputValue(
+          lastMonthStart
+        )
+      endDate =
+        formatDateInputValue(
+          lastMonthEnd
+        )
+    }
+
+    setMovementPage(1)
+
+    setFilters((current) => ({
+      ...current,
+      startDate,
+      endDate
+    }))
+  }
+
   const handleFilterChange = (event) => {
     const { name, value } = event.target
+
+    setMovementPage(1)
 
     setFilters((current) => ({
       ...current,
@@ -666,7 +976,35 @@ function Payments({
     }))
   }
 
-  const clearFilters = () => setFilters(emptyFilters)
+  const clearFilters = () => {
+    setFilters(emptyFilters)
+    setMovementPage(1)
+  }
+
+  const togglePaymentDetails = (paymentId) => {
+    setExpandedPaymentId((current) =>
+      String(current) === String(paymentId)
+        ? null
+        : paymentId
+    )
+  }
+
+  const formatDateTime = (value) => {
+    if (!value) {
+      return '-'
+    }
+
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) {
+      return '-'
+    }
+
+    return date.toLocaleString('tr-TR', {
+      dateStyle: 'short',
+      timeStyle: 'short'
+    })
+  }
 
   const performStartEditPayment = (payment) => {
     setEditingPaymentId(payment.id)
@@ -810,6 +1148,13 @@ function Payments({
       )
 
       setPayments(updatedPayments)
+      setMovementReloadKey(
+        (current) => current + 1
+      )
+
+      setPaymentContextReloadKey(
+        (current) => current + 1
+      )
 
       await updateStoredNextPaymentDate(
         studentPackageId,
@@ -863,6 +1208,13 @@ function Payments({
       )
 
       setPayments(updatedPayments)
+      setMovementReloadKey(
+        (current) => current + 1
+      )
+
+      setPaymentContextReloadKey(
+        (current) => current + 1
+      )
 
       await updateStoredNextPaymentDate(
         getPaymentStudentPackageId(payment),
@@ -961,204 +1313,92 @@ function Payments({
     }
   }
 
-  const filteredPayments = payments
-    .filter((payment) => {
-      if (!isActivePayment(payment)) {
-        return false
+  const movementTotalPages = Math.max(
+    1,
+    Math.ceil(
+      movementTotal /
+        movementPageSize
+    )
+  )
+
+  const movementFirstRecord =
+    movementTotal === 0
+      ? 0
+      : (movementPage - 1) *
+          movementPageSize +
+        1
+
+  const movementLastRecord =
+    Math.min(
+      movementPage *
+        movementPageSize,
+      movementTotal
+    )
+
+  const movementPaginationItems =
+    useMemo(() => {
+      if (movementTotalPages <= 7) {
+        return Array.from(
+          {
+            length:
+              movementTotalPages
+          },
+          (_, index) =>
+            index + 1
+        )
       }
-      const paymentDate = getPaymentDate(payment)
-      const record = getFinancialRecordForPayment(
-        payment
+
+      const items = [1]
+      const startPage = Math.max(
+        2,
+        movementPage - 1
       )
-      const status =
-        getCollectionStatus(record).filterValue
-
-      return (
-        matchesSearchQuery(
-          [
-            payment.studentName,
-            payment.packageName,
-            payment.teacher,
-            payment.referenceNumber,
-            formatPeriod(getPaymentPeriod(payment))
-          ],
-          filters.searchText
-        ) &&
-        (filters.status === '' ||
-          status === filters.status) &&
-        (filters.paymentMethod === '' ||
-          payment.paymentMethod ===
-            filters.paymentMethod) &&
-        (filters.startDate === '' ||
-          paymentDate >= filters.startDate) &&
-        (filters.endDate === '' ||
-          paymentDate <= filters.endDate)
+      const endPage = Math.min(
+        movementTotalPages - 1,
+        movementPage + 1
       )
-    })
-    .sort((firstPayment, secondPayment) => {
-      if (sortOption === 'newest') {
-        return getPaymentDate(secondPayment).localeCompare(
-          getPaymentDate(firstPayment)
-        )
+
+      if (startPage > 2) {
+        items.push('start-ellipsis')
       }
 
-      if (sortOption === 'oldest') {
-        return getPaymentDate(firstPayment).localeCompare(
-          getPaymentDate(secondPayment)
-        )
+      for (
+        let pageNumber = startPage;
+        pageNumber <= endPage;
+        pageNumber += 1
+      ) {
+        items.push(pageNumber)
       }
-
-      if (sortOption === 'studentAsc') {
-        return String(
-          firstPayment.studentName || ''
-        ).localeCompare(
-          String(secondPayment.studentName || ''),
-          'tr'
-        )
-      }
-
-      if (sortOption === 'studentDesc') {
-        return String(
-          secondPayment.studentName || ''
-        ).localeCompare(
-          String(firstPayment.studentName || ''),
-          'tr'
-        )
-      }
-
-      if (sortOption === 'amountDesc') {
-        return (
-          getPaymentAmount(secondPayment) -
-          getPaymentAmount(firstPayment)
-        )
-      }
-
-      if (sortOption === 'amountAsc') {
-        return (
-          getPaymentAmount(firstPayment) -
-          getPaymentAmount(secondPayment)
-        )
-      }
-
-      return 0
-    })
-
-  const currentMonthKey = today.slice(0, 7)
-  const currentMonthLabel = formatPeriod(currentMonthKey)
-
-  /*
-   * Bu tablo yalnızca içinde bulunduğumuz ayda gerçekten
-   * tahsilat yapılmış öğrenci-paket dönemlerini gösterir.
-   * Aynı dönem için birden fazla ödeme varsa tek satırda
-   * birleştirilir ve bu ay alınan toplam tutar gösterilir.
-   */
-  const monthlyCollectedRecords = (() => {
-    const groupedRecords = new Map()
-
-    payments.forEach((payment) => {
-      if (!isActivePayment(payment)) {
-        return
-      }
-
-      const paymentDate = getPaymentDate(payment)
 
       if (
-        !paymentDate ||
-        paymentDate.slice(0, 7) !== currentMonthKey
+        endPage <
+        movementTotalPages - 1
       ) {
-        return
+        items.push('end-ellipsis')
       }
 
-      const studentPackageId =
-        getPaymentStudentPackageId(payment)
-      const period = getPaymentPeriod(payment)
-      const groupKey = `${studentPackageId}-${period}`
-      const amount = getPaymentAmount(payment)
-      const existingRecord = groupedRecords.get(groupKey)
-
-      if (existingRecord) {
-        existingRecord.currentMonthCollectedAmount += amount
-        existingRecord.transactionCount += 1
-
-        if (
-          paymentDate > existingRecord.lastPaymentDate
-        ) {
-          existingRecord.lastPaymentDate = paymentDate
-        }
-
-        return
-      }
-
-      const financialRecord =
-        getFinancialRecordForPayment(payment)
-      const expectedAmount = Number(
-        financialRecord?.expectedAmount ??
-          payment.packagePrice ??
-          0
-      )
-      const collectedAmount = Number(
-        financialRecord?.collectedAmount ?? amount
-      )
-      const remainingAmount = Math.max(
-        0,
-        expectedAmount - collectedAmount
+      items.push(
+        movementTotalPages
       )
 
-      groupedRecords.set(groupKey, {
-        groupKey,
-        studentPackageId,
-        studentName:
-          payment.studentName || 'Öğrenci',
-        packageName:
-          payment.packageName || 'Tanımsız Paket',
-        period,
-        lastPaymentDate: paymentDate,
-        expectedAmount,
-        collectedAmount,
-        currentMonthCollectedAmount: amount,
-        remainingAmount,
-        transactionCount: 1,
-        collectionStatus: getCollectionStatus({
-          remainingAmount
-        })
-      })
-    })
+      return items
+    }, [
+      movementPage,
+      movementTotalPages
+    ])
 
-    return [...groupedRecords.values()].sort(
-      (firstRecord, secondRecord) =>
-        secondRecord.lastPaymentDate.localeCompare(
-          firstRecord.lastPaymentDate
-        )
-    )
-  })()
+  /*
+   * Finansal özet artık yalnızca seçilen öğrenci-paket
+   * kaydı üzerinden hesaplanmaktadır. Tüm öğrencilerin
+   * tahsilat geçmişi bu ekran açılırken yüklenmez.
+   */
 
-  const totalReceivable =
-    packageFinancialRecords.reduce(
-      (total, record) =>
-        total + Number(record.expectedAmount || 0),
-      0
-    )
-
-  const totalCollected =
-    packageFinancialRecords.reduce(
-      (total, record) =>
-        total + Number(record.collectedAmount || 0),
-      0
-    )
-
-  const totalRemaining =
-    packageFinancialRecords.reduce(
-      (total, record) =>
-        total + Number(record.remainingAmount || 0),
-      0
-    )
-
-  const criticalOverdueCount =
-    packageFinancialRecords.filter(
-      (record) =>
-        record.remainingAmount > 0 &&
-        record.dueStatus.filterValue === 'Gecikti'
-    ).length
+  const editingPayment =
+    movementPayments.find(
+      (payment) =>
+        String(payment.id) ===
+        String(editingPaymentId)
+    ) ?? null
 
   return (
     <div className="dashboard-shell">
@@ -1178,22 +1418,22 @@ function Payments({
       <section className="payment-metric-grid">
         <div className="payment-metric-card blue">
           <span>Bu Dönem Beklenen</span>
-          <h3>₺{formatPrice(totalReceivable)}</h3>
+          <h3>₺{formatPrice(selectedPackagePrice)}</h3>
         </div>
 
         <div className="payment-metric-card green">
           <span>Bu Dönem Tahsil Edilen</span>
-          <h3>₺{formatPrice(totalCollected)}</h3>
+          <h3>₺{formatPrice(selectedCollectedAmount)}</h3>
         </div>
 
         <div className="payment-metric-card red">
           <span>Bu Dönem Kalan</span>
-          <h3>₺{formatPrice(totalRemaining)}</h3>
+          <h3>₺{formatPrice(selectedRemainingDebt)}</h3>
         </div>
 
         <div className="payment-metric-card gray">
           <span>Kritik Gecikme</span>
-          <h3>{criticalOverdueCount}</h3>
+          <h3>{selectedPackageRecord?.dueStatus?.filterValue === 'Gecikti' ? 1 : 0}</h3>
         </div>
       </section>
 
@@ -1429,90 +1669,6 @@ function Payments({
       </section>
 
       <section className="lesson-table-card payment-list-card">
-        <div className="table-head payment-list-head">
-          <div>
-            <h2>Bu Ay Alınan Ödemeler</h2>
-            <p>
-              {currentMonthLabel} ayında tahsilat yapılan
-              öğrenci paketlerinin özeti
-            </p>
-          </div>
-          <button
-            type="button"
-            className="lesson-count"
-          >
-            {monthlyCollectedRecords.length} kayıt
-          </button>
-        </div>
-
-        <div className="payment-table-wrapper">
-          <table className="lesson-table payment-table monthly-payment-table">
-            <thead>
-              <tr>
-                <th>Öğrenci</th>
-                <th>Paket</th>
-                <th>Dönem</th>
-                <th>Son Tahsilat</th>
-                <th>Beklenen</th>
-                <th>Bu Ay Alınan</th>
-                <th>Kalan</th>
-                <th>Durum</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyCollectedRecords.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan="8"
-                    className="empty-table"
-                  >
-                    Bu ay henüz tahsilat kaydı
-                    bulunmamaktadır.
-                  </td>
-                </tr>
-              ) : (
-                monthlyCollectedRecords.map((record) => (
-                  <tr key={record.groupKey}>
-                    <td>{record.studentName}</td>
-                    <td>{record.packageName}</td>
-                    <td>
-                      {formatPeriod(record.period)}
-                    </td>
-                    <td>
-                      {formatDate(record.lastPaymentDate)}
-                      {record.transactionCount > 1 && (
-                        <small className="payment-status-detail">
-                          {record.transactionCount} tahsilat işlemi
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      ₺{formatPrice(record.expectedAmount)}
-                    </td>
-                    <td>
-                      ₺{formatPrice(
-                        record.currentMonthCollectedAmount
-                      )}
-                    </td>
-                    <td>
-                      ₺{formatPrice(record.remainingAmount)}
-                    </td>
-                    <td>
-                      <span
-                        className={`payment-status ${record.collectionStatus.className}`}
-                      >
-                        {record.collectionStatus.label}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="lesson-table-card payment-list-card">
         <div className="payment-list-top">
           <div className="payment-filter-header">
             <div>
@@ -1529,6 +1685,57 @@ function Payments({
             >
               Filtreleri Temizle
             </button>
+          </div>
+
+          <div className="payment-quick-date-row">
+            <span>Hızlı Tarih</span>
+
+            <div className="payment-quick-date-buttons">
+              <button
+                type="button"
+                onClick={() =>
+                  applyQuickDateFilter('today')
+                }
+              >
+                Bugün
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyQuickDateFilter('thisWeek')
+                }
+              >
+                Bu Hafta
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyQuickDateFilter('thisMonth')
+                }
+              >
+                Bu Ay
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyQuickDateFilter('lastMonth')
+                }
+              >
+                Geçen Ay
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyQuickDateFilter('all')
+                }
+              >
+                Tüm Zamanlar
+              </button>
+            </div>
           </div>
 
           <div className="payment-filter-grid">
@@ -1613,9 +1820,12 @@ function Payments({
               <label>Sırala</label>
               <select
                 value={sortOption}
-                onChange={(event) =>
-                  setSortOption(event.target.value)
-                }
+                onChange={(event) => {
+                  setSortOption(
+                    event.target.value
+                  )
+                  setMovementPage(1)
+                }}
               >
                 <option value="newest">
                   En yeni tarih
@@ -1637,11 +1847,30 @@ function Payments({
                 </option>
               </select>
             </div>
+            <div className="payment-page-size-box">
+              <label>Sayfa başına</label>
+              <select
+                value={movementPageSize}
+                onChange={(event) => {
+                  setMovementPageSize(
+                    Number(
+                      event.target.value
+                    )
+                  )
+                  setMovementPage(1)
+                }}
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+
             <button
               className="lesson-count"
               type="button"
             >
-              {filteredPayments.length} kayıt
+              {movementTotal} kayıt
             </button>
           </div>
         </div>
@@ -1651,22 +1880,38 @@ function Payments({
             <thead>
               <tr>
                 <th>Öğrenci</th>
-                <th>Paket</th>
-                <th>Dönem</th>
-                <th>Alınan Tutar</th>
+                <th>Paket / Dönem</th>
+                <th>Ödeme Özeti</th>
                 <th>Tahsilat Tarihi</th>
                 <th>Ödeme Yöntemi</th>
-                <th>Dekont No</th>
-                <th>Ödeme Durumu</th>
+                <th>Durum</th>
                 <th>İşlem</th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredPayments.length === 0 ? (
+              {movementLoading ? (
                 <tr>
                   <td
-                    colSpan="9"
+                    colSpan="7"
+                    className="empty-table"
+                  >
+                    Tahsilat hareketleri yükleniyor...
+                  </td>
+                </tr>
+              ) : movementError ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="empty-table"
+                  >
+                    {movementError}
+                  </td>
+                </tr>
+              ) : movementPayments.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan="7"
                     className="empty-table"
                   >
                     Filtrelere uygun tahsilat
@@ -1674,89 +1919,77 @@ function Payments({
                   </td>
                 </tr>
               ) : (
-                filteredPayments.map((payment) => {
-                  const financialRecord =
-                    getFinancialRecordForPayment(
-                      payment
-                    )
+                movementPayments.map((payment) => {
                   const status =
-                    getCollectionStatus(financialRecord)
+                    payment.collectionStatus ===
+                    'Tamamlandı'
+                      ? {
+                          label: 'Tamamlandı',
+                          className: 'paid'
+                        }
+                      : {
+                          label: 'Kısmi Ödeme',
+                          className: 'partial'
+                        }
 
                   return (
-                    <tr key={payment.id}>
+                    <Fragment key={payment.id}>
+                      <tr>
                       <td>{payment.studentName}</td>
-                      <td>{payment.packageName}</td>
                       <td>
-                        {formatPeriod(
-                          getPaymentPeriod(payment)
+                        <div className="payment-package-period">
+                          <strong>
+                            {payment.packageName}
+                          </strong>
+                          <small>
+                            {formatPeriod(
+                              getPaymentPeriod(payment)
+                            )}
+                          </small>
+                        </div>
+                      </td>
+
+                      <td>
+                        <div className="payment-amount-summary">
+                          <span>
+                            <small>Beklenen</small>
+                            <strong>
+                              ₺{formatPrice(
+                                payment.packagePrice
+                              )}
+                            </strong>
+                          </span>
+
+                          <span>
+                            <small>Alınan</small>
+                            <strong>
+                              ₺{formatPrice(
+                                getPaymentAmount(payment)
+                              )}
+                            </strong>
+                          </span>
+
+                          <span>
+                            <small>Güncel Kalan</small>
+                            <strong>
+                              ₺{formatPrice(
+                                payment.remainingAmount
+                              )}
+                            </strong>
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>
+                        {formatDate(
+                          getPaymentDate(payment)
                         )}
                       </td>
+
                       <td>
-                        {String(editingPaymentId) ===
-                        String(payment.id) ? (
-                          <input
-                            className="table-edit-input"
-                            type="number"
-                            name="amount"
-                            value={editForm.amount}
-                            onChange={handleEditChange}
-                            min="0.01"
-                            step="0.01"
-                          />
-                        ) : (
-                          `₺${formatPrice(
-                            getPaymentAmount(payment)
-                          )}`
-                        )}
+                        {payment.paymentMethod || '-'}
                       </td>
-                      <td>
-                        {String(editingPaymentId) ===
-                        String(payment.id) ? (
-                          <input
-                            className="table-edit-input"
-                            type="date"
-                            name="paymentDate"
-                            value={editForm.paymentDate}
-                            onChange={handleEditChange}
-                          />
-                        ) : (
-                          formatDate(
-                            getPaymentDate(payment)
-                          )
-                        )}
-                      </td>
-                      <td>
-                        {String(editingPaymentId) ===
-                        String(payment.id) ? (
-                          <select
-                            className="table-edit-input"
-                            name="paymentMethod"
-                            value={editForm.paymentMethod}
-                            onChange={handleEditChange}
-                          >
-                            <option value="">
-                              Seçiniz
-                            </option>
-                            <option value="Nakit">
-                              Nakit
-                            </option>
-                            <option value="Havale / EFT">
-                              Havale / EFT
-                            </option>
-                            <option value="Kredi Kartı">
-                              Kredi Kartı
-                            </option>
-                            <option value="Banka Kartı">
-                              Banka Kartı
-                            </option>
-                          </select>
-                        ) : (
-                          payment.paymentMethod || '-'
-                        )}
-                      </td>
-                      <td>
-                        {payment.referenceNumber || '-'}
-                      </td>
+
                       <td>
                         <span
                           className={`payment-status ${status.className}`}
@@ -1765,71 +1998,315 @@ function Payments({
                         </span>
                       </td>
                       <td>
-                        {String(editingPaymentId) ===
-                        String(payment.id) ? (
-                          <div className="payment-action-row">
-                            <button
-                              type="button"
-                              className="save-mini-button"
-                              onClick={() =>
-                                saveEditPayment(payment)
-                              }
-                              disabled={
-                                String(updatingPaymentId) ===
-                                String(payment.id)
-                              }
-                            >
-                              {String(updatingPaymentId) ===
+                        <div className="payment-action-row">
+                          <button
+                            type="button"
+                            className="detail-mini-button"
+                            onClick={() =>
+                              togglePaymentDetails(payment.id)
+                            }
+                          >
+                            {String(expandedPaymentId) ===
+                            String(payment.id)
+                              ? 'Kapat'
+                              : 'Detay'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="edit-mini-button"
+                            onClick={() =>
+                              startEditPayment(payment)
+                            }
+                          >
+                            Düzenle
+                          </button>
+
+                          <button
+                            type="button"
+                            className="delete-button"
+                            onClick={() =>
+                              deletePayment(payment)
+                            }
+                            disabled={
+                              String(deletingPaymentId) ===
                               String(payment.id)
-                                ? 'Kaydediliyor...'
-                                : 'Kaydet'}
-                            </button>
-                            <button
-                              type="button"
-                              className="cancel-mini-button"
-                              onClick={cancelEditPayment}
-                            >
-                              İptal
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="payment-action-row">
-                            <button
-                              type="button"
-                              className="edit-mini-button"
-                              onClick={() =>
-                                startEditPayment(payment)
-                              }
-                            >
-                              Düzenle
-                            </button>
-                            <button
-                              type="button"
-                              className="delete-button"
-                              onClick={() =>
-                                deletePayment(payment)
-                              }
-                              disabled={
-                                String(deletingPaymentId) ===
-                                String(payment.id)
-                              }
-                            >
-                              {String(deletingPaymentId) ===
-                              String(payment.id)
-                                ? 'Siliniyor...'
-                                : 'Sil'}
-                            </button>
-                          </div>
-                        )}
+                            }
+                          >
+                            {String(deletingPaymentId) ===
+                            String(payment.id)
+                              ? 'Siliniyor...'
+                              : 'Sil'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
+
+                    {String(expandedPaymentId) ===
+                      String(payment.id) && (
+                      <tr className="payment-detail-row">
+                        <td colSpan="7">
+                          <div className="payment-detail-panel">
+                            <div>
+                              <small>Dekont / İşlem No</small>
+                              <strong>
+                                {payment.referenceNumber || '-'}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <small>Öğretmen</small>
+                              <strong>
+                                {payment.teacherName || '-'}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <small>Oluşturulma</small>
+                              <strong>
+                                {formatDateTime(payment.createdAt)}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <small>Son Güncelleme</small>
+                              <strong>
+                                {formatDateTime(payment.updatedAt)}
+                              </strong>
+                            </div>
+
+                            <div className="payment-detail-note">
+                              <small>Not</small>
+                              <strong>
+                                {payment.note || '-'}
+                              </strong>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })
               )}
             </tbody>
           </table>
         </div>
+
+        <div className="payment-pagination">
+          <div className="payment-pagination-summary">
+            {movementTotal === 0
+              ? 'Gösterilecek kayıt yok'
+              : `${movementFirstRecord}–${movementLastRecord} / ${movementTotal} kayıt`}
+          </div>
+
+          <div className="payment-pagination-controls">
+            <button
+              type="button"
+              className="payment-pagination-button"
+              onClick={() =>
+                setMovementPage(
+                  (current) =>
+                    Math.max(
+                      1,
+                      current - 1
+                    )
+                )
+              }
+              disabled={
+                movementPage === 1 ||
+                movementLoading
+              }
+            >
+              Önceki
+            </button>
+
+            {movementPaginationItems.map(
+              (item) =>
+                typeof item === 'number' ? (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`payment-pagination-button payment-page-number ${
+                      movementPage === item
+                        ? 'active'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      setMovementPage(item)
+                    }
+                    disabled={
+                      movementLoading
+                    }
+                  >
+                    {item}
+                  </button>
+                ) : (
+                  <span
+                    key={item}
+                    className="payment-pagination-ellipsis"
+                  >
+                    …
+                  </span>
+                )
+            )}
+
+            <button
+              type="button"
+              className="payment-pagination-button"
+              onClick={() =>
+                setMovementPage(
+                  (current) =>
+                    Math.min(
+                      movementTotalPages,
+                      current + 1
+                    )
+                )
+              }
+              disabled={
+                movementPage ===
+                  movementTotalPages ||
+                movementLoading ||
+                movementTotal === 0
+              }
+            >
+              Sonraki
+            </button>
+          </div>
+        </div>
       </section>
+      {editingPaymentId &&
+        editForm &&
+        editingPayment && (
+        <div
+          className="payment-edit-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              cancelEditPayment()
+            }
+          }}
+        >
+          <div
+            className="payment-edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-edit-title"
+          >
+            <div className="payment-edit-modal-heading">
+              <div>
+                <span>Tahsilat Düzenle</span>
+                <h2 id="payment-edit-title">
+                  {editingPayment.studentName}
+                </h2>
+                <p>
+                  {editingPayment.packageName}
+                  {' · '}
+                  {formatPeriod(
+                    getPaymentPeriod(editingPayment)
+                  )}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="payment-modal-close-button"
+                onClick={cancelEditPayment}
+                aria-label="Düzenleme penceresini kapat"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="payment-edit-modal-grid">
+              <div className="form-group">
+                <label>Alınan Tutar</label>
+                <input
+                  type="number"
+                  name="amount"
+                  value={editForm.amount}
+                  onChange={handleEditChange}
+                  min="0.01"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Tahsilat Tarihi</label>
+                <input
+                  type="date"
+                  name="paymentDate"
+                  value={editForm.paymentDate}
+                  onChange={handleEditChange}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Ödeme Yöntemi</label>
+                <select
+                  name="paymentMethod"
+                  value={editForm.paymentMethod}
+                  onChange={handleEditChange}
+                >
+                  <option value="">Seçiniz</option>
+                  <option value="Nakit">Nakit</option>
+                  <option value="Havale / EFT">Havale / EFT</option>
+                  <option value="Kredi Kartı">Kredi Kartı</option>
+                  <option value="Banka Kartı">Banka Kartı</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Dekont / İşlem Numarası</label>
+                <input
+                  name="referenceNumber"
+                  value={editForm.referenceNumber}
+                  onChange={handleEditChange}
+                  placeholder="İsteğe bağlı"
+                />
+              </div>
+
+              <div className="form-group full-width">
+                <label>Not</label>
+                <textarea
+                  name="note"
+                  value={editForm.note}
+                  onChange={handleEditChange}
+                  placeholder="Tahsilatla ilgili açıklama"
+                />
+              </div>
+            </div>
+
+            <div className="payment-edit-modal-actions">
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={cancelEditPayment}
+              >
+                İptal
+              </button>
+
+              <button
+                type="button"
+                className="save-button"
+                onClick={() =>
+                  saveEditPayment(editingPayment)
+                }
+                disabled={
+                  String(updatingPaymentId) ===
+                  String(editingPayment.id)
+                }
+              >
+                {String(updatingPaymentId) ===
+                String(editingPayment.id)
+                  ? 'Kaydediliyor...'
+                  : 'Değişiklikleri Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

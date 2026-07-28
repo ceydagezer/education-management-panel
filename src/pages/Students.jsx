@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
 
 import {
@@ -7,6 +7,9 @@ import {
 
 import {
   createStudent,
+  getStudentById,
+  getStudentListCounts,
+  getStudentsPage,
   reactivateStudent,
   setStudentPassive,
   updateStudent
@@ -26,9 +29,12 @@ import {
 import {
   getPaymentAmount,
   getPaymentDate,
-  getPaymentPeriod,
-  isActivePayment
+  getPaymentPeriod
 } from '../utils/paymentSchedule'
+
+import {
+  getStudentPaymentCount
+} from '../services/paymentService'
 
 import {
   areIdsEqual,
@@ -54,9 +60,7 @@ function Students({
   lessonPlans = [],
   packages = [],
   teachers = [],
-  payments = [],
   setLessonPlans,
-  setPayments,
   unsavedChanges,
   onUnsavedChangesChange,
   requestUnsavedAction
@@ -131,6 +135,72 @@ function Students({
     useState(false)
 
   const [statusFilter, setStatusFilter] = useState('active')
+
+  const [
+    studentListRows,
+    setStudentListRows
+  ] = useState([])
+
+  const [
+    studentListTotal,
+    setStudentListTotal
+  ] = useState(0)
+
+  const [
+    studentListCounts,
+    setStudentListCounts
+  ] = useState({
+    active: 0,
+    passive: 0,
+    archived: 0,
+    review: 0,
+    all: 0
+  })
+
+  const [
+    studentListSearch,
+    setStudentListSearch
+  ] = useState('')
+
+  const [
+    studentListPackageId,
+    setStudentListPackageId
+  ] = useState('')
+
+  const [
+    studentListTeacherId,
+    setStudentListTeacherId
+  ] = useState('')
+
+  const [
+    studentListSort,
+    setStudentListSort
+  ] = useState('newest')
+
+  const [
+    studentListPage,
+    setStudentListPage
+  ] = useState(1)
+
+  const [
+    studentListPageSize,
+    setStudentListPageSize
+  ] = useState(10)
+
+  const [
+    studentListLoading,
+    setStudentListLoading
+  ] = useState(false)
+
+  const [
+    studentListError,
+    setStudentListError
+  ] = useState('')
+
+  const [
+    studentListReloadKey,
+    setStudentListReloadKey
+  ] = useState(0)
   const [isCreatingPdf, setIsCreatingPdf] = useState(false)
   const [isSavingStudent, setIsSavingStudent] = useState(false)
   const [changingStudentStatus, setChangingStudentStatus] = useState(false)
@@ -419,32 +489,12 @@ function Students({
           normalizeStatusText(student.fullName)
     )
 
-  const getStudentPayments = (student) =>
-    payments.filter(
-      (payment) =>
-        isActivePayment(payment) &&
-        (
-          areIdsEqual(
-            payment.studentId,
-            student.id
-          ) ||
-          normalizeStatusText(
-            payment.studentName
-          ) ===
-            normalizeStatusText(
-              student.fullName
-            )
-        )
-    )
-
   const getDeletionBlockers = (student) => {
     const blockers = []
     const packageCount =
       normalizeStudentPackages(student).length
     const lessonCount =
       getStudentLessons(student).length
-    const paymentCount =
-      getStudentPayments(student).length
 
     if (packageCount > 0) {
       blockers.push(`${packageCount} paket kaydı`)
@@ -454,9 +504,6 @@ function Students({
       blockers.push(`${lessonCount} ders kaydı`)
     }
 
-    if (paymentCount > 0) {
-      blockers.push(`${paymentCount} tahsilat kaydı`)
-    }
 
     return blockers
   }
@@ -464,40 +511,222 @@ function Students({
   const canPermanentlyDeleteStudent = (student) =>
     getDeletionBlockers(student).length === 0
 
-  const activeStudentCount =
-    students.filter(isStudentActive).length
-
-  const passiveStudentCount =
-    students.filter(isStudentPassive).length
-
-  const archivedStudentCount =
-    students.filter(isArchivedStudent).length
-
-  const reviewStudentCount =
-    students.filter(isRetentionReviewDue).length
-
-  const filteredStudents = students.filter((student) => {
-    if (statusFilter === 'active') {
-      return isStudentActive(student)
+  useEffect(() => {
+    if (studentView !== 'list') {
+      return undefined
     }
 
-    if (statusFilter === 'passive') {
-      return isStudentPassive(student)
-    }
+    let isMounted = true
 
-    if (statusFilter === 'archived') {
-      return (
-        isArchivedStudent(student) &&
-        !isRetentionReviewDue(student)
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setStudentListLoading(true)
+          setStudentListError('')
+
+          try {
+            const [
+              pageResult,
+              countsResult
+            ] = await Promise.all([
+              getStudentsPage({
+                page:
+                  studentListPage,
+                pageSize:
+                  studentListPageSize,
+                status:
+                  statusFilter,
+                searchText:
+                  studentListSearch,
+                packageId:
+                  studentListPackageId,
+                teacherId:
+                  studentListTeacherId,
+                sortOption:
+                  studentListSort
+              }),
+              getStudentListCounts()
+            ])
+
+            if (!isMounted) {
+              return
+            }
+
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  pageResult.total /
+                    studentListPageSize
+                )
+              )
+
+            if (
+              studentListPage >
+              totalPages
+            ) {
+              setStudentListPage(
+                totalPages
+              )
+              return
+            }
+
+            setStudentListRows(
+              pageResult.data
+            )
+            setStudentListTotal(
+              pageResult.total
+            )
+            setStudentListCounts(
+              countsResult
+            )
+          } catch (error) {
+            console.error(
+              'Öğrenci listesi alınamadı:',
+              error
+            )
+
+            if (isMounted) {
+              setStudentListError(
+                error instanceof Error
+                  ? error.message
+                  : 'Öğrenci listesi alınamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setStudentListLoading(false)
+            }
+          }
+        },
+        studentListSearch.trim()
+          ? 350
+          : 0
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(
+        timeoutId
       )
     }
+  }, [
+    studentView,
+    statusFilter,
+    studentListPage,
+    studentListPageSize,
+    studentListSearch,
+    studentListPackageId,
+    studentListTeacherId,
+    studentListSort,
+    studentListReloadKey
+  ])
 
-    if (statusFilter === 'review') {
-      return isRetentionReviewDue(student)
+  const studentListTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        studentListTotal /
+          studentListPageSize
+      )
+    )
+
+  const studentListFirstRecord =
+    studentListTotal === 0
+      ? 0
+      : (
+          studentListPage -
+          1
+        ) *
+          studentListPageSize +
+        1
+
+  const studentListLastRecord =
+    Math.min(
+      studentListPage *
+        studentListPageSize,
+      studentListTotal
+    )
+
+  const studentListPageItems =
+    useMemo(() => {
+      if (
+        studentListTotalPages <= 7
+      ) {
+        return Array.from(
+          {
+            length:
+              studentListTotalPages
+          },
+          (_, index) =>
+            index + 1
+        )
+      }
+
+      const items = [1]
+
+      const startPage =
+        Math.max(
+          2,
+          studentListPage - 1
+        )
+
+      const endPage =
+        Math.min(
+          studentListTotalPages - 1,
+          studentListPage + 1
+        )
+
+      if (startPage > 2) {
+        items.push(
+          'start-ellipsis'
+        )
+      }
+
+      for (
+        let pageNumber =
+          startPage;
+        pageNumber <= endPage;
+        pageNumber += 1
+      ) {
+        items.push(
+          pageNumber
+        )
+      }
+
+      if (
+        endPage <
+        studentListTotalPages - 1
+      ) {
+        items.push(
+          'end-ellipsis'
+        )
+      }
+
+      items.push(
+        studentListTotalPages
+      )
+
+      return items
+    }, [
+      studentListPage,
+      studentListTotalPages
+    ])
+
+  const changeStudentStatusFilter =
+    (nextStatus) => {
+      setStatusFilter(nextStatus)
+      setStudentListPage(1)
     }
 
-    return true
-  })
+  const clearStudentListFilters =
+    () => {
+      setStudentListSearch('')
+      setStudentListPackageId('')
+      setStudentListTeacherId('')
+      setStudentListSort('newest')
+      setStudentListPage(1)
+    }
 
   const isPackageActive = (item) =>
     item?.isActive !== false &&
@@ -755,6 +984,10 @@ function Students({
    * Paket ayrıntıları öğrenci detay ekranında korunur.
    */
   const getInstrumentsText = (student) => {
+    if (student?.instrumentsText) {
+      return student.instrumentsText
+    }
+
     const activeItems = getActiveStudentPackages(student)
     const items = activeItems.length
       ? activeItems
@@ -774,6 +1007,10 @@ function Students({
   }
 
   const getTeachersText = (student) => {
+    if (student?.teachersText) {
+      return student.teachersText
+    }
+
     const activeItems = getActiveStudentPackages(student)
     const items = activeItems.length
       ? activeItems
@@ -796,13 +1033,19 @@ function Students({
   }
 
   const getTotalFee = (student) =>
-    getActiveStudentPackages(student).reduce(
+    student?.totalFee !== undefined
+      ? Number(student.totalFee || 0)
+      : getActiveStudentPackages(student).reduce(
       (total, item) =>
         total + Number(item.agreedPrice || item.monthlyFee || 0),
       0
     )
 
   const getNearestPaymentDate = (student) => {
+    if (student?.nearestPaymentDate) {
+      return student.nearestPaymentDate
+    }
+
     const dates = getActiveStudentPackages(student)
       .map((item) => item.nextPaymentDate)
       .filter(Boolean)
@@ -1358,6 +1601,11 @@ function Students({
         ...current
       ])
 
+      setStudentListPage(1)
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
+
       setStudentForm(emptyStudentForm)
       setPackageDraft(emptyPackageDraft)
       setPackageEditingId(null)
@@ -1398,8 +1646,30 @@ function Students({
   }
 
   const showStudentDetail = (student) => {
-    runProtectedPageAction(() =>
-      performShowStudentDetail(student)
+    runProtectedPageAction(
+      async () => {
+        try {
+          const fullStudent =
+            await getStudentById(
+              student.id
+            )
+
+          performShowStudentDetail(
+            fullStudent
+          )
+        } catch (error) {
+          console.error(
+            'Öğrenci detayı alınamadı:',
+            error
+          )
+
+          alert(
+            error instanceof Error
+              ? error.message
+              : 'Öğrenci detayı alınamadı.'
+          )
+        }
+      }
     )
   }
 
@@ -1488,6 +1758,9 @@ function Students({
 
       setSelectedStudent(savedStudent)
       setEditForm(savedStudent)
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
       setEditingSection(null)
       setEditPackageDraft(emptyPackageDraft)
       setEditPackageEditingId(null)
@@ -1567,6 +1840,9 @@ function Students({
 
     updateSelectedStudentState(updatedStudent)
     setEditingSection(null)
+    setStudentListReloadKey(
+      (current) => current + 1
+    )
   }
 
   const handleToggleStudentStatus = async () => {
@@ -1815,31 +2091,41 @@ function Students({
       )
     }
 
-    if (typeof setPayments === 'function') {
-      setPayments((current) =>
-        current.map((payment) =>
-          areIdsEqual(
-          payment.studentId,
-          selectedStudent.id
-        )
-            ? {
-                ...payment,
-                studentName: anonymousName
-              }
-            : payment
-        )
-      )
-    }
 
     updateSelectedStudentState(updatedStudent)
     setEditingSection(null)
   }
 
-  const handlePermanentDelete = () => {
+  const handlePermanentDelete = async () => {
     if (!selectedStudent) return
 
     const blockers =
       getDeletionBlockers(selectedStudent)
+
+    try {
+      const paymentCount =
+        await getStudentPaymentCount(
+          selectedStudent.id
+        )
+
+      if (paymentCount > 0) {
+        blockers.push(
+          `${paymentCount} tahsilat kaydı`
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Öğrenci tahsilat bağlantısı kontrol edilemedi:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrencinin tahsilat bağlantıları kontrol edilemedi.'
+      )
+      return
+    }
 
     if (blockers.length > 0) {
       alert(
@@ -4254,7 +4540,7 @@ function Students({
             <p>Kayıtlı öğrenciler ve temel bilgileri</p>
           </div>
           <button className="lesson-count" type="button">
-            {filteredStudents.length} öğrenci
+            {studentListTotal} öğrenci
           </button>
         </div>
 
@@ -4265,10 +4551,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'active' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('active')}
+              onClick={() => changeStudentStatusFilter('active')}
             >
               Aktif
-              <span>{activeStudentCount}</span>
+              <span>{studentListCounts.active}</span>
             </button>
 
             <button
@@ -4276,10 +4562,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'passive' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('passive')}
+              onClick={() => changeStudentStatusFilter('passive')}
             >
               Pasif
-              <span>{passiveStudentCount}</span>
+              <span>{studentListCounts.passive}</span>
             </button>
 
             <button
@@ -4287,10 +4573,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'archived' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('archived')}
+              onClick={() => changeStudentStatusFilter('archived')}
             >
               Arşiv
-              <span>{archivedStudentCount - reviewStudentCount}</span>
+              <span>{studentListCounts.archived}</span>
             </button>
 
             <button
@@ -4298,10 +4584,10 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'review' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('review')}
+              onClick={() => changeStudentStatusFilter('review')}
             >
               İnceleme
-              <span>{reviewStudentCount}</span>
+              <span>{studentListCounts.review}</span>
             </button>
 
             <button
@@ -4309,16 +4595,165 @@ function Students({
               className={`student-filter-button ${
                 statusFilter === 'all' ? 'selected' : ''
               }`}
-              onClick={() => setStatusFilter('all')}
+              onClick={() => changeStudentStatusFilter('all')}
             >
               Tümü
-              <span>{students.length}</span>
+              <span>{studentListCounts.all}</span>
             </button>
           </div>
 
           <p>
             Pasif kayıtlar 6 ay sonra arşivlenmeye uygun olur. Arşiv kayıtları 2 yıl sonra incelemeye düşer; sistem otomatik silme yapmaz.
           </p>
+        </div>
+
+        <div className="student-list-query-panel">
+          <div className="student-list-query-grid">
+            <div className="form-group">
+              <label>
+                Öğrenci Ara
+              </label>
+              <input
+                value={
+                  studentListSearch
+                }
+                onChange={(event) => {
+                  setStudentListSearch(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+                placeholder="Ad, TC, telefon veya e-posta"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Paket</label>
+              <select
+                value={
+                  studentListPackageId
+                }
+                onChange={(event) => {
+                  setStudentListPackageId(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="">
+                  Tüm paketler
+                </option>
+                {packages.map(
+                  (packageItem) => (
+                    <option
+                      key={packageItem.id}
+                      value={packageItem.id}
+                    >
+                      {packageItem.name}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Öğretmen</label>
+              <select
+                value={
+                  studentListTeacherId
+                }
+                onChange={(event) => {
+                  setStudentListTeacherId(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="">
+                  Tüm öğretmenler
+                </option>
+                {teachers.map(
+                  (teacher) => (
+                    <option
+                      key={teacher.id}
+                      value={teacher.id}
+                    >
+                      {getTeacherName(
+                        teacher
+                      )}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Sırala</label>
+              <select
+                value={studentListSort}
+                onChange={(event) => {
+                  setStudentListSort(
+                    event.target.value
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="newest">
+                  En yeni kayıt
+                </option>
+                <option value="oldest">
+                  En eski kayıt
+                </option>
+                <option value="nameAsc">
+                  Ad Soyad A-Z
+                </option>
+                <option value="nameDesc">
+                  Ad Soyad Z-A
+                </option>
+                <option value="paymentAsc">
+                  Ödeme tarihi yakın
+                </option>
+                <option value="paymentDesc">
+                  Ödeme tarihi uzak
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div className="student-list-query-actions">
+            <div className="student-page-size-box">
+              <label>
+                Sayfa başına
+              </label>
+              <select
+                value={
+                  studentListPageSize
+                }
+                onChange={(event) => {
+                  setStudentListPageSize(
+                    Number(
+                      event.target.value
+                    )
+                  )
+                  setStudentListPage(1)
+                }}
+              >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              className="cancel-button"
+              onClick={
+                clearStudentListFilters
+              }
+            >
+              Filtreleri Temizle
+            </button>
+          </div>
         </div>
 
         <div className="payment-table-wrapper">
@@ -4337,8 +4772,20 @@ function Students({
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.length ? (
-                filteredStudents.map((student) => (
+              {studentListLoading ? (
+                <tr>
+                  <td colSpan="9" className="empty-table">
+                    Öğrenci listesi yükleniyor...
+                  </td>
+                </tr>
+              ) : studentListError ? (
+                <tr>
+                  <td colSpan="9" className="empty-table">
+                    {studentListError}
+                  </td>
+                </tr>
+              ) : studentListRows.length ? (
+                studentListRows.map((student) => (
                   <tr key={student.id}>
                     <td>{student.tcNo || '-'}</td>
                     <td>{student.fullName}</td>
@@ -4376,6 +4823,91 @@ function Students({
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="student-list-pagination">
+          <div className="student-list-pagination-summary">
+            {studentListTotal === 0
+              ? 'Gösterilecek kayıt yok'
+              : `${studentListFirstRecord}–${studentListLastRecord} / ${studentListTotal} öğrenci`}
+          </div>
+
+          <div className="student-list-pagination-controls">
+            <button
+              type="button"
+              className="student-page-button"
+              onClick={() =>
+                setStudentListPage(
+                  (current) =>
+                    Math.max(
+                      1,
+                      current - 1
+                    )
+                )
+              }
+              disabled={
+                studentListPage === 1 ||
+                studentListLoading
+              }
+            >
+              Önceki
+            </button>
+
+            {studentListPageItems.map(
+              (item) =>
+                typeof item === 'number' ? (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`student-page-button ${
+                      studentListPage ===
+                      item
+                        ? 'active'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      setStudentListPage(
+                        item
+                      )
+                    }
+                    disabled={
+                      studentListLoading
+                    }
+                  >
+                    {item}
+                  </button>
+                ) : (
+                  <span
+                    key={item}
+                    className="student-page-ellipsis"
+                  >
+                    …
+                  </span>
+                )
+            )}
+
+            <button
+              type="button"
+              className="student-page-button"
+              onClick={() =>
+                setStudentListPage(
+                  (current) =>
+                    Math.min(
+                      studentListTotalPages,
+                      current + 1
+                    )
+                )
+              }
+              disabled={
+                studentListPage ===
+                  studentListTotalPages ||
+                studentListLoading ||
+                studentListTotal === 0
+              }
+            >
+              Sonraki
+            </button>
+          </div>
         </div>
       </section>
     </div>
