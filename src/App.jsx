@@ -61,6 +61,12 @@ function App() {
   const [authLoading, setAuthLoading] =
     useState(true)
 
+  const [authError, setAuthError] =
+    useState('')
+
+  const [authCheckKey, setAuthCheckKey] =
+    useState(0)
+
   const [loginLoading, setLoginLoading] =
     useState(false)
 
@@ -252,12 +258,90 @@ function App() {
 
     let isMounted = true
 
+    const getReadableDataError = (
+      error
+    ) => {
+      if (
+        typeof navigator !==
+          'undefined' &&
+        !navigator.onLine
+      ) {
+        return 'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
+      }
+
+      const message = String(
+        error?.message || ''
+      ).toLocaleLowerCase(
+        'tr-TR'
+      )
+
+      if (
+        message.includes(
+          'failed to fetch'
+        ) ||
+        message.includes('network') ||
+        message.includes('fetch') ||
+        message.includes('timeout') ||
+        message.includes(
+          'zaman aşımı'
+        )
+      ) {
+        return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+      }
+
+      return 'Panel verileri şu anda yüklenemedi. Lütfen kısa bir süre sonra tekrar deneyiniz.'
+    }
+
     const loadPanelData =
       async () => {
         setDataLoading(true)
         setDataError('')
 
+        if (
+          typeof navigator !==
+            'undefined' &&
+          !navigator.onLine
+        ) {
+          if (isMounted) {
+            setDataError(
+              'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
+            )
+            setDataLoading(false)
+          }
+
+          return
+        }
+
+        let timeoutId
+
         try {
+          const panelDataPromise =
+            Promise.all([
+              getSpecialties(),
+              getPackages(),
+              getTeachers(),
+              getStudents(),
+              getLessonPlans(),
+              getTeacherPayments()
+            ])
+
+          const timeoutPromise =
+            new Promise(
+              (_, reject) => {
+                timeoutId =
+                  window.setTimeout(
+                    () => {
+                      reject(
+                        new Error(
+                          'Panel verileri zaman aşımına uğradı.'
+                        )
+                      )
+                    },
+                    10000
+                  )
+              }
+            )
+
           const [
             specialtiesResult,
             packagesResult,
@@ -265,14 +349,16 @@ function App() {
             studentsResult,
             lessonPlansResult,
             teacherPaymentsResult
-          ] = await Promise.all([
-            getSpecialties(),
-            getPackages(),
-            getTeachers(),
-            getStudents(),
-            getLessonPlans(),
-            getTeacherPayments()
+          ] = await Promise.race([
+            panelDataPromise,
+            timeoutPromise
           ])
+
+          if (timeoutId) {
+            window.clearTimeout(
+              timeoutId
+            )
+          }
 
           if (!isMounted) {
             return
@@ -307,11 +393,17 @@ function App() {
             error
           )
 
+          if (timeoutId) {
+            window.clearTimeout(
+              timeoutId
+            )
+          }
+
           if (isMounted) {
             setDataError(
-              error instanceof Error
-                ? error.message
-                : 'Panel verileri yüklenemedi.'
+              getReadableDataError(
+                error
+              )
             )
           }
         } finally {
@@ -338,6 +430,32 @@ function App() {
           current + 1
       )
     }
+
+  useEffect(() => {
+    const retryWhenOnline = () => {
+      if (!dataError) {
+        return
+      }
+
+      setDataError('')
+      setCatalogReloadKey(
+        (current) =>
+          current + 1
+      )
+    }
+
+    window.addEventListener(
+      'online',
+      retryWhenOnline
+    )
+
+    return () => {
+      window.removeEventListener(
+        'online',
+        retryWhenOnline
+      )
+    }
+  }, [dataError])
 
   useEffect(() => {
     const markOccurrencesStale = () => {
@@ -423,34 +541,108 @@ function App() {
 
   useEffect(() => {
     let isMounted = true
+    let timeoutId
+
+    const getReadableAuthError = (
+      error
+    ) => {
+      if (
+        typeof navigator !==
+          'undefined' &&
+        !navigator.onLine
+      ) {
+        return 'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
+      }
+
+      const message = String(
+        error?.message || ''
+      ).toLocaleLowerCase(
+        'tr-TR'
+      )
+
+      if (
+        message.includes('fetch') ||
+        message.includes('network') ||
+        message.includes('timeout') ||
+        message.includes(
+          'failed to fetch'
+        )
+      ) {
+        return 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+      }
+
+      return 'Oturum kontrolü tamamlanamadı. Lütfen tekrar deneyiniz.'
+    }
 
     const loadInitialSession =
       async () => {
+        setAuthLoading(true)
+        setAuthError('')
+
+        if (
+          typeof navigator !==
+            'undefined' &&
+          !navigator.onLine
+        ) {
+          if (isMounted) {
+            setSession(null)
+            setAuthLoading(false)
+            setAuthError(
+              'İnternet bağlantısı bulunamadı. Bağlantınızı kontrol edip tekrar deneyiniz.'
+            )
+          }
+
+          return
+        }
+
         try {
+          const sessionPromise =
+            supabase.auth.getSession()
+
+          const timeoutPromise =
+            new Promise(
+              (_, reject) => {
+                timeoutId =
+                  window.setTimeout(
+                    () => {
+                      reject(
+                        new Error(
+                          'Oturum kontrolü zaman aşımına uğradı.'
+                        )
+                      )
+                    },
+                    8000
+                  )
+              }
+            )
+
           const {
             data: {
               session:
                 currentSession
             },
             error
-          } =
-            await supabase.auth.getSession()
+          } = await Promise.race([
+            sessionPromise,
+            timeoutPromise
+          ])
+
+          if (timeoutId) {
+            window.clearTimeout(
+              timeoutId
+            )
+          }
 
           if (error) {
-            console.error(
-              'Supabase oturumu alınamadı:',
-              error.message
-            )
+            throw error
           }
 
           if (isMounted) {
             setSession(
               currentSession
             )
-
-            setAuthLoading(
-              false
-            )
+            setAuthError('')
+            setAuthLoading(false)
           }
         } catch (error) {
           console.error(
@@ -458,11 +650,20 @@ function App() {
             error
           )
 
+          if (timeoutId) {
+            window.clearTimeout(
+              timeoutId
+            )
+          }
+
           if (isMounted) {
             setSession(null)
-            setAuthLoading(
-              false
+            setAuthError(
+              getReadableAuthError(
+                error
+              )
             )
+            setAuthLoading(false)
           }
         }
       }
@@ -486,16 +687,65 @@ function App() {
           setSession(
             currentSession
           )
-
+          setAuthError('')
           setAuthLoading(false)
         }
       )
 
+    const handleOnline = () => {
+      if (!isMounted) {
+        return
+      }
+
+      setAuthCheckKey(
+        (current) =>
+          current + 1
+      )
+    }
+
+    const handleOffline = () => {
+      if (!isMounted) {
+        return
+      }
+
+      setAuthLoading(false)
+      setAuthError(
+        'İnternet bağlantısı kesildi. Bağlantınızı kontrol edip tekrar deneyiniz.'
+      )
+    }
+
+    window.addEventListener(
+      'online',
+      handleOnline
+    )
+
+    window.addEventListener(
+      'offline',
+      handleOffline
+    )
+
     return () => {
       isMounted = false
+
+      if (timeoutId) {
+        window.clearTimeout(
+          timeoutId
+        )
+      }
+
+      window.removeEventListener(
+        'online',
+        handleOnline
+      )
+
+      window.removeEventListener(
+        'offline',
+        handleOffline
+      )
+
       subscription.unsubscribe()
     }
-  }, [])
+  }, [authCheckKey])
 
   /*
    * =========================================================
@@ -884,6 +1134,24 @@ function App() {
       <div className="app-loading-screen">
         <LoadingState
           text="Oturum kontrol ediliyor..."
+        />
+      </div>
+    )
+  }
+
+  if (authError) {
+    return (
+      <div className="app-loading-screen">
+        <ErrorState
+          title="Bağlantı kurulamadı"
+          message={authError}
+          onRetry={() => {
+            setAuthError('')
+            setAuthCheckKey(
+              (current) =>
+                current + 1
+            )
+          }}
         />
       </div>
     )
