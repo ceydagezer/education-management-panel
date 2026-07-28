@@ -41,6 +41,37 @@ function Payments({
 }) {
   const today = getTodayKey()
 
+  const activeStudents =
+    useMemo(
+      () =>
+        students.filter(
+          (student) => {
+            const normalizedStatus =
+              String(
+                student?.status || ''
+              )
+                .trim()
+                .toLocaleLowerCase(
+                  'tr-TR'
+                )
+
+            return (
+              student?.isActive !==
+                false &&
+              student?.isArchived !==
+                true &&
+              student?.isAnonymized !==
+                true &&
+              normalizedStatus !==
+                'pasif' &&
+              normalizedStatus !==
+                'arşiv'
+            )
+          }
+        ),
+      [students]
+    )
+
   const emptyPaymentForm = {
     studentId: '',
     studentPackageId: '',
@@ -188,6 +219,36 @@ function Payments({
 
     action()
   }
+
+  useEffect(() => {
+    if (
+      !paymentForm.studentId
+    ) {
+      return
+    }
+
+    const selectedStudentIsActive =
+      activeStudents.some(
+        (student) =>
+          String(student.id) ===
+          String(
+            paymentForm.studentId
+          )
+      )
+
+    if (
+      !selectedStudentIsActive
+    ) {
+      setPaymentForm(
+        emptyPaymentForm
+      )
+      setPayments([])
+      setPaymentContextError('')
+    }
+  }, [
+    activeStudents,
+    paymentForm.studentId
+  ])
 
   useEffect(() => {
     let isMounted = true
@@ -1460,7 +1521,7 @@ function Payments({
                 <option value="">
                   Öğrenci seçiniz
                 </option>
-                {students.map((student) => (
+                {activeStudents.map((student) => (
                   <option
                     key={student.id}
                     value={student.id}

@@ -6,7 +6,11 @@ import {
 } from '../components/AsyncState'
 
 import {
+  anonymizeStudent,
+  archiveStudent,
   createStudent,
+  deleteStudentPermanently,
+  extendStudentRetention,
   getStudentById,
   getStudentListCounts,
   getStudentsPage,
@@ -31,10 +35,6 @@ import {
   getPaymentDate,
   getPaymentPeriod
 } from '../utils/paymentSchedule'
-
-import {
-  getStudentPaymentCount
-} from '../services/paymentService'
 
 import {
   areIdsEqual,
@@ -1876,6 +1876,32 @@ function Students({
         saveStudentLifecycleUpdate(
           updatedStudent
         )
+
+        if (
+          typeof setLessonPlans ===
+          'function'
+        ) {
+          setLessonPlans((current) =>
+            current.filter(
+              (lesson) =>
+                !areIdsEqual(
+                  lesson.studentId,
+                  selectedStudent.id
+                )
+            )
+          )
+        }
+
+        if (
+          typeof window !==
+          'undefined'
+        ) {
+          window.dispatchEvent(
+            new CustomEvent(
+              'arti-akademi-lesson-occurrences-stale'
+            )
+          )
+        }
       } catch (error) {
         console.error(
           'Öğrenci pasife alma hatası:',
@@ -1930,8 +1956,13 @@ function Students({
     }
   }
 
-  const handleArchiveStudent = () => {
-    if (!selectedStudent) return
+  const handleArchiveStudent = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
+      return
+    }
 
     if (!isStudentPassive(selectedStudent)) {
       alert(
@@ -1965,33 +1996,59 @@ function Students({
       `${selectedStudent.fullName} adlı öğrenciyi arşive taşımak istediğinize emin misiniz? Geçmiş ders ve tahsilat kayıtları korunacaktır.`
     )
 
-    if (!confirmArchive) return
-
-    const archivedAt = getTodayKey()
-
-    const updatedStudent = {
-      ...selectedStudent,
-      isActive: false,
-      status: 'Arşiv',
-      isArchived: true,
-      archivedAt,
-      archiveReason:
-        selectedStudent.passiveReason ||
-        selectedStudent.archiveReason ||
-        'Pasif öğrenci arşive taşındı',
-      retentionReviewDate: addYearsToDate(
-        archivedAt,
-        RETENTION_REVIEW_YEARS
-      ),
-      retentionStatus:
-        'Saklama Süresi Devam Ediyor'
+    if (!confirmArchive) {
+      return
     }
 
-    saveStudentLifecycleUpdate(updatedStudent)
+    const archivedAt = getTodayKey()
+    const reviewDate = addYearsToDate(
+      archivedAt,
+      RETENTION_REVIEW_YEARS
+    )
+
+    setChangingStudentStatus(true)
+
+    try {
+      const updatedStudent =
+        await archiveStudent(
+          selectedStudent.id,
+          {
+            archivedAt,
+            archiveReason:
+              selectedStudent.passiveReason ||
+              selectedStudent.archiveReason ||
+              'Pasif öğrenci arşive taşındı',
+            retentionReviewDate:
+              reviewDate
+          }
+        )
+
+      saveStudentLifecycleUpdate(
+        updatedStudent
+      )
+    } catch (error) {
+      console.error(
+        'Öğrenci arşivleme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci arşive taşınamadı.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
-  const handleExtendRetention = () => {
-    if (!selectedStudent) return
+  const handleExtendRetention = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
+      return
+    }
 
     const currentReviewDate =
       getRetentionReviewDate(selectedStudent)
@@ -2011,17 +2068,45 @@ function Students({
       )} tarihine ertelemek istiyor musunuz?`
     )
 
-    if (!confirmExtend) return
+    if (!confirmExtend) {
+      return
+    }
 
-    saveStudentLifecycleUpdate({
-      ...selectedStudent,
-      retentionReviewDate: newReviewDate,
-      retentionStatus: 'Saklamaya Devam'
-    })
+    setChangingStudentStatus(true)
+
+    try {
+      const updatedStudent =
+        await extendStudentRetention(
+          selectedStudent.id,
+          newReviewDate
+        )
+
+      saveStudentLifecycleUpdate(
+        updatedStudent
+      )
+    } catch (error) {
+      console.error(
+        'Saklama süresi uzatma hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Saklama süresi uzatılamadı.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
-  const handleAnonymizeStudent = () => {
-    if (!selectedStudent) return
+  const handleAnonymizeStudent = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
+      return
+    }
 
     if (!isArchivedStudent(selectedStudent)) {
       alert(
@@ -2037,126 +2122,132 @@ function Students({
       return
     }
 
-    const anonymousName = `Anonim Öğrenci #${selectedStudent.id}`
-
     const confirmAnonymize = window.confirm(
       `${selectedStudent.fullName} adlı öğrencinin kişisel bilgileri anonimleştirilecek. Ders ve finans geçmişi isimsiz olarak korunacaktır. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
     )
 
-    if (!confirmAnonymize) return
-
-    const updatedStudent = {
-      ...selectedStudent,
-      tcNo: '',
-      fullName: anonymousName,
-      gender: '',
-      birthDate: '',
-      phone: '',
-      email: '',
-      address: '',
-      motherName: '',
-      motherPhone: '',
-      fatherName: '',
-      fatherPhone: '',
-      notes: '',
-      isActive: false,
-      status: 'Arşiv',
-      isArchived: true,
-      isAnonymized: true,
-      anonymizedAt: getTodayKey(),
-      retentionStatus: 'Anonimleştirildi'
+    if (!confirmAnonymize) {
+      return
     }
 
-    setStudents((current) =>
-      current.map((student) =>
-        areIdsEqual(student.id, selectedStudent.id)
-          ? updatedStudent
-          : student
-      )
-    )
-
-    if (typeof setLessonPlans === 'function') {
-      setLessonPlans((current) =>
-        current.map((lesson) =>
-          areIdsEqual(
-          lesson.studentId,
-          selectedStudent.id
-        )
-            ? {
-                ...lesson,
-                studentName: anonymousName
-              }
-            : lesson
-        )
-      )
-    }
-
-
-    updateSelectedStudentState(updatedStudent)
-    setEditingSection(null)
-  }
-
-  const handlePermanentDelete = async () => {
-    if (!selectedStudent) return
-
-    const blockers =
-      getDeletionBlockers(selectedStudent)
+    setChangingStudentStatus(true)
 
     try {
-      const paymentCount =
-        await getStudentPaymentCount(
-          selectedStudent.id
+      const updatedStudent =
+        await anonymizeStudent(
+          selectedStudent.id,
+          getTodayKey()
         )
 
-      if (paymentCount > 0) {
-        blockers.push(
-          `${paymentCount} tahsilat kaydı`
+      setStudents((current) =>
+        current.map((student) =>
+          areIdsEqual(
+            student.id,
+            updatedStudent.id
+          )
+            ? updatedStudent
+            : student
+        )
+      )
+
+      if (
+        typeof setLessonPlans ===
+        'function'
+      ) {
+        setLessonPlans((current) =>
+          current.map((lesson) =>
+            areIdsEqual(
+              lesson.studentId,
+              updatedStudent.id
+            )
+              ? {
+                  ...lesson,
+                  studentName:
+                    updatedStudent.fullName
+                }
+              : lesson
+          )
         )
       }
+
+      updateSelectedStudentState(
+        updatedStudent
+      )
+      setEditingSection(null)
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
     } catch (error) {
       console.error(
-        'Öğrenci tahsilat bağlantısı kontrol edilemedi:',
+        'Öğrenci anonimleştirme hatası:',
         error
       )
 
       alert(
         error instanceof Error
           ? error.message
-          : 'Öğrencinin tahsilat bağlantıları kontrol edilemedi.'
+          : 'Öğrenci anonimleştirilemedi.'
       )
-      return
+    } finally {
+      setChangingStudentStatus(false)
     }
+  }
 
-    if (blockers.length > 0) {
-      alert(
-        `Bu öğrenci kalıcı olarak silinemez. Bağlı kayıtlar: ${blockers.join(
-          ', '
-        )}. Öğrenciyi pasife alabilir, arşivleyebilir veya inceleme tarihi geldiğinde anonimleştirebilirsiniz.`
-      )
+  const handlePermanentDelete = async () => {
+    if (
+      !selectedStudent ||
+      changingStudentStatus
+    ) {
       return
     }
 
     const confirmDelete = window.confirm(
-      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Bu işlem yalnızca bağlantısız hatalı/test kayıtları için kullanılmalıdır ve geri alınamaz. Devam etmek istiyor musunuz?`
+      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Veritabanında paket, tahsilat, güncel ders veya ders geçmişi bağlantısı varsa işlem otomatik olarak engellenecektir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
     )
 
-    if (!confirmDelete) return
+    if (!confirmDelete) {
+      return
+    }
 
-    setStudents((current) =>
-      current.filter(
-        (student) =>
-          !areIdsEqual(
-            student.id,
-            selectedStudent.id
-          )
+    setChangingStudentStatus(true)
+
+    try {
+      await deleteStudentPermanently(
+        selectedStudent.id
       )
-    )
 
-    setSelectedStudent(null)
-    setEditForm(null)
-    setEditingSection(null)
-    clearAllDirtyFlags()
-    setStudentView('list')
+      setStudents((current) =>
+        current.filter(
+          (student) =>
+            !areIdsEqual(
+              student.id,
+              selectedStudent.id
+            )
+        )
+      )
+
+      setStudentListReloadKey(
+        (current) => current + 1
+      )
+      setSelectedStudent(null)
+      setEditForm(null)
+      setEditingSection(null)
+      clearAllDirtyFlags()
+      setStudentView('list')
+    } catch (error) {
+      console.error(
+        'Öğrenci kalıcı silme hatası:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Öğrenci kalıcı olarak silinemedi.'
+      )
+    } finally {
+      setChangingStudentStatus(false)
+    }
   }
 
   const exportStudentsToExcel = async () => {
@@ -4144,19 +4235,32 @@ function Students({
                 </>
               )}
 
-            {canPermanentlyDeleteStudent(selectedStudent) && (
-              <button
-                className="student-permanent-delete-button"
-                type="button"
-                onClick={() =>
-                  runAfterDiscardingDetailDraft(
-                    handlePermanentDelete
-                  )
-                }
-              >
-                Kalıcı Sil
-              </button>
-            )}
+            {canPermanentlyDeleteStudent(
+              selectedStudent
+            ) &&
+              !isArchivedStudent(
+                selectedStudent
+              ) &&
+              !isStudentAnonymized(
+                selectedStudent
+              ) && (
+                <button
+                  className="student-permanent-delete-button"
+                  type="button"
+                  disabled={
+                    changingStudentStatus
+                  }
+                  onClick={() =>
+                    runAfterDiscardingDetailDraft(
+                      handlePermanentDelete
+                    )
+                  }
+                >
+                  {changingStudentStatus
+                    ? 'Kontrol Ediliyor...'
+                    : 'Bağlantısız Test Kaydını Sil'}
+                </button>
+              )}
 
             <button
               className="pdf-button"

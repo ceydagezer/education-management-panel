@@ -346,6 +346,159 @@ export async function getLessonOccurrences() {
   )
 }
 
+
+export async function getLessonHistoryPage({
+  page = 1,
+  pageSize = 10,
+  teacherId = '',
+  studentId = '',
+  status = 'all',
+  startDate = '',
+  endDate = '',
+  sortOption = 'newest'
+} = {}) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  const to =
+    from +
+    safePageSize -
+    1
+
+  const historyStatuses = [
+    'Yapıldı',
+    'Telafi yapıldı',
+    'İptal edildi'
+  ]
+
+  let query = supabase
+    .from('lesson_occurrences')
+    .select(
+      lessonOccurrenceSelect,
+      {
+        count: 'exact'
+      }
+    )
+    .eq('is_active', true)
+    .in(
+      'status',
+      historyStatuses
+    )
+
+  if (teacherId) {
+    query = query.eq(
+      'teacher_id',
+      teacherId
+    )
+  }
+
+  if (studentId) {
+    query = query.eq(
+      'student_id',
+      studentId
+    )
+  }
+
+  if (
+    status &&
+    status !== 'all'
+  ) {
+    if (
+      !historyStatuses.includes(
+        status
+      )
+    ) {
+      return {
+        data: [],
+        total: 0,
+        page: safePage,
+        pageSize: safePageSize
+      }
+    }
+
+    query = query.eq(
+      'status',
+      status
+    )
+  }
+
+  if (startDate) {
+    query = query.gte(
+      'lesson_date',
+      startDate
+    )
+  }
+
+  if (endDate) {
+    query = query.lte(
+      'lesson_date',
+      endDate
+    )
+  }
+
+  const ascending =
+    sortOption === 'oldest'
+
+  query = query
+    .order(
+      'lesson_date',
+      {
+        ascending,
+        nullsFirst: false
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending
+      }
+    )
+    .range(from, to)
+
+  const {
+    data,
+    error,
+    count
+  } = await query
+
+  if (error) {
+    throw new Error(
+      `Ders geçmişi alınamadı: ${error.message}`
+    )
+  }
+
+  return {
+    data: (data || []).map(
+      mapLessonOccurrenceFromDb
+    ),
+    total: Number(count || 0),
+    page: safePage,
+    pageSize: safePageSize
+  }
+}
+
 export async function createLessonPlan(
   form
 ) {

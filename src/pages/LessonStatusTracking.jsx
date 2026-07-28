@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   createLessonOccurrence,
   deleteLessonOccurrence,
+  getLessonHistoryPage,
   updateLessonOccurrenceStatus
 } from '../services/lessonService'
 import '../styles/status.css'
@@ -125,6 +126,56 @@ function LessonStatusTracking({
 
   const [isSavingMakeup, setIsSavingMakeup] =
     useState(false)
+
+  const [
+    historyRows,
+    setHistoryRows
+  ] = useState([])
+
+  const [
+    historyTotal,
+    setHistoryTotal
+  ] = useState(0)
+
+  const [
+    historyPage,
+    setHistoryPage
+  ] = useState(1)
+
+  const [
+    historyPageSize,
+    setHistoryPageSize
+  ] = useState(10)
+
+  const [
+    historyStartDate,
+    setHistoryStartDate
+  ] = useState('')
+
+  const [
+    historyEndDate,
+    setHistoryEndDate
+  ] = useState('')
+
+  const [
+    historySort,
+    setHistorySort
+  ] = useState('newest')
+
+  const [
+    historyLoading,
+    setHistoryLoading
+  ] = useState(false)
+
+  const [
+    historyError,
+    setHistoryError
+  ] = useState('')
+
+  const [
+    historyReloadKey,
+    setHistoryReloadKey
+  ] = useState(0)
 
   const studentSearchRef = useRef(null)
 
@@ -547,75 +598,138 @@ function LessonStatusTracking({
     ...pendingMakeupLessons
   ].filter(matchesCurrentFilters)
 
-  /*
-   * Alt tablo yalnızca sonuçlanmış ders geçmişini gösterir.
-   * Program kaydı daha sonra silinse bile occurrence burada kalır.
-   */
-  const historyLessons =
-    lessons.filter((lesson) => {
-      const status =
-        normalizeLessonStatus(
-          lesson.status
-        )
+  useEffect(() => {
+    let isMounted = true
 
-      return [
-        'Yapıldı',
-        'Telafi yapıldı',
-        'İptal edildi'
-      ].includes(status)
-    })
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setHistoryLoading(true)
+          setHistoryError('')
 
-  const filteredHistoryLessons =
-    historyLessons.filter(
-      matchesCurrentFilters
-    )
+          try {
+            const result =
+              await getLessonHistoryPage({
+                page: historyPage,
+                pageSize:
+                  historyPageSize,
+                teacherId:
+                  selectedTeacher ===
+                  'all'
+                    ? ''
+                    : selectedTeacher,
+                studentId:
+                  selectedStudent ===
+                  'all'
+                    ? ''
+                    : selectedStudent,
+                status:
+                  selectedStatus,
+                startDate:
+                  historyStartDate,
+                endDate:
+                  historyEndDate,
+                sortOption:
+                  historySort
+              })
 
-  const sortedHistoryLessons = [
-    ...filteredHistoryLessons
-  ].sort((firstLesson, secondLesson) => {
-    const firstDate =
-      firstLesson.lessonDate ||
-      firstLesson.createdAt ||
-      ''
+            if (!isMounted) {
+              return
+            }
 
-    const secondDate =
-      secondLesson.lessonDate ||
-      secondLesson.createdAt ||
-      ''
+            const totalPages =
+              Math.max(
+                1,
+                Math.ceil(
+                  result.total /
+                    historyPageSize
+                )
+              )
 
-    if (
-      firstDate &&
-      secondDate &&
-      firstDate !== secondDate
-    ) {
-      return String(secondDate)
-        .localeCompare(
-          String(firstDate)
-        )
+            if (
+              historyPage >
+              totalPages
+            ) {
+              setHistoryPage(
+                totalPages
+              )
+              return
+            }
+
+            setHistoryRows(
+              result.data
+            )
+            setHistoryTotal(
+              result.total
+            )
+          } catch (error) {
+            console.error(
+              'Ders geçmişi alınamadı:',
+              error
+            )
+
+            if (isMounted) {
+              setHistoryError(
+                error instanceof Error
+                  ? error.message
+                  : 'Ders geçmişi alınamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setHistoryLoading(false)
+            }
+          }
+        },
+        150
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(
+        timeoutId
+      )
     }
+  }, [
+    historyPage,
+    historyPageSize,
+    selectedTeacher,
+    selectedStudent,
+    selectedStatus,
+    historyStartDate,
+    historyEndDate,
+    historySort,
+    historyReloadKey
+  ])
 
-    const firstDayOrder =
-      dayOrder[firstLesson.day] ?? 99
-
-    const secondDayOrder =
-      dayOrder[secondLesson.day] ?? 99
-
-    const dayDifference =
-      firstDayOrder -
-      secondDayOrder
-
-    if (dayDifference !== 0) {
-      return dayDifference
-    }
-
-    return String(
-      firstLesson.time || ''
-    ).localeCompare(
-      String(
-        secondLesson.time || ''
+  const historyTotalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        historyTotal /
+          historyPageSize
       )
     )
-  })
+
+  const historyFirstRecord =
+    historyTotal === 0
+      ? 0
+      : (
+          historyPage - 1
+        ) *
+          historyPageSize +
+        1
+
+  const historyLastRecord =
+    Math.min(
+      historyPage *
+        historyPageSize,
+      historyTotal
+    )
+
+  const resetHistoryPage = () => {
+    setHistoryPage(1)
+  }
 
   const getLessonsByDayAndHour = (
     day,
@@ -748,6 +862,10 @@ function LessonStatusTracking({
         )
       )
 
+      setHistoryReloadKey(
+        (current) => current + 1
+      )
+
       setOpenMenuId(null)
     } catch (error) {
       console.error(
@@ -796,6 +914,10 @@ function LessonStatusTracking({
         )
       )
 
+      setHistoryReloadKey(
+        (current) => current + 1
+      )
+
       setOpenMenuId(null)
     } catch (error) {
       console.error(
@@ -816,6 +938,7 @@ function LessonStatusTracking({
   const handleStudentSearchChange = (event) => {
     setStudentSearch(event.target.value)
     setSelectedStudent('all')
+    resetHistoryPage()
     setShowStudentSuggestions(true)
   }
 
@@ -1731,141 +1854,313 @@ function LessonStatusTracking({
       </section>
 
       <section className="lesson-table-card status-history-card">
-        <div className="table-head">
+        <div className="table-head status-history-head">
           <div>
             <h2>Ders Geçmişi</h2>
 
             <p>
-              Yapılan, telafisi tamamlanan ve
-              iptal edilen ders kayıtları.
+              Sonuçlanmış ders kayıtları
+              Supabase’den sayfa sayfa yüklenir.
             </p>
           </div>
 
+          <span className="lesson-count">
+            {historyTotal} kayıt
+          </span>
+        </div>
+
+        <div className="status-history-filters">
+          <label>
+            Başlangıç Tarihi
+            <input
+              type="date"
+              value={historyStartDate}
+              onChange={(event) => {
+                setHistoryStartDate(
+                  event.target.value
+                )
+                resetHistoryPage()
+              }}
+            />
+          </label>
+
+          <label>
+            Bitiş Tarihi
+            <input
+              type="date"
+              value={historyEndDate}
+              onChange={(event) => {
+                setHistoryEndDate(
+                  event.target.value
+                )
+                resetHistoryPage()
+              }}
+            />
+          </label>
+
+          <label>
+            Sırala
+            <select
+              value={historySort}
+              onChange={(event) => {
+                setHistorySort(
+                  event.target.value
+                )
+                resetHistoryPage()
+              }}
+            >
+              <option value="newest">
+                En yeni tarih
+              </option>
+              <option value="oldest">
+                En eski tarih
+              </option>
+            </select>
+          </label>
+
+          <label>
+            Sayfa başına
+            <select
+              value={historyPageSize}
+              onChange={(event) => {
+                setHistoryPageSize(
+                  Number(
+                    event.target.value
+                  )
+                )
+                setHistoryPage(1)
+              }}
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </label>
+
           <button
             type="button"
-            className="lesson-count"
+            className="status-history-clear"
+            onClick={() => {
+              setHistoryStartDate('')
+              setHistoryEndDate('')
+              setHistorySort('newest')
+              setHistoryPage(1)
+            }}
           >
-            {sortedHistoryLessons.length} kayıt
+            Tarih Filtrelerini Temizle
           </button>
         </div>
 
-        <div className="payment-table-wrapper">
-          <table className="lesson-table status-detail-table">
-            <thead>
-              <tr>
-                <th>Gün</th>
-                <th>Saat</th>
-                <th>Öğretmen</th>
-                <th>Öğrenci</th>
-                <th>Ders</th>
-                <th>Durum</th>
-                <th>Not</th>
-              </tr>
-            </thead>
+        {historyError ? (
+          <div className="status-history-message error">
+            <span>{historyError}</span>
 
-            <tbody>
-              {sortedHistoryLessons.length > 0 ? (
-                sortedHistoryLessons.map(
-                  (lesson) => (
-                    <tr key={lesson.id}>
-                      <td>
-                        <span className="status-day-text">
-                          {lesson.day}
-                        </span>
-                      </td>
-
-                      <td>
-                        <strong className="status-time-text">
-                          {lesson.time}
-                        </strong>
-                      </td>
-
-                      <td>
-                        <span
-                          className="status-person-text"
-                          title={getTeacherName(
-                            lesson
-                          )}
-                        >
-                          {getTeacherName(
-                            lesson
-                          )}
-                        </span>
-                      </td>
-
-                      <td>
-                        <span
-                          className="status-person-text"
-                          title={getStudentName(
-                            lesson
-                          )}
-                        >
-                          {getStudentName(
-                            lesson
-                          )}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div
-                          className="status-lesson-detail"
-                          title={getLessonTitle(
-                            lesson
-                          )}
-                        >
-                          <strong>
-                            {getLessonInstrument(
-                              lesson
-                            )}
-                          </strong>
-                          <small>
-                            {getLessonTitle(
-                              lesson
-                            )}
-                          </small>
-                        </div>
-                      </td>
-
-                      <td>
-                        <span
-                          className={getLessonStatusBadgeClass(
-                            lesson.status
-                          )}
-                        >
-                          {getLessonStatusLabel(
-                            lesson.status
-                          )}
-                        </span>
-                      </td>
-
-                      <td
-                        className={`status-note-cell ${
-                          lesson.note
-                            ? 'has-note'
-                            : 'empty-note'
-                        }`}
-                        title={lesson.note || ''}
-                      >
-                        <span>
-                          {lesson.note || '—'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
+            <button
+              type="button"
+              onClick={() =>
+                setHistoryReloadKey(
+                  (current) =>
+                    current + 1
                 )
-              ) : (
+              }
+            >
+              Tekrar Dene
+            </button>
+          </div>
+        ) : (
+          <div className="payment-table-wrapper">
+            <table className="lesson-table status-detail-table">
+              <thead>
                 <tr>
-                  <td
-                    colSpan="7"
-                    className="empty-table"
-                  >
-                    Seçili filtrelere uygun
-                    geçmiş ders kaydı bulunamadı.
-                  </td>
+                  <th>Tarih</th>
+                  <th>Gün</th>
+                  <th>Saat</th>
+                  <th>Öğretmen</th>
+                  <th>Öğrenci</th>
+                  <th>Ders</th>
+                  <th>Durum</th>
+                  <th>Not</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {historyLoading ? (
+                  <tr>
+                    <td
+                      colSpan="8"
+                      className="empty-table"
+                    >
+                      Ders geçmişi yükleniyor...
+                    </td>
+                  </tr>
+                ) : historyRows.length > 0 ? (
+                  historyRows.map(
+                    (lesson) => (
+                      <tr key={lesson.id}>
+                        <td>
+                          <span className="status-date-text">
+                            {lesson.lessonDate
+                              ? new Date(
+                                  `${lesson.lessonDate}T00:00:00`
+                                ).toLocaleDateString(
+                                  'tr-TR'
+                                )
+                              : '—'}
+                          </span>
+                        </td>
+
+                        <td>
+                          <span className="status-day-text">
+                            {lesson.day}
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong className="status-time-text">
+                            {lesson.time}
+                          </strong>
+                        </td>
+
+                        <td>
+                          <span
+                            className="status-person-text"
+                            title={getTeacherName(
+                              lesson
+                            )}
+                          >
+                            {getTeacherName(
+                              lesson
+                            )}
+                          </span>
+                        </td>
+
+                        <td>
+                          <span
+                            className="status-person-text"
+                            title={getStudentName(
+                              lesson
+                            )}
+                          >
+                            {getStudentName(
+                              lesson
+                            )}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div
+                            className="status-lesson-detail"
+                            title={getLessonTitle(
+                              lesson
+                            )}
+                          >
+                            <strong>
+                              {getLessonInstrument(
+                                lesson
+                              )}
+                            </strong>
+                            <small>
+                              {getLessonTitle(
+                                lesson
+                              )}
+                            </small>
+                          </div>
+                        </td>
+
+                        <td>
+                          <span
+                            className={getLessonStatusBadgeClass(
+                              lesson.status
+                            )}
+                          >
+                            {getLessonStatusLabel(
+                              lesson.status
+                            )}
+                          </span>
+                        </td>
+
+                        <td
+                          className={`status-note-cell ${
+                            lesson.note
+                              ? 'has-note'
+                              : 'empty-note'
+                          }`}
+                          title={lesson.note || ''}
+                        >
+                          <span>
+                            {lesson.note || '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  )
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="8"
+                      className="empty-table"
+                    >
+                      Seçili filtrelere uygun
+                      geçmiş ders kaydı bulunamadı.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="status-history-pagination">
+          <span>
+            {historyFirstRecord}–{historyLastRecord}
+            {' / '}
+            {historyTotal} kayıt
+          </span>
+
+          <div>
+            <button
+              type="button"
+              disabled={
+                historyPage <= 1 ||
+                historyLoading
+              }
+              onClick={() =>
+                setHistoryPage(
+                  (current) =>
+                    Math.max(
+                      1,
+                      current - 1
+                    )
+                )
+              }
+            >
+              Önceki
+            </button>
+
+            <span className="status-history-page">
+              {historyPage} / {historyTotalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={
+                historyPage >=
+                  historyTotalPages ||
+                historyLoading
+              }
+              onClick={() =>
+                setHistoryPage(
+                  (current) =>
+                    Math.min(
+                      historyTotalPages,
+                      current + 1
+                    )
+                )
+              }
+            >
+              Sonraki
+            </button>
+          </div>
         </div>
       </section>
     </div>

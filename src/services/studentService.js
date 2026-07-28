@@ -1063,11 +1063,15 @@ export async function setStudentPassive(
   passiveReason,
   passiveDate
 ) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
   const cleanReason = String(
     passiveReason ?? ''
   ).trim()
 
-  if (!studentId) {
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
@@ -1079,21 +1083,26 @@ export async function setStudentPassive(
     )
   }
 
-  const { error } = await supabase
-    .from('students')
-    .update({
-      is_active: false,
-      status: 'Pasif',
-      passive_date: passiveDate,
-      passive_reason: cleanReason,
-      is_archived: false,
-      archived_at: null,
-      archive_reason: null,
-      retention_review_date: null,
-      retention_status:
-        'Saklama Süresi Devam Ediyor'
-    })
-    .eq('id', studentId)
+  if (!passiveDate) {
+    throw new Error(
+      'Pasife alma tarihi zorunludur.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'set_student_passive_safely',
+    {
+      p_student_id:
+        cleanStudentId,
+      p_passive_reason:
+        cleanReason,
+      p_passive_date:
+        passiveDate
+    }
+  )
 
   if (error) {
     throw new Error(
@@ -1101,7 +1110,16 @@ export async function setStudentPassive(
     )
   }
 
-  return getStudentById(studentId)
+  const student =
+    await getStudentById(
+      cleanStudentId
+    )
+
+  return {
+    ...student,
+    passiveOperation:
+      data?.[0] || null
+  }
 }
 
 export async function reactivateStudent(
@@ -1379,4 +1397,254 @@ export async function updateStudent(
   )
 
   return getStudentById(studentId)
+}
+
+export async function archiveStudent(
+  studentId,
+  {
+    archivedAt,
+    archiveReason,
+    retentionReviewDate
+  }
+) {
+  if (!studentId) {
+    throw new Error(
+      'Öğrenci kimliği bulunamadı.'
+    )
+  }
+
+  if (
+    !archivedAt ||
+    !retentionReviewDate
+  ) {
+    throw new Error(
+      'Arşiv ve inceleme tarihleri zorunludur.'
+    )
+  }
+
+  const { error } = await supabase
+    .from('students')
+    .update({
+      is_active: false,
+      status: 'Arşiv',
+      is_archived: true,
+      archived_at: archivedAt,
+      archive_reason:
+        String(
+          archiveReason ||
+          'Pasif öğrenci arşive taşındı'
+        ).trim(),
+      retention_review_date:
+        retentionReviewDate,
+      retention_status:
+        'Saklama Süresi Devam Ediyor'
+    })
+    .eq('id', studentId)
+    .eq('is_active', false)
+    .eq('is_anonymized', false)
+
+  if (error) {
+    throw new Error(
+      `Öğrenci arşive taşınamadı: ${error.message}`
+    )
+  }
+
+  return getStudentById(studentId)
+}
+
+export async function extendStudentRetention(
+  studentId,
+  retentionReviewDate
+) {
+  if (!studentId) {
+    throw new Error(
+      'Öğrenci kimliği bulunamadı.'
+    )
+  }
+
+  if (!retentionReviewDate) {
+    throw new Error(
+      'Yeni inceleme tarihi zorunludur.'
+    )
+  }
+
+  const { error } = await supabase
+    .from('students')
+    .update({
+      retention_review_date:
+        retentionReviewDate,
+      retention_status:
+        'Saklamaya Devam'
+    })
+    .eq('id', studentId)
+    .eq('is_archived', true)
+    .eq('is_anonymized', false)
+
+  if (error) {
+    throw new Error(
+      `Saklama süresi uzatılamadı: ${error.message}`
+    )
+  }
+
+  return getStudentById(studentId)
+}
+
+export async function anonymizeStudent(
+  studentId,
+  anonymizedAt
+) {
+  if (!studentId) {
+    throw new Error(
+      'Öğrenci kimliği bulunamadı.'
+    )
+  }
+
+  const anonymousName =
+    `Anonim Öğrenci #${String(
+      studentId
+    ).slice(0, 8)}`
+
+  const anonymousTcNo =
+    String(
+      studentId
+    )
+      .replace(/[^0-9]/g, '')
+      .padEnd(11, '0')
+      .slice(0, 11)
+
+  const { error } = await supabase
+    .from('students')
+    .update({
+      tc_no: anonymousTcNo,
+      full_name: anonymousName,
+      gender: null,
+      birth_date: null,
+      phone: null,
+      email: null,
+      address: null,
+      mother_name: null,
+      mother_phone: null,
+      father_name: null,
+      father_phone: null,
+      notes: null,
+      is_active: false,
+      status: 'Arşiv',
+      is_archived: true,
+      is_anonymized: true,
+      anonymized_at:
+        anonymizedAt || null,
+      retention_status:
+        'Anonimleştirildi'
+    })
+    .eq('id', studentId)
+    .eq('is_archived', true)
+    .eq('is_anonymized', false)
+
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error(
+        'Anonim öğrenci kimliği oluşturulurken benzersizlik hatası oluştu.'
+      )
+    }
+
+    throw new Error(
+      `Öğrenci anonimleştirilemedi: ${error.message}`
+    )
+  }
+
+  return getStudentById(studentId)
+}
+
+
+export async function deleteStudentPermanently(
+  studentId
+) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
+    throw new Error(
+      'Öğrenci kimliği bulunamadı.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase.rpc(
+    'delete_student_permanently_safely',
+    {
+      p_student_id:
+        cleanStudentId
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      `Öğrenci kalıcı olarak silinemedi: ${error.message}`
+    )
+  }
+
+  const result =
+    data?.[0] || null
+
+  if (!result) {
+    throw new Error(
+      'Kalıcı silme sonucu alınamadı.'
+    )
+  }
+
+  if (!result.deleted) {
+    const blockers = []
+
+    const packageCount = Number(
+      result.package_count || 0
+    )
+
+    const paymentCount = Number(
+      result.payment_count || 0
+    )
+
+    const lessonPlanCount = Number(
+      result.lesson_plan_count || 0
+    )
+
+    const occurrenceCount = Number(
+      result.lesson_occurrence_count || 0
+    )
+
+    if (packageCount > 0) {
+      blockers.push(
+        `${packageCount} paket kaydı`
+      )
+    }
+
+    if (paymentCount > 0) {
+      blockers.push(
+        `${paymentCount} tahsilat kaydı`
+      )
+    }
+
+    if (lessonPlanCount > 0) {
+      blockers.push(
+        `${lessonPlanCount} güncel ders kaydı`
+      )
+    }
+
+    if (occurrenceCount > 0) {
+      blockers.push(
+        `${occurrenceCount} ders geçmişi kaydı`
+      )
+    }
+
+    throw new Error(
+      `Bu öğrenci kalıcı olarak silinemez. Bağlı kayıtlar: ${
+        blockers.join(', ') ||
+        'bilinmeyen bağlantı'
+      }. Öğrenciyi pasife alabilir, arşivleyebilir veya anonimleştirebilirsiniz.`
+    )
+  }
+
+  return result
 }
