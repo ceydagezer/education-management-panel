@@ -40,6 +40,7 @@ const studentSelect = `
     payment_day,
     first_payment_date,
     next_payment_date,
+    total_lesson_count,
     status,
     is_active,
     ended_at,
@@ -109,6 +110,12 @@ function mapStudentPackageFromDb(row) {
     packageRecord?.lesson_count || 0
   )
 
+  const totalLessonCount = Number(
+    row.total_lesson_count ??
+    packageRecord?.lesson_count ??
+    0
+  )
+
   const agreedPrice = Number(
     row.agreed_price || 0
   )
@@ -142,6 +149,15 @@ function mapStudentPackageFromDb(row) {
     lessonDuration,
     duration: lessonDuration,
     lessonCount,
+
+    totalLessonCount,
+    usedLessonCount: 0,
+    remainingLessonCount:
+      Math.max(totalLessonCount, 0),
+    lessonRightsStatus:
+      totalLessonCount > 0
+        ? 'Devam Ediyor'
+        : 'Ders Hakkı Bitti',
 
     totalPrice: Number(
       packageRecord?.total_price || 0
@@ -441,6 +457,106 @@ function mapStudentFromDb(row) {
     student,
     enrolledPackages
   )
+}
+
+
+function getLessonUsageKey(
+  studentId,
+  packageId
+) {
+  return `${String(studentId)}::${String(packageId)}`
+}
+
+async function addLessonUsageToStudents(
+  students
+) {
+  const studentList =
+    Array.isArray(students)
+      ? students
+      : []
+
+  if (studentList.length === 0) {
+    return studentList
+  }
+
+  const studentIds = [
+    ...new Set(
+      studentList
+        .map((student) => student.id)
+        .filter(Boolean)
+    )
+  ]
+
+  const { data, error } = await supabase
+    .from('lesson_occurrences')
+    .select('student_id, package_id')
+    .in('student_id', studentIds)
+    .eq('is_active', true)
+    .in('status', ['Yapıldı', 'Telafi yapıldı'])
+
+  if (error) {
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Öğrenci ders hakları şu anda hesaplanamadı.'
+      )
+    )
+  }
+
+  const usageByStudentPackage = new Map()
+
+  for (const occurrence of data || []) {
+    const key = getLessonUsageKey(
+      occurrence.student_id,
+      occurrence.package_id
+    )
+
+    usageByStudentPackage.set(
+      key,
+      (usageByStudentPackage.get(key) || 0) + 1
+    )
+  }
+
+  return studentList.map((student) => {
+    const enrolledPackages = (student.enrolledPackages || []).map((studentPackage) => {
+      const key = getLessonUsageKey(
+        student.id,
+        studentPackage.packageId
+      )
+
+      const usedLessonCount =
+        usageByStudentPackage.get(key) || 0
+
+      const totalLessonCount = Number(
+        studentPackage.totalLessonCount || 0
+      )
+
+      const remainingLessonCount = Math.max(
+        totalLessonCount - usedLessonCount,
+        0
+      )
+
+      let lessonRightsStatus = 'Devam Ediyor'
+
+      if (remainingLessonCount === 0) {
+        lessonRightsStatus = 'Ders Hakkı Bitti'
+      } else if (remainingLessonCount === 1) {
+        lessonRightsStatus = 'Bitmek Üzere'
+      }
+
+      return {
+        ...studentPackage,
+        usedLessonCount,
+        remainingLessonCount,
+        lessonRightsStatus
+      }
+    })
+
+    return syncLegacyPackageFields(
+      student,
+      enrolledPackages
+    )
+  })
 }
 
 function isNetworkError(error) {
@@ -799,6 +915,13 @@ function normalizeStudentForm(form) {
         next_payment_date:
           nextPaymentDate,
 
+        total_lesson_count:
+          Number(
+            item.totalLessonCount ??
+            item.lessonCount ??
+            0
+          ) || null,
+
         status: 'Aktif',
 
         is_active: true,
@@ -1111,6 +1234,120 @@ export async function getStudentListCounts() {
   }
 }
 
+
+export async function getStudentPackageLessonUsage() {
+  const { data: packageRows, error: packageError } = await supabase
+    .from('student_packages')
+    .select(`
+      id,
+      student_id,
+      package_id,
+      total_lesson_count,
+      status,
+      is_active,
+      student:students (
+        id,
+        full_name
+      ),
+      package:packages (
+        id,
+        name
+      )
+    `)
+    .eq('is_active', true)
+
+  if (packageError) {
+    throw new Error(
+      getStudentErrorMessage(
+        packageError,
+        'Öğrenci paketleri şu anda alınamadı.'
+      )
+    )
+  }
+
+  const studentIds = [
+    ...new Set(
+      (packageRows || [])
+        .map((row) => row.student_id)
+        .filter(Boolean)
+    )
+  ]
+
+  let occurrenceRows = []
+
+  if (studentIds.length > 0) {
+    const { data, error } = await supabase
+      .from('lesson_occurrences')
+      .select('student_id, package_id')
+      .in('student_id', studentIds)
+      .eq('is_active', true)
+      .in('status', ['Yapıldı', 'Telafi yapıldı'])
+
+    if (error) {
+      throw new Error(
+        getStudentErrorMessage(
+          error,
+          'Öğrenci ders hakları şu anda hesaplanamadı.'
+        )
+      )
+    }
+
+    occurrenceRows = data || []
+  }
+
+  const usageMap = new Map()
+
+  for (const occurrence of occurrenceRows) {
+    const key = getLessonUsageKey(
+      occurrence.student_id,
+      occurrence.package_id
+    )
+
+    usageMap.set(
+      key,
+      (usageMap.get(key) || 0) + 1
+    )
+  }
+
+  return (packageRows || []).map((row) => {
+    const totalLessonCount = Number(
+      row.total_lesson_count || 0
+    )
+
+    const usedLessonCount = usageMap.get(
+      getLessonUsageKey(
+        row.student_id,
+        row.package_id
+      )
+    ) || 0
+
+    const remainingLessonCount = Math.max(
+      totalLessonCount - usedLessonCount,
+      0
+    )
+
+    let lessonRightsStatus = 'Devam Ediyor'
+
+    if (remainingLessonCount === 0) {
+      lessonRightsStatus = 'Ders Hakkı Bitti'
+    } else if (remainingLessonCount === 1) {
+      lessonRightsStatus = 'Bitmek Üzere'
+    }
+
+    return {
+      studentPackageId: row.id,
+      studentId: row.student_id,
+      studentName: row.student?.full_name || '',
+      packageId: row.package_id,
+      packageName: row.package?.name || '',
+      totalLessonCount,
+      usedLessonCount,
+      remainingLessonCount,
+      lessonRightsStatus
+    }
+  })
+}
+
 export async function getStudents() {
   const { data, error } = await supabase
     .from('students')
@@ -1128,8 +1365,12 @@ export async function getStudents() {
     )
   }
 
-  return (data || []).map(
+  const students = (data || []).map(
     mapStudentFromDb
+  )
+
+  return addLessonUsageToStudents(
+    students
   )
 }
 
@@ -1161,7 +1402,14 @@ export async function getStudentById(
     )
   }
 
-  return mapStudentFromDb(data)
+  const student = mapStudentFromDb(data)
+
+  const enrichedStudents =
+    await addLessonUsageToStudents(
+      [student]
+    )
+
+  return enrichedStudents[0]
 }
 
 export async function createStudent(form) {
@@ -1483,6 +1731,12 @@ function normalizePackageUpdateRow(item) {
     payment_day: paymentDay,
     first_payment_date: firstPaymentDate,
     next_payment_date: nextPaymentDate,
+    total_lesson_count:
+      Number(
+        item.totalLessonCount ??
+        item.lessonCount ??
+        0
+      ) || null,
     status: active ? 'Aktif' : 'Sonlandırıldı',
     is_active: active,
     ended_at:
@@ -1582,6 +1836,113 @@ async function syncStudentPackages(
       )
     }
   }
+}
+
+
+export async function extendStudentPackage(
+  studentPackageId,
+  lessonCountToAdd
+) {
+  const cleanStudentPackageId =
+    String(
+      studentPackageId || ''
+    ).trim()
+
+  const cleanLessonCountToAdd =
+    Number(lessonCountToAdd)
+
+  if (!cleanStudentPackageId) {
+    throw new Error(
+      'Öğrenci paket kaydı bulunamadı.'
+    )
+  }
+
+  if (
+    !Number.isInteger(
+      cleanLessonCountToAdd
+    ) ||
+    cleanLessonCountToAdd <= 0
+  ) {
+    throw new Error(
+      'Eklenecek ders sayısı pozitif bir tam sayı olmalıdır.'
+    )
+  }
+
+  const {
+    data: currentPackage,
+    error: readError
+  } = await supabase
+    .from('student_packages')
+    .select(`
+      id,
+      student_id,
+      total_lesson_count,
+      status,
+      is_active
+    `)
+    .eq(
+      'id',
+      cleanStudentPackageId
+    )
+    .single()
+
+  if (readError || !currentPackage) {
+    throw new Error(
+      getStudentErrorMessage(
+        readError,
+        'Öğrenci paket bilgisi alınamadı.'
+      )
+    )
+  }
+
+  if (
+    currentPackage.is_active === false ||
+    normalizeStatus(
+      currentPackage.status
+    ) === 'sonlandırıldı'
+  ) {
+    throw new Error(
+      'Sonlandırılmış paket uzatılamaz.'
+    )
+  }
+
+  const currentTotal =
+    Number(
+      currentPackage.total_lesson_count ||
+      0
+    )
+
+  const newTotal =
+    currentTotal +
+    cleanLessonCountToAdd
+
+  const {
+    error: updateError
+  } = await supabase
+    .from('student_packages')
+    .update({
+      total_lesson_count:
+        newTotal,
+      updated_at:
+        new Date().toISOString()
+    })
+    .eq(
+      'id',
+      cleanStudentPackageId
+    )
+
+  if (updateError) {
+    throw new Error(
+      getStudentErrorMessage(
+        updateError,
+        'Paket ders hakkı uzatılamadı.'
+      )
+    )
+  }
+
+  return getStudentById(
+    currentPackage.student_id
+  )
 }
 
 export async function updateStudent(

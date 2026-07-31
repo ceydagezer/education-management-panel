@@ -4,6 +4,7 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'students', label: 'Öğrenciler' },
   { id: 'teachers', label: 'Öğretmenler' },
+  { id: 'lesson-groups', label: 'Ders Grupları' },
   { id: 'schedule', label: 'Ders Programı' },
   {
     id: 'lesson-status',

@@ -47,6 +47,7 @@ import Teachers from './pages/Teachers'
 import Payments from './pages/Payments'
 import Finance from './pages/Finance'
 import LessonStatusTracking from './pages/LessonStatusTracking'
+import LessonGroups from './pages/LessonGroups'
 
 const VALID_PAGES = [
   'dashboard',
@@ -55,6 +56,7 @@ const VALID_PAGES = [
   'teachers',
   'schedule',
   'lesson-status',
+  'lesson-groups',
   'payments',
   'finance'
 ]
@@ -1397,6 +1399,28 @@ function App() {
               )}
             />
           )
+        )}
+
+        {activePage ===
+          'lesson-groups' && (
+          <LessonGroups
+            specialties={
+              specialties
+            }
+            teachers={
+              teachers
+            }
+            students={
+              students
+            }
+            packages={
+              packages
+            }
+            unsavedChanges={createUnsavedPageApi(
+              'lesson-groups',
+              'Ders grubu işlemleri'
+            )}
+          />
         )}
 
         {activePage ===

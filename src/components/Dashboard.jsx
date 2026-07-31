@@ -7,6 +7,10 @@ import {
 } from '../services/dashboardService'
 
 import {
+  getStudentPackageLessonUsage
+} from '../services/studentService'
+
+import {
   addYearsToDate,
   formatDate,
   formatPrice,
@@ -59,6 +63,11 @@ function Dashboard({
   ] = useState([])
 
   const [
+    packageLessonUsage,
+    setPackageLessonUsage
+  ] = useState([])
+
+  const [
     dashboardLoading,
     setDashboardLoading
   ] = useState(true)
@@ -94,7 +103,8 @@ function Dashboard({
         try {
           const [
             summaryResult,
-            receivableResult
+            receivableResult,
+            packageLessonUsageResult
           ] = await Promise.all([
             getDashboardSummary({
               todayKey,
@@ -111,7 +121,8 @@ function Dashboard({
               graceDays:
                 GRACE_DAYS,
               limit: 30
-            })
+            }),
+            getStudentPackageLessonUsage()
           ])
 
           if (!isMounted) {
@@ -124,6 +135,10 @@ function Dashboard({
 
           setReceivableRecords(
             receivableResult
+          )
+
+          setPackageLessonUsage(
+            packageLessonUsageResult
           )
         } catch (error) {
           console.error(
@@ -413,7 +428,57 @@ function Dashboard({
       }
     )
 
+  const packagesWithOneLessonLeft =
+    packageLessonUsage.filter(
+      (item) =>
+        item.remainingLessonCount === 1
+    )
+
+  const packagesWithNoLessonLeft =
+    packageLessonUsage.filter(
+      (item) =>
+        item.remainingLessonCount === 0
+    )
+
   const alerts = []
+
+  packagesWithNoLessonLeft.forEach(
+    (item) => {
+      alerts.push({
+        id:
+          `package-finished-${item.studentPackageId}`,
+        type: 'danger',
+        title:
+          `${item.studentName} · Ders hakkı bitti`,
+        description:
+          `${item.packageName} paketinde ${item.usedLessonCount}/${item.totalLessonCount} ders tamamlandı. Paketi uzatın, güncelleyin veya sonlandırın.`,
+        page: 'students',
+        studentId:
+          item.studentId,
+        studentPackageId:
+          item.studentPackageId
+      })
+    }
+  )
+
+  packagesWithOneLessonLeft.forEach(
+    (item) => {
+      alerts.push({
+        id:
+          `package-nearly-finished-${item.studentPackageId}`,
+        type: 'warning',
+        title:
+          `${item.studentName} · 1 ders kaldı`,
+        description:
+          `${item.packageName} paketinde ${item.usedLessonCount}/${item.totalLessonCount} ders tamamlandı.`,
+        page: 'students',
+        studentId:
+          item.studentId,
+        studentPackageId:
+          item.studentPackageId
+      })
+    }
+  )
 
   if (
     criticalOverdueRecords.length >

@@ -14,6 +14,7 @@ import {
   getStudentById,
   getStudentListCounts,
   getStudentsPage,
+  extendStudentPackage,
   reactivateStudent,
   setStudentPassive,
   updateStudent
@@ -208,6 +209,11 @@ function Students({
   const [isSavingStudent, setIsSavingStudent] = useState(false)
   const [changingStudentStatus, setChangingStudentStatus] = useState(false)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+
+  const [
+    extendingPackageId,
+    setExtendingPackageId
+  ] = useState('')
 
   /*
    * ÖĞRENCİ EKRANI KAYDEDİLMEMİŞ DEĞİŞİKLİK TAKİBİ
@@ -877,6 +883,23 @@ function Students({
           instrument: student.instrument || '',
           lessonDuration: student.lessonDuration || '',
           lessonCount: Number(student.lessonCount || 0),
+          totalLessonCount: Number(
+            student.totalLessonCount ??
+            student.lessonCount ??
+            0
+          ),
+          usedLessonCount: Number(
+            student.usedLessonCount || 0
+          ),
+          remainingLessonCount: Number(
+            student.remainingLessonCount ??
+            student.totalLessonCount ??
+            student.lessonCount ??
+            0
+          ),
+          lessonRightsStatus:
+            student.lessonRightsStatus ||
+            'Devam Ediyor',
           monthlyFee: Number(
             student.agreedPrice ?? student.monthlyFee ?? 0
           ),
@@ -1439,6 +1462,120 @@ function Students({
       )
     }
   }
+
+
+  const handleExtendStudentPackage =
+    async (packageItem) => {
+      if (
+        !selectedStudent ||
+        extendingPackageId
+      ) {
+        return
+      }
+
+      if (!isPackageActive(packageItem)) {
+        alert(
+          'Sonlandırılmış paket uzatılamaz.'
+        )
+        return
+      }
+
+      const currentTotal =
+        Number(
+          packageItem.totalLessonCount ??
+          packageItem.lessonCount ??
+          0
+        )
+
+      const defaultExtension =
+        Number(
+          packageItem.lessonCount ||
+          1
+        )
+
+      const inputValue =
+        window.prompt(
+          `${packageItem.packageName} paketine kaç ders eklensin?\n\nMevcut toplam: ${currentTotal}\nÖnerilen ek ders: ${defaultExtension}`,
+          String(defaultExtension)
+        )
+
+      if (inputValue === null) {
+        return
+      }
+
+      const lessonCountToAdd =
+        Number(inputValue)
+
+      if (
+        !Number.isInteger(
+          lessonCountToAdd
+        ) ||
+        lessonCountToAdd <= 0
+      ) {
+        alert(
+          'Eklenecek ders sayısı pozitif bir tam sayı olmalıdır.'
+        )
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `${currentTotal} olan toplam ders hakkı ${currentTotal + lessonCountToAdd} olacak. Devam etmek istiyor musunuz?`
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      setExtendingPackageId(
+        packageItem.studentPackageId
+      )
+
+      try {
+        const updatedStudent =
+          await extendStudentPackage(
+            packageItem.studentPackageId,
+            lessonCountToAdd
+          )
+
+        setStudents((current) =>
+          current.map((student) =>
+            areIdsEqual(
+              student.id,
+              updatedStudent.id
+            )
+              ? updatedStudent
+              : student
+          )
+        )
+
+        setSelectedStudent(
+          updatedStudent
+        )
+
+        setEditForm({
+          ...updatedStudent
+        })
+
+        setStudentListReloadKey(
+          (current) =>
+            current + 1
+        )
+      } catch (error) {
+        console.error(
+          'Paket uzatma hatası:',
+          error
+        )
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : 'Paket uzatılamadı.'
+        )
+      } finally {
+        setExtendingPackageId('')
+      }
+    }
 
   const togglePackageStatusInForm = (
     target,
@@ -3786,6 +3923,7 @@ function Students({
     items,
     {
       onEdit = null,
+      onExtend = null,
       onRemove = null,
       onToggleStatus = null
     } = {}
@@ -3800,6 +3938,7 @@ function Students({
 
     const hasActions =
       Boolean(onEdit) ||
+      Boolean(onExtend) ||
       Boolean(onRemove) ||
       Boolean(onToggleStatus)
 
@@ -3814,6 +3953,7 @@ function Students({
               <th>İlk Ödeme</th>
               <th>Ödeme Günü</th>
               <th>Sonraki Ödeme</th>
+              <th>Ders Hakkı</th>
               <th>Durum</th>
               {hasActions && <th>İşlem</th>}
             </tr>
@@ -3822,6 +3962,47 @@ function Students({
           <tbody>
             {items.map((item) => {
               const active = isPackageActive(item)
+
+              const totalLessonCount =
+                Number(
+                  item.totalLessonCount ??
+                  item.lessonCount ??
+                  0
+                )
+
+              const usedLessonCount =
+                Number(
+                  item.usedLessonCount || 0
+                )
+
+              const remainingLessonCount =
+                Math.max(
+                  Number(
+                    item.remainingLessonCount ??
+                    (
+                      totalLessonCount -
+                      usedLessonCount
+                    )
+                  ),
+                  0
+                )
+
+              const lessonRightsStatus =
+                item.lessonRightsStatus ||
+                (
+                  remainingLessonCount === 0
+                    ? 'Ders Hakkı Bitti'
+                    : remainingLessonCount === 1
+                      ? 'Bitmek Üzere'
+                      : 'Devam Ediyor'
+                )
+
+              const lessonRightsClass =
+                remainingLessonCount === 0
+                  ? 'ended'
+                  : remainingLessonCount === 1
+                    ? 'warning'
+                    : 'active'
 
               return (
                 <tr
@@ -3873,6 +4054,24 @@ function Students({
                   </td>
 
                   <td>
+                    <div className="package-lesson-rights">
+                      <strong>
+                        {usedLessonCount}/{totalLessonCount}
+                      </strong>
+
+                      <span>
+                        {remainingLessonCount} ders kaldı
+                      </span>
+
+                      <small
+                        className={`package-lesson-rights-badge ${lessonRightsClass}`}
+                      >
+                        {lessonRightsStatus}
+                      </small>
+                    </div>
+                  </td>
+
+                  <td>
                     <span
                       className={`package-status-badge ${
                         active ? 'active' : 'ended'
@@ -3900,6 +4099,29 @@ function Students({
                             onClick={() => onEdit(item)}
                           >
                             Düzenle
+                          </button>
+                        )}
+
+                        {onExtend && active && (
+                          <button
+                            className="package-extend-button"
+                            type="button"
+                            onClick={() =>
+                              onExtend(item)
+                            }
+                            disabled={
+                              areIdsEqual(
+                                extendingPackageId,
+                                item.studentPackageId
+                              )
+                            }
+                          >
+                            {areIdsEqual(
+                              extendingPackageId,
+                              item.studentPackageId
+                            )
+                              ? 'Uzatılıyor...'
+                              : 'Uzat'}
                           </button>
                         )}
 
@@ -4625,6 +4847,8 @@ function Students({
                             setEditPackageEditingId,
                             setEditPackageEditorOpen
                           ),
+                        onExtend:
+                          handleExtendStudentPackage,
                         onToggleStatus: (id) =>
                           togglePackageStatusInForm(
                             editForm,
@@ -4650,7 +4874,11 @@ function Students({
             ) : (
               <>
                 {renderPackageTable(
-                  normalizeStudentPackages(selectedStudent)
+                  normalizeStudentPackages(selectedStudent),
+                  {
+                    onExtend:
+                      handleExtendStudentPackage
+                  }
                 )}
                 <div className="detail-grid" style={{ marginTop: '18px' }}>
                   <p><strong>Aylık Toplam Ücret:</strong> ₺{formatPrice(getTotalFee(selectedStudent))}</p>

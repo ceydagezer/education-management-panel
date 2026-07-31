@@ -4,6 +4,7 @@ import {
   createLessonOccurrence,
   deleteLessonOccurrence,
   getLessonHistoryPage,
+  getLessonPlanStudents,
   updateLessonOccurrenceStatus
 } from '../services/lessonService'
 import '../styles/status.css'
@@ -13,7 +14,6 @@ import {
   getLessonStatusBadgeClass,
   getLessonStatusClass,
   getLessonStatusLabel,
-  isActiveLesson,
   isMakeupLesson,
   normalizeLessonStatus
 } from '../utils/lessonHelpers'
@@ -271,6 +271,11 @@ function LessonStatusTracking({
     setHistoryReloadKey
   ] = useState(0)
 
+  const [
+    lessonPlanStudents,
+    setLessonPlanStudents
+  ] = useState([])
+
   const studentSearchRef = useRef(null)
 
   /*
@@ -382,6 +387,32 @@ function LessonStatusTracking({
     }
   }, [])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const loadLessonPlanStudents = async () => {
+      try {
+        const rows =
+          await getLessonPlanStudents()
+
+        if (isMounted) {
+          setLessonPlanStudents(rows)
+        }
+      } catch (error) {
+        console.error(
+          'Grup dersi öğrencileri alınamadı:',
+          error
+        )
+      }
+    }
+
+    loadLessonPlanStudents()
+
+    return () => {
+      isMounted = false
+    }
+  }, [lessonPlans])
+
   const getTeacherName = (lesson) => {
     if (lesson.teacherName) {
       return lesson.teacherName
@@ -441,6 +472,140 @@ function LessonStatusTracking({
       student?.name ||
       '-'
     )
+  }
+
+  const getLessonPlanRecord = (lesson) => {
+    const planId =
+      lesson.lessonPlanId ||
+      lesson.id
+
+    return lessonPlans.find(
+      (lessonPlan) =>
+        areIdsEqual(
+          lessonPlan.id,
+          planId
+        )
+    ) || null
+  }
+
+  const isGroupLessonRecord = (lesson) => {
+    if (
+      lesson.isGroupLesson === true ||
+      lesson.lessonType === 'group'
+    ) {
+      return true
+    }
+
+    const lessonPlan =
+      getLessonPlanRecord(lesson)
+
+    return (
+      lessonPlan?.isGroupLesson === true ||
+      lessonPlan?.lessonType === 'group'
+    )
+  }
+
+  const getLessonPlanId = (lesson) =>
+    lesson.lessonPlanId ||
+    (
+      isGroupLessonRecord(lesson)
+        ? lesson.id
+        : ''
+    )
+
+  const getGroupParticipantIds = (lesson) => {
+    const lessonPlanId =
+      getLessonPlanId(lesson)
+
+    if (!lessonPlanId) {
+      return []
+    }
+
+    return lessonPlanStudents
+      .filter(
+        (link) =>
+          link.isActive !== false &&
+          areIdsEqual(
+            link.lessonPlanId,
+            lessonPlanId
+          )
+      )
+      .map(
+        (link) => link.studentId
+      )
+  }
+
+  const getGroupStudentCount = (lesson) => {
+    const participantIds =
+      getGroupParticipantIds(lesson)
+
+    if (participantIds.length > 0) {
+      return participantIds.length
+    }
+
+    const lessonPlan =
+      getLessonPlanRecord(lesson)
+
+    return Number(
+      lesson.studentCount ||
+      lessonPlan?.studentCount ||
+      0
+    )
+  }
+
+  const getGroupName = (lesson) => {
+    const lessonPlan =
+      getLessonPlanRecord(lesson)
+
+    return (
+      lesson.groupName ||
+      lessonPlan?.groupName ||
+      'Grup Dersi'
+    )
+  }
+
+  const getLessonStudentIds = (lesson) => {
+    if (isGroupLessonRecord(lesson)) {
+      const participantIds =
+        getGroupParticipantIds(lesson)
+
+      if (participantIds.length > 0) {
+        return participantIds
+      }
+    }
+
+    return lesson.studentId
+      ? [lesson.studentId]
+      : []
+  }
+
+  const getLessonDisplayStudent = (lesson) => {
+    if (!isGroupLessonRecord(lesson)) {
+      return getStudentName(lesson)
+    }
+
+    return getGroupName(lesson)
+  }
+
+  const getLessonDisplaySummary = (lesson) => {
+    if (!isGroupLessonRecord(lesson)) {
+      return `${getStudentName(
+        lesson
+      )} • ${getLessonInstrument(
+        lesson
+      )}`
+    }
+
+    const studentCount =
+      getGroupStudentCount(lesson)
+
+    return `${getGroupName(
+      lesson
+    )} • ${
+      studentCount > 0
+        ? `${studentCount} öğrenci`
+        : 'Grup'
+    }`
   }
 
   const getLessonTitle = (lesson) => {
@@ -571,23 +736,40 @@ function LessonStatusTracking({
         selectedTeacher
       )
 
-    const lessonStudent = students.find(
-      (student) =>
-        areIdsEqual(
-          student.id,
-          lesson.studentId
+    const lessonStudentIds =
+      getLessonStudentIds(lesson)
+
+    const lessonStudents =
+      lessonStudentIds
+        .map(
+          (studentId) =>
+            students.find(
+              (student) =>
+                areIdsEqual(
+                  student.id,
+                  studentId
+                )
+            )
         )
-    )
+        .filter(Boolean)
 
     const lessonStudentSearchValue =
       normalizeSearchText(
         [
-          getStudentName(lesson),
-          lessonStudent?.phone,
-          lessonStudent?.motherPhone,
-          lessonStudent?.fatherPhone,
-          lessonStudent?.tcNo,
-          lessonStudent?.email
+          getLessonDisplayStudent(
+            lesson
+          ),
+          ...lessonStudents.flatMap(
+            (student) => [
+              student?.fullName,
+              student?.name,
+              student?.phone,
+              student?.motherPhone,
+              student?.fatherPhone,
+              student?.tcNo,
+              student?.email
+            ]
+          )
         ]
           .filter(Boolean)
           .join(' ')
@@ -595,9 +777,12 @@ function LessonStatusTracking({
 
     const studentMatch =
       selectedStudent !== 'all'
-        ? areIdsEqual(
-            lesson.studentId,
-            selectedStudent
+        ? lessonStudentIds.some(
+            (studentId) =>
+              areIdsEqual(
+                studentId,
+                selectedStudent
+              )
           )
         : !normalizedStudentSearch ||
           lessonStudentSearchValue.includes(
@@ -700,11 +885,6 @@ function LessonStatusTracking({
    */
   const pendingMakeupLessons =
     lessons.filter((lesson) => {
-      const status =
-        normalizeLessonStatus(
-          lesson.status
-        )
-
       const belongsToSelectedWeek =
         !lesson.lessonDate ||
         (
@@ -714,14 +894,15 @@ function LessonStatusTracking({
             selectedWeekEnd
         )
 
+      /*
+       * Telafi dersi sonuçlandıktan sonra haftalık tablodan
+       * kaldırılmaz. Böylece aynı öğrenci/öğretmen için aynı
+       * tarih ve saate ikinci bir telafi eklenmesi engellenir.
+       * Durum kartın rengi ve etiketiyle gösterilir.
+       */
       return (
         belongsToSelectedWeek &&
-        isMakeupLesson(lesson) &&
-        (
-          status ===
-            'Telafi yapılacak' ||
-          status === 'Planlandı'
-        )
+        isMakeupLesson(lesson)
       )
     })
 
@@ -969,14 +1150,33 @@ function LessonStatusTracking({
       return
     }
 
-    const actionId =
+    const makeupLesson =
+      isMakeupLesson(currentLesson)
+
+    /*
+     * Düzenli derslerde gerçek occurrence kimliği
+     * occurrenceId alanında bulunur.
+     *
+     * Telafi dersleri doğrudan lesson_occurrences
+     * tablosundan geldiği için gerçek kayıt kimliği
+     * id alanındadır.
+     */
+    const existingOccurrenceId =
       currentLesson.occurrenceId ||
+      (
+        makeupLesson
+          ? currentLesson.id
+          : ''
+      )
+
+    const actionId =
+      existingOccurrenceId ||
       currentLesson.id
 
     const statusToSave =
       newStatus === 'Geri al'
         ? (
-            isMakeupLesson(currentLesson)
+            makeupLesson
               ? 'Telafi yapılacak'
               : 'Planlandı'
           )
@@ -993,12 +1193,11 @@ function LessonStatusTracking({
     try {
       let savedLesson
 
-      if (currentLesson.occurrenceId) {
+      if (existingOccurrenceId) {
         savedLesson =
           await updateLessonOccurrenceStatus(
-            currentLesson.occurrenceId,
-            statusToSave,
-            lessonDate
+            existingOccurrenceId,
+            statusToSave
           )
 
         setLessons((currentLessons) =>
@@ -1006,8 +1205,7 @@ function LessonStatusTracking({
             (lesson) =>
               areIdsEqual(
                 lesson.id,
-                currentLesson
-                  .occurrenceId
+                existingOccurrenceId
               )
                 ? savedLesson
                 : lesson
@@ -1221,32 +1419,101 @@ function LessonStatusTracking({
   }
 
   const hasConflict = () => {
-    return lessons.some((lesson) => {
-      const sameDay =
-        lesson.day === makeupForm.day
-
-      const sameTime =
-        lesson.time === makeupForm.time
-
-      const sameTeacher = areIdsEqual(
-        getTeacherId(lesson),
-        makeupForm.teacherId
+    const selectedLessonDate =
+      getLessonDateForDay(
+        makeupForm.day
       )
 
-      const sameStudent = areIdsEqual(
-        lesson.studentId,
-        makeupForm.studentId
-      )
+    const occurrenceConflict =
+      lessons.some((lesson) => {
+        const lessonStatus =
+          normalizeLessonStatus(
+            lesson.status
+          )
 
-      const isSameSlot =
-        sameDay && sameTime
+        const sameDate =
+          lesson.lessonDate
+            ? lesson.lessonDate ===
+              selectedLessonDate
+            : lesson.day ===
+              makeupForm.day
 
-      return (
-        isSameSlot &&
-        isActiveLesson(lesson) &&
-        (sameTeacher || sameStudent)
-      )
-    })
+        const sameTime =
+          lesson.time ===
+          makeupForm.time
+
+        const sameTeacher =
+          areIdsEqual(
+            getTeacherId(lesson),
+            makeupForm.teacherId
+          )
+
+        const sameStudent =
+          areIdsEqual(
+            lesson.studentId,
+            makeupForm.studentId
+          )
+
+        /*
+         * Yapılmış bir telafi de o tarih ve saatte gerçekleşmiş
+         * gerçek bir derstir. Bu yüzden yalnızca iptal edilmiş
+         * kayıtlar yeni ders eklenmesine engel olmaz.
+         */
+        const blocksSlot =
+          lessonStatus !==
+            'İptal edildi'
+
+        return (
+          lesson.isActive !== false &&
+          blocksSlot &&
+          sameDate &&
+          sameTime &&
+          (
+            sameTeacher ||
+            sameStudent
+          )
+        )
+      })
+
+    if (occurrenceConflict) {
+      return true
+    }
+
+    return lessonPlans.some(
+      (lessonPlan) => {
+        const sameDay =
+          lessonPlan.day ===
+          makeupForm.day
+
+        const sameTime =
+          lessonPlan.time ===
+          makeupForm.time
+
+        const sameTeacher =
+          areIdsEqual(
+            getTeacherId(
+              lessonPlan
+            ),
+            makeupForm.teacherId
+          )
+
+        const sameStudent =
+          areIdsEqual(
+            lessonPlan.studentId,
+            makeupForm.studentId
+          )
+
+        return (
+          lessonPlan.isActive !== false &&
+          sameDay &&
+          sameTime &&
+          (
+            sameTeacher ||
+            sameStudent
+          )
+        )
+      }
+    )
   }
 
   const saveMakeupLesson = async (event) => {
@@ -1934,18 +2201,33 @@ function LessonStatusTracking({
                                         </div>
 
                                         <span
-                                          title={`${getStudentName(
-                                            lesson
-                                          )} • ${getLessonInstrument(
-                                            lesson
-                                          )}`}
-                                        >
-                                          {getStudentName(
+                                          title={getLessonDisplaySummary(
                                             lesson
                                           )}
-                                          <b>•</b>
-                                          {getLessonInstrument(
+                                        >
+                                          {isGroupLessonRecord(
                                             lesson
+                                          ) ? (
+                                            <>
+                                              {getGroupName(
+                                                lesson
+                                              )}
+                                              <b>•</b>
+                                              {getGroupStudentCount(
+                                                lesson
+                                              )}{' '}
+                                              öğrenci
+                                            </>
+                                          ) : (
+                                            <>
+                                              {getStudentName(
+                                                lesson
+                                              )}
+                                              <b>•</b>
+                                              {getLessonInstrument(
+                                                lesson
+                                              )}
+                                            </>
                                           )}
                                         </span>
 
@@ -2242,11 +2524,11 @@ function LessonStatusTracking({
                         <td className="status-history-student-cell">
                           <span
                             className="status-person-text"
-                            title={getStudentName(
+                            title={getLessonDisplaySummary(
                               lesson
                             )}
                           >
-                            {getStudentName(
+                            {getLessonDisplayStudent(
                               lesson
                             )}
                           </span>
@@ -2265,9 +2547,15 @@ function LessonStatusTracking({
                               )}
                             </strong>
                             <small>
-                              {getLessonTitle(
+                              {isGroupLessonRecord(
                                 lesson
-                              )}
+                              )
+                                ? `${getGroupStudentCount(
+                                    lesson
+                                  )} öğrenci`
+                                : getLessonTitle(
+                                    lesson
+                                  )}
                             </small>
                           </div>
                         </td>
