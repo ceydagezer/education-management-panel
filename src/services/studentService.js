@@ -30,6 +30,23 @@ const studentSelect = `
   created_at,
   updated_at,
 
+  student_guardians (
+    id,
+    student_id,
+    full_name,
+    relationship,
+    phone,
+    email,
+    address,
+    same_address_as_student,
+    is_primary,
+    notes,
+    sort_order,
+    is_active,
+    created_at,
+    updated_at
+  ),
+
   student_packages (
     id,
     student_id,
@@ -347,6 +364,121 @@ function mapStudentSummaryFromDb(row) {
   }
 }
 
+
+function mapStudentGuardianFromDb(row) {
+  return {
+    id: row.id || '',
+    studentId: row.student_id || '',
+    fullName: row.full_name || '',
+    relationship: row.relationship || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    address: row.address || '',
+    sameAddressAsStudent:
+      row.same_address_as_student === true,
+    isPrimary:
+      row.is_primary === true,
+    notes: row.notes || '',
+    sortOrder: Number(row.sort_order || 1),
+    isActive: row.is_active !== false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function getGuardianFormFields(row, index) {
+  const prefix = `guardian${index + 1}`
+
+  return {
+    [`${prefix}Id`]: row?.id || '',
+    [`${prefix}Name`]: row?.fullName || '',
+    [`${prefix}Relationship`]:
+      row?.relationship || '',
+    [`${prefix}Phone`]: row?.phone || '',
+    [`${prefix}Email`]: row?.email || '',
+    [`${prefix}Address`]: row?.address || '',
+    [`${prefix}SameAddress`]:
+      row?.sameAddressAsStudent === true,
+    [`${prefix}IsPrimary`]:
+      row?.isPrimary === true,
+    [`${prefix}Notes`]: row?.notes || ''
+  }
+}
+
+function normalizeGuardiansFromForm(form) {
+  const rows = [1, 2]
+    .map((number) => {
+      const prefix = `guardian${number}`
+      const fullName = String(
+        form[`${prefix}Name`] || ''
+      ).trim()
+
+      if (!fullName) {
+        return null
+      }
+
+      const relationship = String(
+        form[`${prefix}Relationship`] || ''
+      ).trim()
+
+      if (!relationship) {
+        throw new Error(
+          `${number}. veli için yakınlık derecesi seçilmelidir.`
+        )
+      }
+
+      return {
+        id: String(
+          form[`${prefix}Id`] || ''
+        ).trim(),
+        full_name: fullName,
+        relationship,
+        phone:
+          String(
+            form[`${prefix}Phone`] || ''
+          ).trim() || null,
+        email:
+          String(
+            form[`${prefix}Email`] || ''
+          ).trim() || null,
+        address:
+          form[`${prefix}SameAddress`] === true
+            ? null
+            : String(
+                form[`${prefix}Address`] || ''
+              ).trim() || null,
+        same_address_as_student:
+          form[`${prefix}SameAddress`] === true,
+        is_primary:
+          form[`${prefix}IsPrimary`] === true,
+        notes:
+          String(
+            form[`${prefix}Notes`] || ''
+          ).trim() || null,
+        sort_order: number,
+        is_active: true
+      }
+    })
+    .filter(Boolean)
+
+  if (
+    rows.length > 0 &&
+    !rows.some((row) => row.is_primary)
+  ) {
+    rows[0].is_primary = true
+  }
+
+  if (
+    rows.filter((row) => row.is_primary).length > 1
+  ) {
+    throw new Error(
+      'Yalnızca bir veli birincil iletişim kişisi olabilir.'
+    )
+  }
+
+  return rows
+}
+
 function mapStudentFromDb(row) {
   const enrolledPackages = (
     row.student_packages || []
@@ -365,6 +497,54 @@ function mapStudentFromDb(row) {
         String(first.createdAt || '')
       )
     })
+
+  const guardians = (
+    row.student_guardians || []
+  )
+    .filter(
+      (guardian) =>
+        guardian.is_active !== false
+    )
+    .map(mapStudentGuardianFromDb)
+    .sort(
+      (first, second) =>
+        Number(first.sortOrder || 0) -
+        Number(second.sortOrder || 0)
+    )
+
+  const legacyGuardians =
+    guardians.length > 0
+      ? guardians
+      : [
+          row.mother_name
+            ? {
+                fullName: row.mother_name,
+                relationship: 'Anne',
+                phone: row.mother_phone || '',
+                email: '',
+                address: '',
+                sameAddressAsStudent: false,
+                isPrimary: true,
+                notes: '',
+                sortOrder: 1,
+                isActive: true
+              }
+            : null,
+          row.father_name
+            ? {
+                fullName: row.father_name,
+                relationship: 'Baba',
+                phone: row.father_phone || '',
+                email: '',
+                address: '',
+                sameAddressAsStudent: false,
+                isPrimary: !row.mother_name,
+                notes: '',
+                sortOrder: 2,
+                isActive: true
+              }
+            : null
+        ].filter(Boolean)
 
   const student = {
     id: row.id,
@@ -407,6 +587,19 @@ function mapStudentFromDb(row) {
 
     notes:
       row.notes || '',
+
+    guardians:
+      legacyGuardians,
+
+    ...getGuardianFormFields(
+      legacyGuardians[0],
+      0
+    ),
+
+    ...getGuardianFormFields(
+      legacyGuardians[1],
+      1
+    ),
 
     status:
       row.status || 'Aktif',
@@ -809,6 +1002,9 @@ function normalizeStudentForm(form) {
     )
   }
 
+  const guardianRows =
+    normalizeGuardiansFromForm(form)
+
   const packageRows =
     activePackages.map((item) => {
       const packageId =
@@ -1020,7 +1216,8 @@ function normalizeStudentForm(form) {
         null
     },
 
-    packageRows
+    packageRows,
+    guardianRows
   }
 }
 
@@ -1415,7 +1612,8 @@ export async function getStudentById(
 export async function createStudent(form) {
   const {
     studentRow,
-    packageRows
+    packageRows,
+    guardianRows
   } = normalizeStudentForm(form)
 
   const { data, error } = await supabase
@@ -1476,6 +1674,49 @@ export async function createStudent(form) {
         'Aynı paket öğrenciye birden fazla aktif kayıt olarak eklenemez.'
       )
     )
+  }
+
+  if (guardianRows.length > 0) {
+    const {
+      error: guardianError
+    } = await supabase
+      .from('student_guardians')
+      .insert(
+        guardianRows.map((row) => {
+          const {
+            id,
+            ...guardianRow
+          } = row
+
+          return {
+            ...guardianRow,
+            student_id: studentId
+          }
+        })
+      )
+
+    if (guardianError) {
+      const {
+        error: rollbackError
+      } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId)
+
+      if (rollbackError) {
+        console.error(
+          'Başarısız veli kaydı geri alınamadı:',
+          rollbackError
+        )
+      }
+
+      throw new Error(
+        getStudentErrorMessage(
+          guardianError,
+          'Veli bilgileri kaydedilemedi.'
+        )
+      )
+    }
   }
 
   return getStudentById(studentId)
@@ -1655,7 +1896,9 @@ function normalizeStudentUpdate(form) {
         String(form.notes ?? '').trim() || null
     },
     enrolledPackages:
-      normalizeStudentPackages(form)
+      normalizeStudentPackages(form),
+    guardianRows:
+      normalizeGuardiansFromForm(form)
   }
 }
 
@@ -1945,6 +2188,63 @@ export async function extendStudentPackage(
   )
 }
 
+
+async function syncStudentGuardians(
+  studentId,
+  guardianRows
+) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  const {
+    error: deleteError
+  } = await supabase
+    .from('student_guardians')
+    .delete()
+    .eq('student_id', cleanStudentId)
+
+  if (deleteError) {
+    throw new Error(
+      getStudentErrorMessage(
+        deleteError,
+        'Veli bilgileri güncellenemedi.'
+      )
+    )
+  }
+
+  if (!guardianRows.length) {
+    return
+  }
+
+  const {
+    error: insertError
+  } = await supabase
+    .from('student_guardians')
+    .insert(
+      guardianRows.map((row) => {
+        const {
+          id,
+          ...guardianRow
+        } = row
+
+        return {
+          ...guardianRow,
+          student_id: cleanStudentId
+        }
+      })
+    )
+
+  if (insertError) {
+    throw new Error(
+      getStudentErrorMessage(
+        insertError,
+        'Veli bilgileri kaydedilemedi.'
+      )
+    )
+  }
+}
+
 export async function updateStudent(
   studentId,
   form
@@ -1961,7 +2261,8 @@ export async function updateStudent(
 
   const {
     studentRow,
-    enrolledPackages
+    enrolledPackages,
+    guardianRows
   } = normalizeStudentUpdate(form)
 
   const { error } = await supabase
@@ -1988,6 +2289,11 @@ export async function updateStudent(
   await syncStudentPackages(
     cleanStudentId,
     enrolledPackages
+  )
+
+  await syncStudentGuardians(
+    cleanStudentId,
+    guardianRows
   )
 
   return getStudentById(

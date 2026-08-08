@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
+import StaffPaymentsPanel from '../components/StaffPaymentsPanel'
 import '../styles/finance.css'
 
 
@@ -15,7 +16,8 @@ import {
   getFinanceExpenseSummary,
   getTeacherEarningsSummary,
   getTeacherEarningLessons,
-  getTeacherPaymentsPage
+  getTeacherPaymentsPage,
+  getStaffPaymentSummary
 } from '../services/financeService'
 
 import {
@@ -75,7 +77,8 @@ function Finance({
     'overview',
     'incomes',
     'expenses',
-    'teacher-payments'
+    'teacher-payments',
+    'staff-payments'
   ]
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -278,6 +281,63 @@ function Finance({
     setTeacherHistoryReloadKey
   ] = useState(0)
 
+  const [
+    staffPaymentSummary,
+    setStaffPaymentSummary
+  ] = useState({
+    totalPaid: 0,
+    recordCount: 0
+  })
+
+  const [
+    staffPaymentSummaryLoading,
+    setStaffPaymentSummaryLoading
+  ] = useState(true)
+
+  const [
+    staffPaymentReloadKey,
+    setStaffPaymentReloadKey
+  ] = useState(0)
+
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadStaffPaymentSummary =
+      async () => {
+        setStaffPaymentSummaryLoading(
+          true
+        )
+
+        try {
+          const result =
+            await getStaffPaymentSummary()
+
+          if (isMounted) {
+            setStaffPaymentSummary(
+              result
+            )
+          }
+        } catch (error) {
+          console.error(
+            'Personel ödeme özeti alınamadı:',
+            error
+          )
+        } finally {
+          if (isMounted) {
+            setStaffPaymentSummaryLoading(
+              false
+            )
+          }
+        }
+      }
+
+    loadStaffPaymentSummary()
+
+    return () => {
+      isMounted = false
+    }
+  }, [staffPaymentReloadKey])
 
   useEffect(() => {
     let isMounted = true
@@ -1056,8 +1116,19 @@ useEffect(() => {
       0
     )
 
-  const totalExpense = totalInstitutionExpenses + totalTeacherPaid
-  const netCash = totalIncome - totalExpense
+  const totalStaffPaid =
+    Number(
+      staffPaymentSummary.totalPaid || 0
+    )
+
+  const totalExpense =
+    totalInstitutionExpenses +
+    totalTeacherPaid +
+    totalStaffPaid
+
+  const netCash =
+    totalIncome -
+    totalExpense
 
   const selectedTeacherSummary = teacherSummaries.find(
     (summary) =>
@@ -1689,7 +1760,8 @@ useEffect(() => {
   const financeSummaryLoading =
     incomeSummaryLoading ||
     expenseSummaryLoading ||
-    teacherEarningsLoading
+    teacherEarningsLoading ||
+    staffPaymentSummaryLoading
 
   const renderCurrencyValue = (
     value,
@@ -1720,7 +1792,7 @@ useEffect(() => {
       <div className="finance-metric-card expense">
         <span>Toplam Gider</span>
         <strong>{renderCurrencyValue(totalExpense)}</strong>
-        <small>Kurum giderleri ve öğretmenlere yapılan ödemeler.</small>
+        <small>Kurum giderleri, öğretmen ve personel ödemeleri.</small>
       </div>
 
       <div className="finance-metric-card net">
@@ -1799,6 +1871,16 @@ useEffect(() => {
             {renderCurrencyValue(
               totalTeacherPaid,
               teacherEarningsLoading
+            )}
+          </strong>
+        </div>
+
+        <div className="finance-summary-row">
+          <span>Personele Ödenen</span>
+          <strong>
+            {renderCurrencyValue(
+              totalStaffPaid,
+              staffPaymentSummaryLoading
             )}
           </strong>
         </div>
@@ -3835,7 +3917,7 @@ useEffect(() => {
           <span className="page-badge">Finans Yönetimi</span>
           <h1>Finans</h1>
           <p>
-            Öğrenci tahsilatlarını, ek gelirleri, kurum giderlerini ve öğretmen ödemelerini tek alandan takip edin.
+            Öğrenci tahsilatlarını, ek gelirleri, kurum giderlerini, öğretmen ve personel ödemelerini tek alandan takip edin.
           </p>
         </div>
       </section>
@@ -3879,12 +3961,34 @@ useEffect(() => {
         >
           Öğretmen Ödemeleri
         </button>
+
+        <button
+          type="button"
+          className={activeTab === 'staff-payments' ? 'active' : ''}
+          onClick={() =>
+            changeFinanceTab('staff-payments')
+          }
+        >
+          Personel Ödemeleri
+        </button>
       </nav>
 
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'incomes' && renderIncomes()}
       {activeTab === 'expenses' && renderExpenses()}
       {activeTab === 'teacher-payments' && renderTeacherPayments()}
+
+      {activeTab === 'staff-payments' && (
+        <StaffPaymentsPanel
+          unsavedChanges={unsavedChanges}
+          onChanged={() =>
+            setStaffPaymentReloadKey(
+              (current) =>
+                current + 1
+            )
+          }
+        />
+      )}
     </div>
   )
 }

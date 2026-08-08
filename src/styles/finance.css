@@ -1532,3 +1532,146 @@
     padding-bottom: 3px;
   }
 }
+
+
+/* Personel ödemeleri */
+.finance-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 18px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.finance-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.finance-pagination-current {
+  min-width: 64px;
+  color: #334155;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .finance-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .finance-pagination > div {
+    justify-content: space-between;
+  }
+}
+
+
+/* Personel ödemeleri filtre görünümü */
+.finance-income-filter-panel {
+  padding: 18px;
+  margin-top: 20px;
+  background: #f8fafc;
+  border: 1px solid #dbe5ef;
+  border-radius: 16px;
+}
+
+.finance-income-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.4fr)
+    minmax(170px, 0.85fr)
+    minmax(170px, 0.85fr)
+    minmax(155px, 0.75fr)
+    minmax(155px, 0.75fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.finance-income-filter-grid .form-group {
+  margin: 0;
+}
+
+.staff-payment-filter-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.staff-payment-filter-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.staff-payment-sort-control,
+.staff-payment-page-size-control {
+  margin: 0;
+}
+
+.staff-payment-sort-control {
+  min-width: 210px;
+}
+
+.staff-payment-page-size-control {
+  min-width: 145px;
+}
+
+.staff-payment-filter-actions select {
+  width: 100%;
+  min-height: 44px;
+}
+
+.finance-table-card .payment-table-wrapper {
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.finance-table-card .finance-data-table {
+  width: 100%;
+  margin: 0;
+}
+
+.finance-table-card .finance-data-table th,
+.finance-table-card .finance-data-table td {
+  vertical-align: middle;
+}
+
+.finance-table-card .finance-data-table .empty-table {
+  height: 90px;
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .finance-income-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .finance-income-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-payment-filter-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-payment-filter-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-payment-sort-control,
+  .staff-payment-page-size-control {
+    min-width: 0;
+  }
+}

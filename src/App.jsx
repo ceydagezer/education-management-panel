@@ -48,6 +48,7 @@ import Payments from './pages/Payments'
 import Finance from './pages/Finance'
 import LessonStatusTracking from './pages/LessonStatusTracking'
 import LessonGroups from './pages/LessonGroups'
+import Reports from './pages/Reports'
 
 const VALID_PAGES = [
   'dashboard',
@@ -58,7 +59,8 @@ const VALID_PAGES = [
   'lesson-status',
   'lesson-groups',
   'payments',
-  'finance'
+  'finance',
+  'reports'
 ]
 
 const getReadableConnectionError = (
@@ -1478,6 +1480,12 @@ function App() {
             )}
           />
         )}
+
+      {activePage ===
+        'reports' && (
+        <Reports />
+      )}
+
       </main>
 
       {showUnsavedModal && (

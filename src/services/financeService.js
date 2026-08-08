@@ -1236,3 +1236,359 @@ export async function cancelTeacherPayment(
 
   return mapTeacherPaymentFromDb(data)
 }
+
+
+const staffPaymentSelect = `
+  id,
+  staff_name,
+  role_title,
+  payment_type,
+  payment_period,
+  amount,
+  payment_date,
+  payment_method,
+  reference_number,
+  note,
+  status,
+  cancelled_at,
+  created_at,
+  updated_at
+`
+
+function mapStaffPaymentFromDb(row) {
+  return {
+    id: row.id,
+    staffName: row.staff_name || '',
+    roleTitle: row.role_title || '',
+    paymentType: row.payment_type || '',
+    paymentPeriod: row.payment_period || '',
+    amount: Number(row.amount || 0),
+    paymentDate: row.payment_date || '',
+    paymentMethod: row.payment_method || '',
+    referenceNumber: row.reference_number || '',
+    note: row.note || '',
+    status: row.status || 'Aktif',
+    cancelledAt: row.cancelled_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export async function getStaffPaymentsPage({
+  page = 1,
+  pageSize = 10,
+  searchText = '',
+  paymentType = '',
+  paymentMethod = '',
+  startDate = '',
+  endDate = '',
+  sortOption = 'newest'
+} = {}) {
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
+  )
+
+  let query = supabase
+    .from('staff_payments')
+    .select(staffPaymentSelect, {
+      count: 'exact'
+    })
+    .eq('status', 'Aktif')
+
+  const cleanSearchText =
+    cleanSearchValue(searchText)
+
+  if (cleanSearchText) {
+    const searchPattern =
+      `%${cleanSearchText}%`
+
+    query = query.or(
+      [
+        `staff_name.ilike.${searchPattern}`,
+        `role_title.ilike.${searchPattern}`,
+        `payment_period.ilike.${searchPattern}`,
+        `reference_number.ilike.${searchPattern}`,
+        `note.ilike.${searchPattern}`
+      ].join(',')
+    )
+  }
+
+  if (paymentType) {
+    query = query.eq(
+      'payment_type',
+      paymentType
+    )
+  }
+
+  if (paymentMethod) {
+    query = query.eq(
+      'payment_method',
+      paymentMethod
+    )
+  }
+
+  if (startDate) {
+    query = query.gte(
+      'payment_date',
+      startDate
+    )
+  }
+
+  if (endDate) {
+    query = query.lte(
+      'payment_date',
+      endDate
+    )
+  }
+
+  const sortSettings = {
+    newest: {
+      column: 'payment_date',
+      ascending: false
+    },
+    oldest: {
+      column: 'payment_date',
+      ascending: true
+    },
+    amountDesc: {
+      column: 'amount',
+      ascending: false
+    },
+    amountAsc: {
+      column: 'amount',
+      ascending: true
+    },
+    staffAsc: {
+      column: 'staff_name',
+      ascending: true
+    },
+    staffDesc: {
+      column: 'staff_name',
+      ascending: false
+    }
+  }
+
+  const selectedSort =
+    sortSettings[sortOption] ||
+    sortSettings.newest
+
+  query = query
+    .order(
+      selectedSort.column,
+      {
+        ascending:
+          selectedSort.ascending,
+        nullsFirst: false
+      }
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+    .range(from, to)
+
+  const {
+    data,
+    error,
+    count
+  } = await query
+
+  if (error) {
+    throw new Error(
+      getFinanceErrorMessage(
+        error,
+        'Personel ödemeleri şu anda alınamadı.'
+      )
+    )
+  }
+
+  return {
+    data: (data || []).map(
+      mapStaffPaymentFromDb
+    ),
+    total: Number(count || 0),
+    page: safePage,
+    pageSize: safePageSize
+  }
+}
+
+export async function getStaffPaymentSummary() {
+  const {
+    data,
+    error,
+    count
+  } = await supabase
+    .from('staff_payments')
+    .select('amount', {
+      count: 'exact'
+    })
+    .eq('status', 'Aktif')
+
+  if (error) {
+    throw new Error(
+      getFinanceErrorMessage(
+        error,
+        'Personel ödeme özeti şu anda alınamadı.'
+      )
+    )
+  }
+
+  return {
+    totalPaid: (data || []).reduce(
+      (total, row) =>
+        total +
+        Number(row.amount || 0),
+      0
+    ),
+    recordCount:
+      Number(count || 0)
+  }
+}
+
+export async function createStaffPayment(
+  form
+) {
+  const staffName = String(
+    form.staffName || ''
+  ).trim()
+
+  const roleTitle = String(
+    form.roleTitle || ''
+  ).trim()
+
+  const paymentType = String(
+    form.paymentType || ''
+  ).trim()
+
+  const paymentDate = String(
+    form.paymentDate || ''
+  ).trim()
+
+  const paymentMethod = String(
+    form.paymentMethod || ''
+  ).trim()
+
+  if (!staffName) {
+    throw new Error(
+      'Personel adı zorunludur.'
+    )
+  }
+
+  if (!roleTitle) {
+    throw new Error(
+      'Personelin görevi zorunludur.'
+    )
+  }
+
+  if (!paymentType) {
+    throw new Error(
+      'Ödeme türü seçilmelidir.'
+    )
+  }
+
+  if (!paymentDate) {
+    throw new Error(
+      'Ödeme tarihi seçilmelidir.'
+    )
+  }
+
+  if (!paymentMethod) {
+    throw new Error(
+      'Ödeme yöntemi seçilmelidir.'
+    )
+  }
+
+  const amount = validatePositiveAmount(
+    form.amount,
+    'Personel ödeme tutarı'
+  )
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('staff_payments')
+    .insert({
+      staff_name: staffName,
+      role_title: roleTitle,
+      payment_type: paymentType,
+      payment_period:
+        cleanOptionalText(
+          form.paymentPeriod
+        ),
+      amount,
+      payment_date:
+        paymentDate,
+      payment_method:
+        paymentMethod,
+      reference_number:
+        cleanOptionalText(
+          form.referenceNumber
+        ),
+      note:
+        cleanOptionalText(
+          form.note
+        ),
+      status: 'Aktif'
+    })
+    .select(staffPaymentSelect)
+    .single()
+
+  if (error) {
+    throw new Error(
+      getFinanceErrorMessage(
+        error,
+        'Personel ödemesi kaydedilemedi.'
+      )
+    )
+  }
+
+  return mapStaffPaymentFromDb(data)
+}
+
+export async function cancelStaffPayment(
+  paymentId
+) {
+  const cleanPaymentId = String(
+    paymentId || ''
+  ).trim()
+
+  if (!cleanPaymentId) {
+    throw new Error(
+      'Personel ödemesi kimliği bulunamadı.'
+    )
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('staff_payments')
+    .update({
+      status: 'İptal',
+      cancelled_at:
+        new Date().toISOString()
+    })
+    .eq('id', cleanPaymentId)
+    .select(staffPaymentSelect)
+    .single()
+
+  if (error) {
+    throw new Error(
+      getFinanceErrorMessage(
+        error,
+        'Personel ödemesi iptal edilemedi.'
+      )
+    )
+  }
+
+  return mapStaffPaymentFromDb(data)
+}

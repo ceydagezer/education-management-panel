@@ -1,7 +1,7 @@
 import academyLogo from '../assets/LOGO.JPG'
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'dashboard', label: 'Ana Sayfa' },
   { id: 'students', label: 'Öğrenciler' },
   { id: 'teachers', label: 'Öğretmenler' },
   { id: 'lesson-groups', label: 'Ders Grupları' },
@@ -12,7 +12,8 @@ const menuItems = [
   },
   { id: 'packages', label: 'Paketler' },
   { id: 'payments', label: 'Tahsilatlar' },
-  { id: 'finance', label: 'Finans' }
+  { id: 'finance', label: 'Finans' },
+  { id: 'reports', label: 'Raporlar' }
 ]
 
 function Sidebar({
