@@ -25,12 +25,6 @@ import {
   getLessonPlans,
   getLessonOccurrences
 } from './services/lessonService'
-
-
-import {
-  getTeacherPayments
-} from './services/financeService'
-
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -49,6 +43,7 @@ import Finance from './pages/Finance'
 import LessonStatusTracking from './pages/LessonStatusTracking'
 import LessonGroups from './pages/LessonGroups'
 import Reports from './pages/Reports'
+import UserManagement from './pages/UserManagement'
 
 const VALID_PAGES = [
   'dashboard',
@@ -60,7 +55,8 @@ const VALID_PAGES = [
   'lesson-groups',
   'payments',
   'finance',
-  'reports'
+  'reports',
+  'user-management'
 ]
 
 const getReadableConnectionError = (
@@ -115,6 +111,24 @@ function App() {
 
   const [loginError, setLoginError] =
     useState('')
+
+  const [
+    currentUserRole,
+    setCurrentUserRole
+  ] = useState(null)
+
+  const [
+    userRoleLoading,
+    setUserRoleLoading
+  ] = useState(false)
+
+  const [
+    userRoleError,
+    setUserRoleError
+  ] = useState('')
+
+  const isAdmin =
+    currentUserRole === 'admin'
 
   const [dataLoading, setDataLoading] =
     useState(false)
@@ -253,12 +267,6 @@ function App() {
     expenses,
     setExpenses
   ] = useState([])
-
-  const [
-    teacherPayments,
-    setTeacherPayments
-  ] = useState([])
-
   const clearAppData = () => {
     setSpecialties([])
     setPackages([])
@@ -272,7 +280,6 @@ function App() {
     setLessonOccurrencesReloadKey(0)
     setOtherIncomes([])
     setExpenses([])
-    setTeacherPayments([])
     setDataError('')
     setDataLoading(false)
   }
@@ -318,8 +325,7 @@ function App() {
               getPackages(),
               getTeachers(),
               getStudents(),
-              getLessonPlans(),
-              getTeacherPayments()
+              getLessonPlans()
             ])
 
           const timeoutPromise =
@@ -344,8 +350,7 @@ function App() {
             packagesResult,
             teachersResult,
             studentsResult,
-            lessonPlansResult,
-            teacherPaymentsResult
+            lessonPlansResult
           ] = await Promise.race([
             panelDataPromise,
             timeoutPromise
@@ -380,11 +385,7 @@ function App() {
           setLessonPlans(
             lessonPlansResult
           )
-
-          setTeacherPayments(
-            teacherPaymentsResult
-          )
-        } catch (error) {
+} catch (error) {
           console.error(
             'Panel verileri yüklenemedi:',
             error
@@ -728,6 +729,119 @@ function App() {
 
   /*
    * =========================================================
+   * GİRİŞ YAPAN KULLANICININ ROLÜ
+   * =========================================================
+   *
+   * user_roles tablosu yalnızca kullanıcı yönetimi yetkisini
+   * ayırır. Business modüllerine erişim mevcut authenticated
+   * RLS politikalarıyla devam eder.
+   */
+
+  useEffect(() => {
+    const userId =
+      session?.user?.id || ''
+
+    if (!userId) {
+      setCurrentUserRole(null)
+      setUserRoleLoading(false)
+      setUserRoleError('')
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadCurrentUserRole =
+      async () => {
+        setUserRoleLoading(true)
+        setUserRoleError('')
+
+        try {
+          const {
+            data,
+            error
+          } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId)
+            .maybeSingle()
+
+          if (error) {
+            throw error
+          }
+
+          if (!isMounted) {
+            return
+          }
+
+          if (!data?.role) {
+            setCurrentUserRole(null)
+            setUserRoleError(
+              'Kullanıcı rolü bulunamadı.'
+            )
+            return
+          }
+
+          setCurrentUserRole(
+            data.role
+          )
+        } catch (error) {
+          console.error(
+            'Kullanıcı rolü alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            setCurrentUserRole(null)
+            setUserRoleError(
+              getReadableConnectionError(
+                error,
+                'Kullanıcı rolü şu anda alınamadı.'
+              )
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setUserRoleLoading(false)
+          }
+        }
+      }
+
+    loadCurrentUserRole()
+
+    return () => {
+      isMounted = false
+    }
+  }, [session?.user?.id])
+
+  /*
+   * Admin olmayan kullanıcı daha önce localStorage'da kalan
+   * kullanıcı yönetimi sayfasına doğrudan giremez.
+   */
+  useEffect(() => {
+    if (
+      !session ||
+      userRoleLoading ||
+      !currentUserRole
+    ) {
+      return
+    }
+
+    if (
+      activePage === 'user-management' &&
+      !isAdmin
+    ) {
+      setActivePage('dashboard')
+    }
+  }, [
+    session,
+    userRoleLoading,
+    currentUserRole,
+    activePage,
+    isAdmin
+  ])
+
+  /*
+   * =========================================================
    * KAYDEDİLMEMİŞ DEĞİŞİKLİKLER API
    * =========================================================
    */
@@ -1042,6 +1156,13 @@ function App() {
     page
   ) => {
     if (
+      page === 'user-management' &&
+      !isAdmin
+    ) {
+      return
+    }
+
+    if (
       page === activePage
     ) {
       return
@@ -1082,6 +1203,9 @@ function App() {
          * bekletmeden ve boş ekran oluşturmadan tamamla.
          */
         setSession(null)
+        setCurrentUserRole(null)
+        setUserRoleLoading(false)
+        setUserRoleError('')
         setAuthLoading(false)
         setAuthError('')
         setDataLoading(false)
@@ -1226,6 +1350,18 @@ function App() {
         handleLogout={
           handleLogout
         }
+        userRole={
+          currentUserRole
+        }
+        isAdmin={
+          isAdmin
+        }
+        userRoleLoading={
+          userRoleLoading
+        }
+        userRoleError={
+          userRoleError
+        }
       />
 
       <main className="dashboard">
@@ -1317,9 +1453,6 @@ function App() {
             }
             lessonPlans={
               lessonPlans
-            }
-            teacherPayments={
-              teacherPayments
             }
             unsavedChanges={createUnsavedPageApi(
               'teachers',
@@ -1468,12 +1601,6 @@ function App() {
             setExpenses={
               setExpenses
             }
-            teacherPayments={
-              teacherPayments
-            }
-            setTeacherPayments={
-              setTeacherPayments
-            }
             unsavedChanges={createUnsavedPageApi(
               'finance',
               'Finans işlemleri'
@@ -1484,6 +1611,12 @@ function App() {
       {activePage ===
         'reports' && (
         <Reports />
+      )}
+
+      {activePage ===
+        'user-management' &&
+        isAdmin && (
+        <UserManagement />
       )}
 
       </main>

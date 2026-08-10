@@ -68,7 +68,6 @@ function Finance({
   teachers = [],
   setOtherIncomes = () => {},
   setExpenses = () => {},
-  setTeacherPayments = () => {},
   unsavedChanges
 }) {
   const today = getTodayKey()
@@ -1626,7 +1625,7 @@ useEffect(() => {
     setIsSavingTeacherPayment(true)
 
     try {
-      const savedPayment = await createTeacherPayment({
+      await createTeacherPayment({
         teacherId: teacher.id,
         amount,
         paymentDate: teacherPaymentForm.paymentDate,
@@ -1635,13 +1634,7 @@ useEffect(() => {
           teacherPaymentForm.referenceNumber.trim(),
         note: teacherPaymentForm.note.trim()
       })
-
-      setTeacherPayments((current) => [
-        ...current,
-        savedPayment
-      ])
-
-      setTeacherHistoryPage(1)
+setTeacherHistoryPage(1)
       setTeacherHistoryReloadKey(
         (current) => current + 1
       )

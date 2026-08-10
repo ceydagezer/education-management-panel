@@ -16,11 +16,22 @@ const menuItems = [
   { id: 'reports', label: 'Raporlar' }
 ]
 
+const adminMenuItem = {
+  id: 'user-management',
+  label: 'Kullanıcı Yönetimi'
+}
+
 function Sidebar({
   activePage,
   handleMenuClick,
-  handleLogout
+  handleLogout,
+  isAdmin = false
 }) {
+  const visibleMenuItems =
+    isAdmin
+      ? [...menuItems, adminMenuItem]
+      : menuItems
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -39,7 +50,7 @@ function Sidebar({
       </div>
 
       <nav className="sidebar-nav">
-        {menuItems.map((item) => (
+        {visibleMenuItems.map((item) => (
           <button
             key={item.id}
             type="button"

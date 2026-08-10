@@ -2561,6 +2561,14 @@ export async function deleteStudentPermanently(
       result.lesson_occurrence_count || 0
     )
 
+    const lessonPlanStudentCount = Number(
+      result.lesson_plan_student_count || 0
+    )
+
+    const lessonGroupStudentCount = Number(
+      result.lesson_group_student_count || 0
+    )
+
     if (packageCount > 0) {
       blockers.push(
         `${packageCount} paket kaydı`
@@ -2582,6 +2590,18 @@ export async function deleteStudentPermanently(
     if (occurrenceCount > 0) {
       blockers.push(
         `${occurrenceCount} ders geçmişi kaydı`
+      )
+    }
+
+    if (lessonPlanStudentCount > 0) {
+      blockers.push(
+        `${lessonPlanStudentCount} ders katılımcı bağlantısı`
+      )
+    }
+
+    if (lessonGroupStudentCount > 0) {
+      blockers.push(
+        `${lessonGroupStudentCount} ders grubu üyeliği`
       )
     }
 

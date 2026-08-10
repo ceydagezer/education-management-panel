@@ -859,6 +859,7 @@ function Packages({
 
           <form
             className="package-form"
+            autoComplete="off"
             onSubmit={savePackage}
           >
             <div className="form-grid">
@@ -866,6 +867,7 @@ function Packages({
                 <label>Paket Adı</label>
 
                 <input
+                  autoComplete="off"
                   name="name"
                   value={packageForm.name}
                   onChange={handlePackageChange}
@@ -881,6 +883,7 @@ function Packages({
 
                 <div className="specialty-inline-row">
                   <input
+                    autoComplete="off"
                     list="package-specialty-options"
                     value={specialtyInput}
                     onChange={
@@ -995,6 +998,7 @@ function Packages({
                 </label>
 
                 <input
+                  autoComplete="off"
                   type="number"
                   name="lessonCount"
                   value={
@@ -1014,6 +1018,7 @@ function Packages({
                 <label>Paket Ücreti</label>
 
                 <input
+                  autoComplete="off"
                   type="number"
                   name="totalPrice"
                   value={

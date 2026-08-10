@@ -1382,7 +1382,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
         </button>
       </div>
 
-      <form onSubmit={saveTeacher}>
+      <form onSubmit={saveTeacher} autoComplete="off">
         <div className="teacher-form-top">
           <aside className="teacher-photo-section">
             <span className="teacher-photo-label">
@@ -1479,6 +1479,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                 </label>
 
                 <input
+                  autoComplete="off"
                   name="fullName"
                   value={teacherForm.fullName}
                   onChange={handleTeacherChange}
@@ -1495,6 +1496,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                 </label>
 
                 <input
+                  autoComplete="off"
                   name="phone"
                   value={teacherForm.phone}
                   onChange={handleTeacherChange}
@@ -1511,6 +1513,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                 </label>
 
                 <input
+                  autoComplete="off"
                   type="email"
                   name="email"
                   value={teacherForm.email}
@@ -1528,6 +1531,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                 </label>
 
                 <input
+                  autoComplete="off"
                   type="date"
                   name="birthDate"
                   value={teacherForm.birthDate}
@@ -1569,6 +1573,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                 </label>
 
                 <input
+                  autoComplete="off"
                   type="number"
                   name="commissionRate"
                   value={
@@ -1646,6 +1651,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                         key={specialtyId}
                       >
                         <input
+                          autoComplete="off"
                           type="checkbox"
                           checked={isSelected}
                           onChange={() =>
@@ -1662,6 +1668,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
 
                 <div className="specialty-add-row specialty-add-row-bottom">
                   <input
+                    autoComplete="off"
                     value={newSpecialty}
                     onChange={
                       handleNewSpecialtyChange
@@ -1685,6 +1692,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                 <label>Açıklama / Not</label>
 
                 <textarea
+                  autoComplete="off"
                   name="notes"
                   value={teacherForm.notes}
                   onChange={handleTeacherChange}

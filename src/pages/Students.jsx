@@ -24,6 +24,10 @@ import {
   getPaymentsByStudentPackage
 } from '../services/paymentService'
 
+import {
+  getLessonPlans
+} from '../services/lessonService'
+
 import '../styles/students.css'
 
 import {
@@ -2076,15 +2080,30 @@ function Students({
           typeof setLessonPlans ===
           'function'
         ) {
-          setLessonPlans((current) =>
-            current.filter(
-              (lesson) =>
-                !areIdsEqual(
-                  lesson.studentId,
-                  selectedStudent.id
-                )
+          try {
+            const refreshedLessonPlans =
+              await getLessonPlans()
+
+            setLessonPlans(
+              refreshedLessonPlans
             )
-          )
+          } catch (
+            lessonPlanRefreshError
+          ) {
+            console.error(
+              'Ders programı pasife alma sonrası yenilenemedi:',
+              lessonPlanRefreshError
+            )
+
+            if (
+              typeof window !==
+              'undefined'
+            ) {
+              window.alert(
+                'Öğrenci pasife alındı ancak ders programı ekranda yenilenemedi. Sayfayı yenilediğinizde güncel hali gelecektir.'
+              )
+            }
+          }
         }
 
         if (
@@ -2397,7 +2416,7 @@ function Students({
     }
 
     const confirmDelete = window.confirm(
-      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Veritabanında paket, tahsilat, güncel ders veya ders geçmişi bağlantısı varsa işlem otomatik olarak engellenecektir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
+      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Veritabanında paket, tahsilat, ders planı, ders geçmişi, grup üyeliği veya ders katılımcı bağlantısı varsa işlem otomatik olarak engellenecektir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
     )
 
     if (!confirmDelete) {
@@ -4167,13 +4186,18 @@ function Students({
         </button>
       </section>
 
-      <form onSubmit={handleStudentSubmit} className="student-form-card">
+      <form
+        onSubmit={handleStudentSubmit}
+        className="student-form-card"
+        autoComplete="off"
+      >
         <div className="form-section">
           <h2>Öğrenci Bilgileri</h2>
           <div className="form-grid">
             <div className="form-group">
               <label>TC Kimlik No <RequiredStar /></label>
               <input
+                autoComplete="off"
                 name="tcNo"
                 value={studentForm.tcNo}
                 onChange={handleStudentChange}
@@ -4183,6 +4207,7 @@ function Students({
             <div className="form-group">
               <label>Ad Soyad <RequiredStar /></label>
               <input
+                autoComplete="off"
                 name="fullName"
                 value={studentForm.fullName}
                 onChange={handleStudentChange}
@@ -4203,6 +4228,7 @@ function Students({
             <div className="form-group">
               <label>Doğum Tarihi</label>
               <input
+                autoComplete="off"
                 type="date"
                 name="birthDate"
                 value={studentForm.birthDate}
@@ -4212,6 +4238,7 @@ function Students({
             <div className="form-group">
               <label>Kayıt Tarihi <RequiredStar /></label>
               <input
+                autoComplete="off"
                 type="date"
                 name="registerDate"
                 value={studentForm.registerDate}
@@ -4221,6 +4248,7 @@ function Students({
             <div className="form-group">
               <label>Cep Telefonu <RequiredStar /></label>
               <input
+                autoComplete="off"
                 name="phone"
                 value={studentForm.phone}
                 onChange={handleStudentChange}
@@ -4229,6 +4257,7 @@ function Students({
             <div className="form-group">
               <label>E-posta</label>
               <input
+                autoComplete="off"
                 type="email"
                 name="email"
                 value={studentForm.email}
@@ -4238,6 +4267,7 @@ function Students({
             <div className="form-group full-width">
               <label>Adres</label>
               <textarea
+                autoComplete="off"
                 name="address"
                 value={studentForm.address}
                 onChange={handleStudentChange}
@@ -4261,6 +4291,7 @@ function Students({
             <div className="form-group">
               <label>Ad Soyad</label>
               <input
+                autoComplete="off"
                 name="guardian1Name"
                 value={studentForm.guardian1Name}
                 onChange={handleStudentChange}
@@ -4293,6 +4324,7 @@ function Students({
             <div className="form-group">
               <label>Telefon</label>
               <input
+                autoComplete="off"
                 name="guardian1Phone"
                 value={studentForm.guardian1Phone}
                 onChange={handleStudentChange}
@@ -4302,6 +4334,7 @@ function Students({
             <div className="form-group">
               <label>E-posta</label>
               <input
+                autoComplete="off"
                 type="email"
                 name="guardian1Email"
                 value={studentForm.guardian1Email}
@@ -4312,6 +4345,7 @@ function Students({
             <div className="form-group full-width">
               <label className="checkbox-label">
                 <input
+                  autoComplete="off"
                   type="checkbox"
                   name="guardian1SameAddress"
                   checked={studentForm.guardian1SameAddress}
@@ -4325,6 +4359,7 @@ function Students({
               <div className="form-group full-width">
                 <label>Veli Adresi</label>
                 <textarea
+                  autoComplete="off"
                   name="guardian1Address"
                   value={studentForm.guardian1Address}
                   onChange={handleStudentChange}
@@ -4335,6 +4370,7 @@ function Students({
             <div className="form-group">
               <label className="checkbox-label">
                 <input
+                  autoComplete="off"
                   type="checkbox"
                   name="guardian1IsPrimary"
                   checked={studentForm.guardian1IsPrimary}
@@ -4347,6 +4383,7 @@ function Students({
             <div className="form-group">
               <label>Not</label>
               <input
+                autoComplete="off"
                 name="guardian1Notes"
                 value={studentForm.guardian1Notes}
                 onChange={handleStudentChange}
@@ -4360,6 +4397,7 @@ function Students({
             <div className="form-group">
               <label>Ad Soyad</label>
               <input
+                autoComplete="off"
                 name="guardian2Name"
                 value={studentForm.guardian2Name}
                 onChange={handleStudentChange}
@@ -4392,6 +4430,7 @@ function Students({
             <div className="form-group">
               <label>Telefon</label>
               <input
+                autoComplete="off"
                 name="guardian2Phone"
                 value={studentForm.guardian2Phone}
                 onChange={handleStudentChange}
@@ -4401,6 +4440,7 @@ function Students({
             <div className="form-group">
               <label>E-posta</label>
               <input
+                autoComplete="off"
                 type="email"
                 name="guardian2Email"
                 value={studentForm.guardian2Email}
@@ -4411,6 +4451,7 @@ function Students({
             <div className="form-group full-width">
               <label className="checkbox-label">
                 <input
+                  autoComplete="off"
                   type="checkbox"
                   name="guardian2SameAddress"
                   checked={studentForm.guardian2SameAddress}
@@ -4424,6 +4465,7 @@ function Students({
               <div className="form-group full-width">
                 <label>Veli Adresi</label>
                 <textarea
+                  autoComplete="off"
                   name="guardian2Address"
                   value={studentForm.guardian2Address}
                   onChange={handleStudentChange}
@@ -4434,6 +4476,7 @@ function Students({
             <div className="form-group">
               <label className="checkbox-label">
                 <input
+                  autoComplete="off"
                   type="checkbox"
                   name="guardian2IsPrimary"
                   checked={studentForm.guardian2IsPrimary}
@@ -4446,6 +4489,7 @@ function Students({
             <div className="form-group">
               <label>Not</label>
               <input
+                autoComplete="off"
                 name="guardian2Notes"
                 value={studentForm.guardian2Notes}
                 onChange={handleStudentChange}
@@ -4548,6 +4592,7 @@ function Students({
                 <div className="form-group">
                   <label>Aylık Toplam Ücret</label>
                   <input
+                    autoComplete="off"
                     value={`₺${formatPrice(getTotalFee(studentForm))}`}
                     readOnly
                   />
@@ -4557,6 +4602,7 @@ function Students({
               <div className="form-group full-width">
                 <label>Notlar</label>
                 <textarea
+                  autoComplete="off"
                   name="notes"
                   value={studentForm.notes}
                   onChange={handleStudentChange}

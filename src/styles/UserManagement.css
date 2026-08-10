@@ -1,0 +1,548 @@
+.user-management-page {
+  padding: 8px 0 36px;
+}
+
+.user-management-header {
+  margin-bottom: 22px;
+}
+
+.user-management-header h1,
+.user-card-heading h2,
+.user-password-modal-heading h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.user-management-header h1 {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.user-management-header p,
+.user-card-heading p,
+.user-password-modal-heading p {
+  margin: 7px 0 0;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.user-management-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.user-summary-card,
+.user-management-card {
+  background: #ffffff;
+  border: 1px solid #dfe6ef;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+}
+
+.user-summary-card {
+  padding: 18px 20px;
+}
+
+.user-summary-card span {
+  display: block;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.user-summary-card strong {
+  color: #0f172a;
+  font-size: 27px;
+  line-height: 1;
+}
+
+.user-management-card {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.user-card-heading {
+  margin-bottom: 20px;
+}
+
+.user-card-heading h2 {
+  font-size: 19px;
+}
+
+.user-list-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+/* =========================================================
+   KULLANICI OLUŞTURMA FORMU
+   ========================================================= */
+
+.user-create-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.user-create-form > label:nth-of-type(1) {
+  grid-column: span 5;
+}
+
+.user-create-form > label:nth-of-type(2) {
+  grid-column: span 5;
+}
+
+.user-create-form > label:nth-of-type(3) {
+  grid-column: span 2;
+}
+
+.user-create-form label,
+.user-reset-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.user-create-form label span,
+.user-reset-form label span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.user-create-form input,
+.user-create-form select,
+.user-reset-form input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.user-create-form input::placeholder,
+.user-reset-form input::placeholder {
+  color: #94a3b8;
+}
+
+.user-create-form input:focus,
+.user-create-form select:focus,
+.user-reset-form input:focus {
+  border-color: #22c7d6;
+  box-shadow: 0 0 0 3px rgba(34, 199, 214, 0.12);
+}
+
+.user-password-field {
+  grid-column: span 8;
+}
+
+.user-password-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: stretch;
+}
+
+.user-password-input-row input {
+  min-width: 0;
+}
+
+.user-create-actions {
+  grid-column: span 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 9px;
+  align-items: stretch;
+}
+
+.user-primary-button,
+.user-secondary-button,
+.user-modal-close {
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.user-primary-button,
+.user-secondary-button {
+  min-height: 42px;
+  padding: 0 15px;
+  white-space: nowrap;
+}
+
+.user-primary-button {
+  background: #0ea5e9;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(14, 165, 233, 0.18);
+}
+
+.user-primary-button:hover:not(:disabled) {
+  background: #0891b2;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.22);
+}
+
+.user-secondary-button {
+  border: 1px solid #e2e8f0;
+  background: #f3fbfc;
+  color: #155e75;
+}
+
+.user-secondary-button:hover:not(:disabled) {
+  background: #e6f8fb;
+}
+
+.user-primary-button:active:not(:disabled),
+.user-secondary-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.user-primary-button:disabled,
+.user-secondary-button:disabled,
+.user-modal-close:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   MESAJLAR / GİRİŞ BİLGİLERİ
+   ========================================================= */
+
+.user-message {
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.user-message-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.user-message-success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.user-global-message {
+  margin-bottom: 18px;
+}
+
+.user-credential-box {
+  margin-top: 18px;
+  padding: 17px;
+  border: 1px solid #a5f3fc;
+  border-radius: 12px;
+  background: #ecfeff;
+}
+
+.user-credential-box strong {
+  color: #0f172a;
+}
+
+.user-credential-box p {
+  margin: 6px 0 14px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.user-credential-grid {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.user-credential-grid span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-credential-grid code {
+  display: block;
+  padding: 9px 11px;
+  border: 1px solid #cffafe;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.user-credential-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* =========================================================
+   KULLANICI TABLOSU
+   ========================================================= */
+
+.user-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e7edf4;
+  border-radius: 10px;
+}
+
+.user-management-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.user-management-table th,
+.user-management-table td {
+  padding: 14px 13px;
+  border-bottom: 1px solid #e8edf3;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.user-management-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-management-table td {
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.user-management-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.user-management-table tbody tr:hover {
+  background: #fbfdff;
+}
+
+.user-role-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 27px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-role-badge.admin {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.user-role-badge.staff {
+  background: #ecfeff;
+  color: #0e7490;
+}
+
+.user-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-row-actions .user-secondary-button {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.user-list-state {
+  padding: 24px 0 8px;
+  color: #64748b;
+  text-align: center;
+}
+
+.user-list-error {
+  color: #b91c1c;
+}
+
+.user-list-error p {
+  margin: 0 0 12px;
+}
+
+/* =========================================================
+   ŞİFRE MODALI
+   ========================================================= */
+
+.user-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.user-password-modal {
+  width: min(520px, 100%);
+  padding: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+.user-password-modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 19px;
+}
+
+.user-modal-close {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  background: #e6f8fb;
+  color: #475569;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.user-modal-close:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.user-reset-form {
+  display: grid;
+  gap: 15px;
+}
+
+.user-reset-options,
+.user-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.user-modal-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1150px) {
+  .user-create-form > label:nth-of-type(1),
+  .user-create-form > label:nth-of-type(2) {
+    grid-column: span 6;
+  }
+
+  .user-create-form > label:nth-of-type(3) {
+    grid-column: span 4;
+  }
+
+  .user-password-field {
+    grid-column: span 8;
+  }
+
+  .user-create-actions {
+    grid-column: span 12;
+    grid-template-columns: repeat(2, max-content);
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 850px) {
+  .user-management-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .user-create-form {
+    grid-template-columns: 1fr;
+  }
+
+  .user-create-form > label:nth-of-type(1),
+  .user-create-form > label:nth-of-type(2),
+  .user-create-form > label:nth-of-type(3),
+  .user-password-field,
+  .user-create-actions {
+    grid-column: 1;
+  }
+
+  .user-create-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .user-list-heading {
+    flex-direction: column;
+  }
+
+  .user-password-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .user-row-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+
+.user-danger-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fff7f7;
+  color: #dc2626;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.user-danger-button:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.user-danger-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.user-danger-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

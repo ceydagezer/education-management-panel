@@ -573,12 +573,13 @@ function LessonGroups({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete="off">
           <div className="lesson-group-form-grid">
             <div className="form-group">
               <label>Grup Adı</label>
 
               <input
+                autoComplete="off"
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -651,6 +652,7 @@ function LessonGroups({
 
               <div className="lesson-group-number-field">
                 <input
+                  autoComplete="off"
                   type="number"
                   name="defaultDurationMinutes"
                   min="1"
@@ -666,6 +668,7 @@ function LessonGroups({
               <label>Kontenjan</label>
 
               <input
+                autoComplete="off"
                 type="number"
                 name="capacity"
                 min="1"
