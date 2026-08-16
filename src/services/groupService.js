@@ -163,6 +163,173 @@ export async function getLessonGroups({
   )
 }
 
+
+function sanitizeLessonGroupStudentSearch(value) {
+  return String(value || '')
+    .replace(/[,%()*_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export async function searchLessonGroupStudents(
+  searchText,
+  {
+    limit = 8
+  } = {}
+) {
+  const cleanSearch =
+    sanitizeLessonGroupStudentSearch(
+      searchText
+    )
+
+  if (cleanSearch.length < 2) {
+    return []
+  }
+
+  const safeLimit = Math.min(
+    Math.max(
+      Number(limit) || 8,
+      1
+    ),
+    20
+  )
+
+  const searchPattern =
+    `*${cleanSearch}*`
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('students')
+    .select(`
+      id,
+      full_name,
+      tc_no,
+      status,
+      is_active,
+      is_archived
+    `)
+    .eq('is_active', true)
+    .or(
+      [
+        `and(is_archived.eq.false,full_name.ilike.${searchPattern})`,
+        `and(is_archived.is.null,full_name.ilike.${searchPattern})`,
+        `and(is_archived.eq.false,tc_no.ilike.${searchPattern})`,
+        `and(is_archived.is.null,tc_no.ilike.${searchPattern})`
+      ].join(',')
+    )
+    .order('full_name')
+    .limit(safeLimit)
+
+  if (error) {
+    throw new Error(
+      `Öğrenci araması yapılamadı: ${error.message}`
+    )
+  }
+
+  return (data || [])
+    .filter(
+      (row) =>
+        row.is_active !== false &&
+        row.is_archived !== true &&
+        String(row.status || '')
+          .trim()
+          .toLocaleLowerCase('tr-TR') !==
+          'pasif'
+    )
+    .map((row) => ({
+      id: row.id,
+      fullName:
+        row.full_name || '',
+      tcNo:
+        row.tc_no || '',
+      status:
+        row.status || '',
+      isActive:
+        row.is_active !== false,
+      isArchived:
+        row.is_archived === true
+    }))
+}
+
+export async function getLessonGroupStudentPackages(
+  studentId
+) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
+    return []
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('student_packages')
+    .select(`
+      id,
+      student_id,
+      package_id,
+      status,
+      is_active,
+      created_at,
+
+      package:packages (
+        id,
+        name,
+
+        specialty:specialties (
+          id,
+          name
+        )
+      )
+    `)
+    .eq('student_id', cleanStudentId)
+    .eq('is_active', true)
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      `Öğrenci paketleri alınamadı: ${error.message}`
+    )
+  }
+
+  return (data || [])
+    .filter(
+      (row) =>
+        row.is_active !== false &&
+        String(row.status || '')
+          .trim()
+          .toLocaleLowerCase('tr-TR') !==
+          'sonlandırıldı'
+    )
+    .map((row) => ({
+      studentPackageId:
+        row.id || '',
+      studentId:
+        row.student_id || '',
+      packageId:
+        row.package_id || '',
+      packageName:
+        row.package?.name ||
+        'Tanımsız Paket',
+      specialtyName:
+        row.package?.specialty?.name || '',
+      status:
+        row.status || '',
+      isActive:
+        row.is_active !== false
+    }))
+}
+
 export async function createLessonGroup(
   form
 ) {

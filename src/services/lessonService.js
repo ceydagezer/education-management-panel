@@ -352,6 +352,49 @@ export async function getLessonPlans() {
   )
 }
 
+
+/*
+ * Dashboard ana ekranda bütün aktif ders planlarını yüklemez.
+ * Bu sorgu yalnız bugünün tablo satırlarını ilişkili adlarla getirir.
+ * Çakışma ve bekleyen telafi sayıları dashboardService içindeki
+ * getDashboardLessonHealth() ile veritabanında hesaplanır.
+ */
+export async function getDashboardLessonPlanSnapshot({
+  currentDayName = ''
+} = {}) {
+  const cleanDayName = String(
+    currentDayName || ''
+  ).trim()
+
+  if (!cleanDayName) {
+    return {
+      todayLessons: []
+    }
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from('lesson_plans')
+    .select(lessonPlanSelect)
+    .eq('is_active', true)
+    .eq('day', cleanDayName)
+    .order('start_time')
+
+  if (error) {
+    throw new Error(
+      `Bugünkü ders programı alınamadı: ${error.message}`
+    )
+  }
+
+  return {
+    todayLessons: (data || []).map(
+      mapLessonPlanFromDb
+    )
+  }
+}
+
 export async function getLessonPlanStudents() {
   const {
     data,
@@ -398,21 +441,115 @@ export async function getLessonPlanStudents() {
   )
 }
 
-export async function getLessonOccurrences() {
-  const { data, error } = await supabase
-    .from('lesson_occurrences')
-    .select(lessonOccurrenceListSelect)
-    .order('day')
-    .order('start_time')
-    .order('created_at')
+function formatLocalDateKey(date) {
+  const year = date.getFullYear()
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0')
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0')
 
-  if (error) {
+  return `${year}-${month}-${day}`
+}
+
+function getCurrentWeekRange() {
+  const today = new Date()
+  const monday = new Date(today)
+  const dayOfWeek =
+    monday.getDay() || 7
+
+  monday.setHours(12, 0, 0, 0)
+  monday.setDate(
+    monday.getDate() -
+      dayOfWeek +
+      1
+  )
+
+  const sunday = new Date(monday)
+  sunday.setDate(
+    monday.getDate() + 6
+  )
+
+  return {
+    startDate:
+      formatLocalDateKey(monday),
+    endDate:
+      formatLocalDateKey(sunday)
+  }
+}
+
+export async function getLessonOccurrences() {
+  const {
+    startDate,
+    endDate
+  } = getCurrentWeekRange()
+
+  /*
+   * Haftalık Ders Durumu ekranı yalnız seçili (şimdilik mevcut)
+   * haftanın occurrence kayıtlarına ihtiyaç duyar. Geçmiş kayıtlar
+   * aşağıdaki getLessonHistoryPage() ile zaten server-side
+   * sayfalanır; burada tüm geçmişi tarayıcıya indirmeyiz.
+   */
+  const [
+    weekResult,
+    legacyMakeupResult
+  ] = await Promise.all([
+    supabase
+      .from('lesson_occurrences')
+      .select(lessonOccurrenceListSelect)
+      .eq('is_active', true)
+      .gte('lesson_date', startDate)
+      .lte('lesson_date', endDate)
+      .order('day')
+      .order('start_time')
+      .order('created_at'),
+
+    /*
+     * Tarihi olmayan eski telafi/test kayıtlarının geçiş sürecinde
+     * görünmeye devam etmesi için küçük ve kontrollü bir üst sınır.
+     */
+    supabase
+      .from('lesson_occurrences')
+      .select(lessonOccurrenceListSelect)
+      .eq('is_active', true)
+      .eq('is_makeup', true)
+      .is('lesson_date', null)
+      .order('created_at', {
+        ascending: false
+      })
+      .limit(100)
+  ])
+
+  if (weekResult.error) {
     throw new Error(
-      `Ders durum kayıtları alınamadı: ${error.message}`
+      `Bu haftanın ders durumları alınamadı: ${weekResult.error.message}`
     )
   }
 
-  return (data || []).map(
+  if (legacyMakeupResult.error) {
+    throw new Error(
+      `Eski telafi kayıtları alınamadı: ${legacyMakeupResult.error.message}`
+    )
+  }
+
+  const rowsById = new Map()
+
+  ;[
+    ...(weekResult.data || []),
+    ...(legacyMakeupResult.data || [])
+  ].forEach((row) => {
+    if (row?.id) {
+      rowsById.set(
+        String(row.id),
+        row
+      )
+    }
+  })
+
+  return Array.from(
+    rowsById.values()
+  ).map(
     mapLessonOccurrenceFromDb
   )
 }

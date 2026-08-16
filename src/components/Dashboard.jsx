@@ -3,7 +3,8 @@ import '../styles/dashboard.css'
 
 import {
   getDashboardSummary,
-  getDashboardReceivables
+  getDashboardReceivables,
+  getDashboardLessonHealth
 } from '../services/dashboardService'
 
 import {
@@ -20,9 +21,16 @@ import {
 
 import {
   getLessonStatusClass,
-  isActiveLesson,
   normalizeLessonStatus
 } from '../utils/lessonHelpers'
+
+import {
+  getDashboardLessonPlanSnapshot
+} from '../services/lessonService'
+
+import {
+  prefetchFinanceOverview
+} from '../services/financeService'
 
 import {
   normalizeStatusText as normalizeText
@@ -31,46 +39,109 @@ import {
 const UPCOMING_DAYS = 7
 const GRACE_DAYS = 3
 
+const EMPTY_DASHBOARD_SUMMARY = {
+  activeStudentCount: 0,
+  activeTeacherCount: 0,
+  monthlyStudentIncome: 0,
+  monthlyOtherIncome: 0,
+  monthlyIncome: 0,
+  totalIncome: 0,
+  totalInstitutionExpense: 0,
+  totalTeacherPaid: 0,
+  totalExpense: 0,
+  netCash: 0,
+  totalOutstanding: 0,
+  overdueCount: 0,
+  upcomingCount: 0,
+  teacherRemaining: 0,
+  todayLessonCount: 0,
+  completedLessonCount: 0
+}
+
+let dashboardViewCache = null
+
+function getCurrentDashboardCacheKey() {
+  const now = new Date()
+  const dayName = now.toLocaleDateString(
+    'tr-TR',
+    { weekday: 'long' }
+  )
+
+  return `${getTodayKey()}::${dayName}`
+}
+
+function getDashboardViewCache(cacheKey) {
+  if (
+    !dashboardViewCache ||
+    dashboardViewCache.key !== cacheKey
+  ) {
+    return null
+  }
+
+  return dashboardViewCache.data
+}
+
+function setDashboardViewCache(cacheKey, data) {
+  dashboardViewCache = {
+    key: cacheKey,
+    data,
+    updatedAt: Date.now()
+  }
+
+  return data
+}
+
 function Dashboard({
   students = [],
   teachers = [],
-  lessonPlans = [],
   onNavigate = () => {}
 }) {
+  const initialDashboardCache =
+    getDashboardViewCache(
+      getCurrentDashboardCacheKey()
+    )
+
   const [dashboardSummary, setDashboardSummary] =
-    useState({
-      activeStudentCount: 0,
-      activeTeacherCount: 0,
-      monthlyStudentIncome: 0,
-      monthlyOtherIncome: 0,
-      monthlyIncome: 0,
-      totalIncome: 0,
-      totalInstitutionExpense: 0,
-      totalTeacherPaid: 0,
-      totalExpense: 0,
-      netCash: 0,
-      totalOutstanding: 0,
-      overdueCount: 0,
-      upcomingCount: 0,
-      teacherRemaining: 0,
-      todayLessonCount: 0,
-      completedLessonCount: 0
-    })
+    useState(
+      () =>
+        initialDashboardCache?.summary ||
+        EMPTY_DASHBOARD_SUMMARY
+    )
 
   const [
     receivableRecords,
     setReceivableRecords
-  ] = useState([])
+  ] = useState(
+    () => initialDashboardCache?.receivables || []
+  )
 
   const [
     packageLessonUsage,
     setPackageLessonUsage
-  ] = useState([])
+  ] = useState(
+    () =>
+      initialDashboardCache?.packageLessonUsage || []
+  )
+
+
+  const [
+    dashboardLessonSnapshot,
+    setDashboardLessonSnapshot
+  ] = useState(
+    () =>
+      initialDashboardCache?.lessonSnapshot || {
+        todayLessons: [],
+        waitingMakeupCount: 0,
+        conflictCount: 0
+      }
+  )
 
   const [
     dashboardLoading,
     setDashboardLoading
-  ] = useState(true)
+  ] = useState(
+    () => !initialDashboardCache
+  )
 
   const [
     dashboardError,
@@ -85,6 +156,9 @@ function Dashboard({
       weekday: 'long'
     })
 
+  const dashboardCacheKey =
+    `${todayKey}::${currentDayName}`
+
   const formattedToday =
     now.toLocaleDateString('tr-TR', {
       day: '2-digit',
@@ -97,14 +171,34 @@ function Dashboard({
 
     const loadDashboardData =
       async () => {
-        setDashboardLoading(true)
+        const cachedData =
+          getDashboardViewCache(
+            dashboardCacheKey
+          )
+
+        if (cachedData) {
+          setDashboardSummary(cachedData.summary)
+          setReceivableRecords(cachedData.receivables)
+          setPackageLessonUsage(
+            cachedData.packageLessonUsage
+          )
+          setDashboardLessonSnapshot(
+            cachedData.lessonSnapshot
+          )
+          setDashboardLoading(false)
+        } else {
+          setDashboardLoading(true)
+        }
+
         setDashboardError('')
 
         try {
           const [
             summaryResult,
             receivableResult,
-            packageLessonUsageResult
+            packageLessonUsageResult,
+            lessonSnapshotResult,
+            lessonHealthResult
           ] = await Promise.all([
             getDashboardSummary({
               todayKey,
@@ -122,23 +216,47 @@ function Dashboard({
                 GRACE_DAYS,
               limit: 30
             }),
-            getStudentPackageLessonUsage()
+            getStudentPackageLessonUsage(),
+            getDashboardLessonPlanSnapshot({
+              currentDayName
+            }),
+            getDashboardLessonHealth()
           ])
 
           if (!isMounted) {
             return
           }
 
+          const nextDashboardData =
+            setDashboardViewCache(
+              dashboardCacheKey,
+              {
+                summary: summaryResult,
+                receivables: receivableResult,
+                packageLessonUsage:
+                  packageLessonUsageResult,
+                lessonSnapshot: {
+                  todayLessons:
+                    lessonSnapshotResult.todayLessons || [],
+                  waitingMakeupCount:
+                    lessonHealthResult.waitingMakeupCount || 0,
+                  conflictCount:
+                    lessonHealthResult.conflictCount || 0
+                }
+              }
+            )
+
           setDashboardSummary(
-            summaryResult
+            nextDashboardData.summary
           )
-
           setReceivableRecords(
-            receivableResult
+            nextDashboardData.receivables
           )
-
           setPackageLessonUsage(
-            packageLessonUsageResult
+            nextDashboardData.packageLessonUsage
+          )
+          setDashboardLessonSnapshot(
+            nextDashboardData.lessonSnapshot
           )
         } catch (error) {
           console.error(
@@ -172,8 +290,65 @@ function Dashboard({
     }
   }, [
     todayKey,
-    currentDayName
+    currentDayName,
+    dashboardCacheKey
   ])
+
+  /*
+   * Dashboard görünürken Finans özetlerini tarayıcı boşta kaldığında
+   * önceden al. Finans sayfasına geçildiğinde rakamlar RAM cache'den
+   * anında gösterilir; bu prefetch Dashboard'un kendi yüklenmesini bloklamaz.
+   */
+  useEffect(() => {
+    let cancelled = false
+    let idleId = null
+    let timeoutId = null
+
+    const runPrefetch = () => {
+      if (cancelled) {
+        return
+      }
+
+      prefetchFinanceOverview().catch(() => {
+        // Prefetch yardımcı bir optimizasyondur.
+        // Finans sayfası açıldığında normal yükleme tekrar denenir.
+      })
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.requestIdleCallback ===
+        'function'
+    ) {
+      idleId = window.requestIdleCallback(
+        runPrefetch,
+        {
+          timeout: 1500
+        }
+      )
+    } else if (typeof window !== 'undefined') {
+      timeoutId = window.setTimeout(
+        runPrefetch,
+        700
+      )
+    }
+
+    return () => {
+      cancelled = true
+
+      if (
+        idleId !== null &&
+        typeof window.cancelIdleCallback ===
+          'function'
+      ) {
+        window.cancelIdleCallback(idleId)
+      }
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [])
 
   const getTeacherName = (teacher) =>
     teacher?.fullName ??
@@ -200,25 +375,8 @@ function Dashboard({
   const totalOutstanding =
     dashboardSummary.totalOutstanding
 
-  const todayLessons = lessonPlans
-    .filter(
-      (lesson) =>
-        normalizeText(lesson.day) ===
-        normalizeText(currentDayName)
-    )
-    .sort(
-      (
-        firstLesson,
-        secondLesson
-      ) =>
-        String(
-          firstLesson.time || ''
-        ).localeCompare(
-          String(
-            secondLesson.time || ''
-          )
-        )
-    )
+  const todayLessons =
+    dashboardLessonSnapshot.todayLessons
 
   const upcomingReceivables =
     packageFinancialRecords
@@ -243,84 +401,15 @@ function Dashboard({
         'Tarih Eksik'
     )
 
-  const waitingMakeupLessons =
-    lessonPlans.filter(
-      (lesson) =>
-        normalizeLessonStatus(
-          lesson.status
-        ) ===
-        'Telafi yapılacak'
+  const waitingMakeupLessonCount =
+    Number(
+      dashboardLessonSnapshot.waitingMakeupCount || 0
     )
 
-  const conflictKeys = new Set()
-
-  const activeLessonsForConflict =
-    lessonPlans.filter(
-      isActiveLesson
+  const lessonConflictCount =
+    Number(
+      dashboardLessonSnapshot.conflictCount || 0
     )
-
-  activeLessonsForConflict.forEach(
-    (
-      lesson,
-      lessonIndex
-    ) => {
-      activeLessonsForConflict
-        .slice(lessonIndex + 1)
-        .forEach(
-          (otherLesson) => {
-            const sameSlot =
-              normalizeText(
-                lesson.day
-              ) ===
-                normalizeText(
-                  otherLesson.day
-                ) &&
-              String(
-                lesson.time || ''
-              ) ===
-                String(
-                  otherLesson.time || ''
-                )
-
-            if (!sameSlot) {
-              return
-            }
-
-            const sameTeacher =
-              lesson.teacherId &&
-              otherLesson.teacherId &&
-              String(
-                lesson.teacherId
-              ) ===
-                String(
-                  otherLesson.teacherId
-                )
-
-            const sameStudent =
-              lesson.studentId &&
-              otherLesson.studentId &&
-              String(
-                lesson.studentId
-              ) ===
-                String(
-                  otherLesson.studentId
-                )
-
-            if (sameTeacher) {
-              conflictKeys.add(
-                `teacher-${lesson.teacherId}-${lesson.day}-${lesson.time}`
-              )
-            }
-
-            if (sameStudent) {
-              conflictKeys.add(
-                `student-${lesson.studentId}-${lesson.day}-${lesson.time}`
-              )
-            }
-          }
-        )
-    }
-  )
 
   const missingTeacherAssignments =
     packageFinancialRecords.filter(
@@ -538,24 +627,24 @@ function Dashboard({
   }
 
   if (
-    waitingMakeupLessons.length >
+    waitingMakeupLessonCount >
     0
   ) {
     alerts.push({
       id: 'makeup-lessons',
       type: 'warning',
-      title: `${waitingMakeupLessons.length} bekleyen telafi dersi`,
+      title: `${waitingMakeupLessonCount} bekleyen telafi dersi`,
       description:
         'Planlanmış ancak henüz tamamlanmamış telafi dersleri var.',
       page: 'lesson-status'
     })
   }
 
-  if (conflictKeys.size > 0) {
+  if (lessonConflictCount > 0) {
     alerts.push({
       id: 'lesson-conflicts',
       type: 'danger',
-      title: `${conflictKeys.size} ders çakışması`,
+      title: `${lessonConflictCount} ders çakışması`,
       description:
         'Aynı öğrenci veya öğretmen aynı gün ve saate atanmış.',
       page: 'schedule'
@@ -722,6 +811,23 @@ function Dashboard({
       return 'upcoming'
     }
 
+  const renderValueSkeleton = (
+    width = '4rem'
+  ) => (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-block',
+        width,
+        height: '0.9em',
+        borderRadius: '999px',
+        background:
+          'rgba(148, 163, 184, 0.28)',
+        verticalAlign: 'middle'
+      }}
+    />
+  )
+
   const renderMetricValue = (
     value,
     {
@@ -729,9 +835,9 @@ function Dashboard({
     } = {}
   ) => {
     if (dashboardLoading) {
-      return currency
-        ? '₺—'
-        : '—'
+      return renderValueSkeleton(
+        currency ? '5.8rem' : '2.8rem'
+      )
     }
 
     if (currency) {
@@ -929,7 +1035,7 @@ function Dashboard({
             }
           >
             {dashboardLoading
-              ? '—'
+              ? renderValueSkeleton('4.5rem')
               : `${todayLessons.length} ders`}
           </button>
         </div>
@@ -1059,7 +1165,7 @@ function Dashboard({
               }
             >
               {dashboardLoading
-                ? '—'
+                ? renderValueSkeleton('2.2rem')
                 : upcomingReceivables.length}
             </button>
           </div>
@@ -1136,7 +1242,7 @@ function Dashboard({
 
             <span className="dashboard-home-panel-count static">
               {dashboardLoading
-                ? '—'
+                ? renderValueSkeleton('2.2rem')
                 : alerts.length}
             </span>
           </div>

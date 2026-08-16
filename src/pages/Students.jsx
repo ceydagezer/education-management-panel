@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import RequiredStar from '../components/RequiredStar'
 
 import {
@@ -23,10 +24,6 @@ import {
 import {
   getPaymentsByStudentPackage
 } from '../services/paymentService'
-
-import {
-  getLessonPlans
-} from '../services/lessonService'
 
 import '../styles/students.css'
 
@@ -73,6 +70,8 @@ function Students({
   onUnsavedChangesChange,
   requestUnsavedAction
 }) {
+  const queryClient = useQueryClient()
+
   const [studentView, setStudentView] = useState('list')
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [editingSection, setEditingSection] = useState(null)
@@ -159,27 +158,6 @@ function Students({
   const [statusFilter, setStatusFilter] = useState('active')
 
   const [
-    studentListRows,
-    setStudentListRows
-  ] = useState([])
-
-  const [
-    studentListTotal,
-    setStudentListTotal
-  ] = useState(0)
-
-  const [
-    studentListCounts,
-    setStudentListCounts
-  ] = useState({
-    active: 0,
-    passive: 0,
-    archived: 0,
-    review: 0,
-    all: 0
-  })
-
-  const [
     studentListSearch,
     setStudentListSearch
   ] = useState('')
@@ -210,19 +188,14 @@ function Students({
   ] = useState(10)
 
   const [
-    studentListLoading,
-    setStudentListLoading
-  ] = useState(true)
-
-  const [
-    studentListError,
-    setStudentListError
-  ] = useState('')
-
-  const [
     studentListReloadKey,
     setStudentListReloadKey
   ] = useState(0)
+
+  const [
+    debouncedStudentListSearch,
+    setDebouncedStudentListSearch
+  ] = useState('')
   const [isCreatingPdf, setIsCreatingPdf] = useState(false)
   const [isSavingStudent, setIsSavingStudent] = useState(false)
   const [changingStudentStatus, setChangingStudentStatus] = useState(false)
@@ -538,140 +511,187 @@ function Students({
   const canPermanentlyDeleteStudent = (student) =>
     getDeletionBlockers(student).length === 0
 
+  /*
+   * Öğrenci listesi TanStack Query ile sayfa/filtre bazında cache'lenir.
+   * Sayfadan çıkıp geri dönüldüğünde son gerçek veri anında gösterilir;
+   * veri stale ise arka planda sessizce yenilenir.
+   */
   useEffect(() => {
-    if (studentView !== 'list') {
-      return undefined
-    }
-
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setStudentListLoading(true)
-          setStudentListError('')
-
-          try {
-            const [
-              pageResult,
-              countsResult
-            ] = await Promise.all([
-              getStudentsPage({
-                page:
-                  studentListPage,
-                pageSize:
-                  studentListPageSize,
-                status:
-                  statusFilter,
-                searchText:
-                  studentListSearch,
-                packageId:
-                  studentListPackageId,
-                teacherId:
-                  studentListTeacherId,
-                sortOption:
-                  studentListSort
-              }),
-              getStudentListCounts()
-            ])
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  pageResult.total /
-                    studentListPageSize
-                )
-              )
-
-            if (
-              studentListPage >
-              totalPages
-            ) {
-              setStudentListPage(
-                totalPages
-              )
-              return
-            }
-
-            setStudentListRows(
-              pageResult.data
-            )
-            setStudentListTotal(
-              pageResult.total
-            )
-            setStudentListCounts(
-              countsResult
-            )
-          } catch (error) {
-            console.error(
-              'Öğrenci listesi alınamadı:',
-              error
-            )
-
-            if (isMounted) {
-              const isOffline =
-                typeof navigator !==
-                  'undefined' &&
-                !navigator.onLine
-
-              const errorMessage =
-                String(
-                  error?.message || ''
-                ).toLocaleLowerCase(
-                  'tr-TR'
-                )
-
-              const isNetworkError =
-                errorMessage.includes(
-                  'failed to fetch'
-                ) ||
-                errorMessage.includes(
-                  'network'
-                ) ||
-                errorMessage.includes(
-                  'fetch'
-                )
-
-              setStudentListError(
-                isOffline
-                  ? 'İnternet bağlantısı bulunamadı. Öğrenci listesi yüklenemedi.'
-                  : isNetworkError
-                    ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
-                    : 'Öğrenci listesi şu anda yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setStudentListLoading(false)
-            }
-          }
-        },
-        studentListSearch.trim()
-          ? 350
-          : 0
-      )
+    const timeoutId = window.setTimeout(
+      () => {
+        setDebouncedStudentListSearch(
+          studentListSearch
+        )
+      },
+      studentListSearch.trim()
+        ? 350
+        : 0
+    )
 
     return () => {
-      isMounted = false
-      window.clearTimeout(
-        timeoutId
+      window.clearTimeout(timeoutId)
+    }
+  }, [studentListSearch])
+
+  const studentListQuery = useQuery({
+    queryKey: [
+      'students',
+      'list',
+      {
+        page: studentListPage,
+        pageSize: studentListPageSize,
+        status: statusFilter,
+        searchText:
+          debouncedStudentListSearch,
+        packageId:
+          studentListPackageId,
+        teacherId:
+          studentListTeacherId,
+        sortOption:
+          studentListSort
+      }
+    ],
+    queryFn: () =>
+      getStudentsPage({
+        page: studentListPage,
+        pageSize: studentListPageSize,
+        status: statusFilter,
+        searchText:
+          debouncedStudentListSearch,
+        packageId:
+          studentListPackageId,
+        teacherId:
+          studentListTeacherId,
+        sortOption:
+          studentListSort
+      }),
+    enabled: studentView === 'list'
+  })
+
+  const studentListCountsQuery = useQuery({
+    queryKey: [
+      'students',
+      'counts'
+    ],
+    queryFn: getStudentListCounts,
+    enabled: studentView === 'list'
+  })
+
+  /*
+   * Mevcut mutation akışlarını değiştirmeden koruyoruz.
+   * studentListReloadKey arttığında aynı cache anahtarları stale olur;
+   * eldeki veri kaybolmadan arka planda güncel kayıt çekilir.
+   */
+  useEffect(() => {
+    if (studentListReloadKey === 0) {
+      return
+    }
+
+    queryClient.invalidateQueries({
+      queryKey: ['students']
+    })
+  }, [
+    studentListReloadKey,
+    queryClient
+  ])
+
+  const studentListRows =
+    studentListQuery.data?.data ?? []
+
+  const studentListTotal =
+    Number(
+      studentListQuery.data?.total ?? 0
+    )
+
+  const studentListCounts =
+    studentListCountsQuery.data ?? {
+      active: 0,
+      passive: 0,
+      archived: 0,
+      review: 0,
+      all: 0
+    }
+
+  const studentListLoading =
+    (
+      studentListQuery.isPending &&
+      !studentListQuery.data
+    ) ||
+    (
+      studentListCountsQuery.isPending &&
+      !studentListCountsQuery.data
+    )
+
+  const studentListError = (() => {
+    if (studentListQuery.data) {
+      return ''
+    }
+
+    const error =
+      studentListQuery.error
+
+    if (!error) {
+      return ''
+    }
+
+    const isOffline =
+      typeof navigator !== 'undefined' &&
+      !navigator.onLine
+
+    const errorMessage =
+      String(
+        error?.message || ''
+      ).toLocaleLowerCase('tr-TR')
+
+    const isNetworkError =
+      errorMessage.includes(
+        'failed to fetch'
+      ) ||
+      errorMessage.includes(
+        'network'
+      ) ||
+      errorMessage.includes(
+        'fetch'
+      )
+
+    return isOffline
+      ? 'İnternet bağlantısı bulunamadı. Öğrenci listesi yüklenemedi.'
+      : isNetworkError
+        ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+        : 'Öğrenci listesi şu anda yüklenemedi.'
+  })()
+
+  /*
+   * Silme/filtre değişimi sonrası mevcut sayfa artık yoksa
+   * son geçerli sayfaya dön.
+   */
+  useEffect(() => {
+    if (!studentListQuery.data) {
+      return
+    }
+
+    const totalPages =
+      Math.max(
+        1,
+        Math.ceil(
+          studentListTotal /
+            studentListPageSize
+        )
+      )
+
+    if (
+      studentListPage >
+      totalPages
+    ) {
+      setStudentListPage(
+        totalPages
       )
     }
   }, [
-    studentView,
-    statusFilter,
+    studentListQuery.data,
+    studentListTotal,
     studentListPage,
-    studentListPageSize,
-    studentListSearch,
-    studentListPackageId,
-    studentListTeacherId,
-    studentListSort,
-    studentListReloadKey
+    studentListPageSize
   ])
 
   const studentListTotalPages =
@@ -1849,9 +1869,17 @@ function Students({
       async () => {
         try {
           const fullStudent =
-            await getStudentById(
-              student.id
-            )
+            await queryClient.fetchQuery({
+              queryKey: [
+                'students',
+                'detail',
+                String(student.id)
+              ],
+              queryFn: () =>
+                getStudentById(
+                  student.id
+                )
+            })
 
           performShowStudentDetail(
             fullStudent
@@ -2080,30 +2108,15 @@ function Students({
           typeof setLessonPlans ===
           'function'
         ) {
-          try {
-            const refreshedLessonPlans =
-              await getLessonPlans()
-
-            setLessonPlans(
-              refreshedLessonPlans
+          setLessonPlans((current) =>
+            current.filter(
+              (lesson) =>
+                !areIdsEqual(
+                  lesson.studentId,
+                  selectedStudent.id
+                )
             )
-          } catch (
-            lessonPlanRefreshError
-          ) {
-            console.error(
-              'Ders programı pasife alma sonrası yenilenemedi:',
-              lessonPlanRefreshError
-            )
-
-            if (
-              typeof window !==
-              'undefined'
-            ) {
-              window.alert(
-                'Öğrenci pasife alındı ancak ders programı ekranda yenilenemedi. Sayfayı yenilediğinizde güncel hali gelecektir.'
-              )
-            }
-          }
+          )
         }
 
         if (
@@ -4186,18 +4199,13 @@ function Students({
         </button>
       </section>
 
-      <form
-        onSubmit={handleStudentSubmit}
-        className="student-form-card"
-        autoComplete="off"
-      >
+      <form onSubmit={handleStudentSubmit} className="student-form-card">
         <div className="form-section">
           <h2>Öğrenci Bilgileri</h2>
           <div className="form-grid">
             <div className="form-group">
               <label>TC Kimlik No <RequiredStar /></label>
               <input
-                autoComplete="off"
                 name="tcNo"
                 value={studentForm.tcNo}
                 onChange={handleStudentChange}
@@ -4207,7 +4215,6 @@ function Students({
             <div className="form-group">
               <label>Ad Soyad <RequiredStar /></label>
               <input
-                autoComplete="off"
                 name="fullName"
                 value={studentForm.fullName}
                 onChange={handleStudentChange}
@@ -4228,7 +4235,6 @@ function Students({
             <div className="form-group">
               <label>Doğum Tarihi</label>
               <input
-                autoComplete="off"
                 type="date"
                 name="birthDate"
                 value={studentForm.birthDate}
@@ -4238,7 +4244,6 @@ function Students({
             <div className="form-group">
               <label>Kayıt Tarihi <RequiredStar /></label>
               <input
-                autoComplete="off"
                 type="date"
                 name="registerDate"
                 value={studentForm.registerDate}
@@ -4248,7 +4253,6 @@ function Students({
             <div className="form-group">
               <label>Cep Telefonu <RequiredStar /></label>
               <input
-                autoComplete="off"
                 name="phone"
                 value={studentForm.phone}
                 onChange={handleStudentChange}
@@ -4257,7 +4261,6 @@ function Students({
             <div className="form-group">
               <label>E-posta</label>
               <input
-                autoComplete="off"
                 type="email"
                 name="email"
                 value={studentForm.email}
@@ -4267,7 +4270,6 @@ function Students({
             <div className="form-group full-width">
               <label>Adres</label>
               <textarea
-                autoComplete="off"
                 name="address"
                 value={studentForm.address}
                 onChange={handleStudentChange}
@@ -4291,7 +4293,6 @@ function Students({
             <div className="form-group">
               <label>Ad Soyad</label>
               <input
-                autoComplete="off"
                 name="guardian1Name"
                 value={studentForm.guardian1Name}
                 onChange={handleStudentChange}
@@ -4324,7 +4325,6 @@ function Students({
             <div className="form-group">
               <label>Telefon</label>
               <input
-                autoComplete="off"
                 name="guardian1Phone"
                 value={studentForm.guardian1Phone}
                 onChange={handleStudentChange}
@@ -4334,7 +4334,6 @@ function Students({
             <div className="form-group">
               <label>E-posta</label>
               <input
-                autoComplete="off"
                 type="email"
                 name="guardian1Email"
                 value={studentForm.guardian1Email}
@@ -4345,7 +4344,6 @@ function Students({
             <div className="form-group full-width">
               <label className="checkbox-label">
                 <input
-                  autoComplete="off"
                   type="checkbox"
                   name="guardian1SameAddress"
                   checked={studentForm.guardian1SameAddress}
@@ -4359,7 +4357,6 @@ function Students({
               <div className="form-group full-width">
                 <label>Veli Adresi</label>
                 <textarea
-                  autoComplete="off"
                   name="guardian1Address"
                   value={studentForm.guardian1Address}
                   onChange={handleStudentChange}
@@ -4370,7 +4367,6 @@ function Students({
             <div className="form-group">
               <label className="checkbox-label">
                 <input
-                  autoComplete="off"
                   type="checkbox"
                   name="guardian1IsPrimary"
                   checked={studentForm.guardian1IsPrimary}
@@ -4383,7 +4379,6 @@ function Students({
             <div className="form-group">
               <label>Not</label>
               <input
-                autoComplete="off"
                 name="guardian1Notes"
                 value={studentForm.guardian1Notes}
                 onChange={handleStudentChange}
@@ -4397,7 +4392,6 @@ function Students({
             <div className="form-group">
               <label>Ad Soyad</label>
               <input
-                autoComplete="off"
                 name="guardian2Name"
                 value={studentForm.guardian2Name}
                 onChange={handleStudentChange}
@@ -4430,7 +4424,6 @@ function Students({
             <div className="form-group">
               <label>Telefon</label>
               <input
-                autoComplete="off"
                 name="guardian2Phone"
                 value={studentForm.guardian2Phone}
                 onChange={handleStudentChange}
@@ -4440,7 +4433,6 @@ function Students({
             <div className="form-group">
               <label>E-posta</label>
               <input
-                autoComplete="off"
                 type="email"
                 name="guardian2Email"
                 value={studentForm.guardian2Email}
@@ -4451,7 +4443,6 @@ function Students({
             <div className="form-group full-width">
               <label className="checkbox-label">
                 <input
-                  autoComplete="off"
                   type="checkbox"
                   name="guardian2SameAddress"
                   checked={studentForm.guardian2SameAddress}
@@ -4465,7 +4456,6 @@ function Students({
               <div className="form-group full-width">
                 <label>Veli Adresi</label>
                 <textarea
-                  autoComplete="off"
                   name="guardian2Address"
                   value={studentForm.guardian2Address}
                   onChange={handleStudentChange}
@@ -4476,7 +4466,6 @@ function Students({
             <div className="form-group">
               <label className="checkbox-label">
                 <input
-                  autoComplete="off"
                   type="checkbox"
                   name="guardian2IsPrimary"
                   checked={studentForm.guardian2IsPrimary}
@@ -4489,7 +4478,6 @@ function Students({
             <div className="form-group">
               <label>Not</label>
               <input
-                autoComplete="off"
                 name="guardian2Notes"
                 value={studentForm.guardian2Notes}
                 onChange={handleStudentChange}
@@ -4592,7 +4580,6 @@ function Students({
                 <div className="form-group">
                   <label>Aylık Toplam Ücret</label>
                   <input
-                    autoComplete="off"
                     value={`₺${formatPrice(getTotalFee(studentForm))}`}
                     readOnly
                   />
@@ -4602,7 +4589,6 @@ function Students({
               <div className="form-group full-width">
                 <label>Notlar</label>
                 <textarea
-                  autoComplete="off"
                   name="notes"
                   value={studentForm.notes}
                   onChange={handleStudentChange}

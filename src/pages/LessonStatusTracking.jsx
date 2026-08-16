@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query'
 
 import {
   createLessonOccurrence,
@@ -96,6 +100,73 @@ const formatShortDate = (
     }
   )
 
+const LESSON_PLAN_STUDENTS_QUERY_KEY = [
+  'lesson-plan-students',
+  'active'
+]
+
+const LESSON_HISTORY_QUERY_ROOT = [
+  'lesson-status',
+  'history'
+]
+
+const getLessonHistoryQueryKey = ({
+  page,
+  pageSize,
+  teacherId,
+  studentId,
+  status,
+  startDate,
+  endDate,
+  sortOption
+}) => [
+  ...LESSON_HISTORY_QUERY_ROOT,
+  {
+    page,
+    pageSize,
+    teacherId,
+    studentId,
+    status,
+    startDate,
+    endDate,
+    sortOption
+  }
+]
+
+const getLessonHistoryErrorMessage = (
+  error
+) => {
+  const isOffline =
+    typeof navigator !== 'undefined' &&
+    !navigator.onLine
+
+  if (isOffline) {
+    return 'İnternet bağlantısı bulunamadı. Ders geçmişi yüklenemedi.'
+  }
+
+  const errorMessage =
+    String(
+      error?.message || ''
+    ).toLocaleLowerCase(
+      'tr-TR'
+    )
+
+  const isNetworkError =
+    errorMessage.includes(
+      'failed to fetch'
+    ) ||
+    errorMessage.includes(
+      'network'
+    ) ||
+    errorMessage.includes(
+      'fetch'
+    )
+
+  return isNetworkError
+    ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    : 'Ders geçmişi şu anda yüklenemedi.'
+}
+
 function LessonStatusTracking({
   lessons = [],
   lessonPlans = [],
@@ -105,6 +176,8 @@ function LessonStatusTracking({
   packages = [],
   unsavedChanges
 }) {
+  const queryClient = useQueryClient()
+
   const days = [
     'Pazartesi',
     'Salı',
@@ -222,16 +295,6 @@ function LessonStatusTracking({
     useState(false)
 
   const [
-    historyRows,
-    setHistoryRows
-  ] = useState([])
-
-  const [
-    historyTotal,
-    setHistoryTotal
-  ] = useState(0)
-
-  const [
     historyPage,
     setHistoryPage
   ] = useState(1)
@@ -255,26 +318,6 @@ function LessonStatusTracking({
     historySort,
     setHistorySort
   ] = useState('newest')
-
-  const [
-    historyLoading,
-    setHistoryLoading
-  ] = useState(true)
-
-  const [
-    historyError,
-    setHistoryError
-  ] = useState('')
-
-  const [
-    historyReloadKey,
-    setHistoryReloadKey
-  ] = useState(0)
-
-  const [
-    lessonPlanStudents,
-    setLessonPlanStudents
-  ] = useState([])
 
   const studentSearchRef = useRef(null)
 
@@ -312,11 +355,7 @@ function LessonStatusTracking({
     normalizeSearchText(
       [
         getStudentFullName(student),
-        student?.phone,
-        student?.motherPhone,
-        student?.fatherPhone,
-        student?.tcNo,
-        student?.email
+        student?.tcNo
       ]
         .filter(Boolean)
         .join(' ')
@@ -387,31 +426,20 @@ function LessonStatusTracking({
     }
   }, [])
 
-  useEffect(() => {
-    let isMounted = true
+  /*
+   * Ders Programı ekranıyla aynı query key kullanılır. Kullanıcı sayfalar
+   * arasında dolaşırken grup dersi katılımcıları yeniden boş state'ten
+   * yüklenmez; cache varsa anında kullanılır, stale ise arka planda yenilenir.
+   */
+  const lessonPlanStudentsQuery = useQuery({
+    queryKey:
+      LESSON_PLAN_STUDENTS_QUERY_KEY,
+    queryFn:
+      getLessonPlanStudents
+  })
 
-    const loadLessonPlanStudents = async () => {
-      try {
-        const rows =
-          await getLessonPlanStudents()
-
-        if (isMounted) {
-          setLessonPlanStudents(rows)
-        }
-      } catch (error) {
-        console.error(
-          'Grup dersi öğrencileri alınamadı:',
-          error
-        )
-      }
-    }
-
-    loadLessonPlanStudents()
-
-    return () => {
-      isMounted = false
-    }
-  }, [lessonPlans])
+  const lessonPlanStudents =
+    lessonPlanStudentsQuery.data ?? []
 
   const getTeacherName = (lesson) => {
     if (lesson.teacherName) {
@@ -763,11 +791,7 @@ function LessonStatusTracking({
             (student) => [
               student?.fullName,
               student?.name,
-              student?.phone,
-              student?.motherPhone,
-              student?.fatherPhone,
-              student?.tcNo,
-              student?.email
+              student?.tcNo
             ]
           )
         ]
@@ -911,133 +935,94 @@ function LessonStatusTracking({
     ...pendingMakeupLessons
   ].filter(matchesCurrentFilters)
 
+  const historyFilters = {
+    page: historyPage,
+    pageSize:
+      historyPageSize,
+    teacherId:
+      selectedTeacher ===
+      'all'
+        ? ''
+        : selectedTeacher,
+    studentId:
+      selectedStudent ===
+      'all'
+        ? ''
+        : selectedStudent,
+    status:
+      selectedStatus,
+    startDate:
+      historyStartDate,
+    endDate:
+      historyEndDate,
+    sortOption:
+      historySort
+  }
+
+  /*
+   * Geçmiş tablosunu filtre + sayfa bazında cache'le. Aynı filtreye geri
+   * dönüldüğünde son gerçek tablo anında görünür. 30 saniye sonrası refetch
+   * olursa eski tablo ekranda kalır; yalnız ilk kez açılan sorguda loading
+   * gösterilir.
+   */
+  const historyQuery = useQuery({
+    queryKey:
+      getLessonHistoryQueryKey(
+        historyFilters
+      ),
+    queryFn: () =>
+      getLessonHistoryPage(
+        historyFilters
+      )
+  })
+
+  const historyRows =
+    historyQuery.data?.data ?? []
+
+  const historyTotal =
+    Number(
+      historyQuery.data?.total ?? 0
+    )
+
+  const historyLoading =
+    historyQuery.isPending &&
+    historyQuery.data === undefined
+
+  const historyError =
+    historyQuery.isError &&
+    historyQuery.data === undefined
+      ? getLessonHistoryErrorMessage(
+          historyQuery.error
+        )
+      : ''
+
   useEffect(() => {
-    let isMounted = true
+    if (!historyQuery.data) {
+      return
+    }
 
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setHistoryLoading(true)
-          setHistoryError('')
-
-          try {
-            const result =
-              await getLessonHistoryPage({
-                page: historyPage,
-                pageSize:
-                  historyPageSize,
-                teacherId:
-                  selectedTeacher ===
-                  'all'
-                    ? ''
-                    : selectedTeacher,
-                studentId:
-                  selectedStudent ===
-                  'all'
-                    ? ''
-                    : selectedStudent,
-                status:
-                  selectedStatus,
-                startDate:
-                  historyStartDate,
-                endDate:
-                  historyEndDate,
-                sortOption:
-                  historySort
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    historyPageSize
-                )
-              )
-
-            if (
-              historyPage >
-              totalPages
-            ) {
-              setHistoryPage(
-                totalPages
-              )
-              return
-            }
-
-            setHistoryRows(
-              result.data
-            )
-            setHistoryTotal(
-              result.total
-            )
-          } catch (error) {
-            console.error(
-              'Ders geçmişi alınamadı:',
-              error
-            )
-
-            if (isMounted) {
-              const isOffline =
-                typeof navigator !==
-                  'undefined' &&
-                !navigator.onLine
-
-              const errorMessage =
-                String(
-                  error?.message || ''
-                ).toLocaleLowerCase(
-                  'tr-TR'
-                )
-
-              const isNetworkError =
-                errorMessage.includes(
-                  'failed to fetch'
-                ) ||
-                errorMessage.includes(
-                  'network'
-                ) ||
-                errorMessage.includes(
-                  'fetch'
-                )
-
-              setHistoryError(
-                isOffline
-                  ? 'İnternet bağlantısı bulunamadı. Ders geçmişi yüklenemedi.'
-                  : isNetworkError
-                    ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
-                    : 'Ders geçmişi şu anda yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setHistoryLoading(false)
-            }
-          }
-        },
-        150
+    const totalPages =
+      Math.max(
+        1,
+        Math.ceil(
+          historyTotal /
+            historyPageSize
+        )
       )
 
-    return () => {
-      isMounted = false
-      window.clearTimeout(
-        timeoutId
+    if (
+      historyPage >
+      totalPages
+    ) {
+      setHistoryPage(
+        totalPages
       )
     }
   }, [
     historyPage,
     historyPageSize,
-    selectedTeacher,
-    selectedStudent,
-    selectedStatus,
-    historyStartDate,
-    historyEndDate,
-    historySort,
-    historyReloadKey
+    historyQuery.data,
+    historyTotal
   ])
 
   const historyTotalPages =
@@ -1247,9 +1232,10 @@ function LessonStatusTracking({
         ])
       }
 
-      setHistoryReloadKey(
-        (current) => current + 1
-      )
+      queryClient.invalidateQueries({
+        queryKey:
+          LESSON_HISTORY_QUERY_ROOT
+      })
 
       setOpenMenuId(null)
     } catch (error) {
@@ -1299,9 +1285,10 @@ function LessonStatusTracking({
         )
       )
 
-      setHistoryReloadKey(
-        (current) => current + 1
-      )
+      queryClient.invalidateQueries({
+        queryKey:
+          LESSON_HISTORY_QUERY_ROOT
+      })
 
       setOpenMenuId(null)
     } catch (error) {
@@ -1594,6 +1581,11 @@ function LessonStatusTracking({
         savedLesson
       ])
 
+      queryClient.invalidateQueries({
+        queryKey:
+          LESSON_HISTORY_QUERY_ROOT
+      })
+
       unsavedChanges?.markClean?.()
       performCloseMakeupForm()
     } catch (error) {
@@ -1695,7 +1687,7 @@ function LessonStatusTracking({
                 onFocus={() =>
                   setShowStudentSuggestions(true)
                 }
-                placeholder="Ad, telefon veya TC ile ara"
+                placeholder="Ad veya TC ile ara"
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={showStudentSuggestions}
@@ -1752,6 +1744,11 @@ function LessonStatusTracking({
                           <strong>
                             {getStudentFullName(student)}
                           </strong>
+                          {student.tcNo && (
+                            <small>
+                              TC: {student.tcNo}
+                            </small>
+                          )}
                         </span>
                       </button>
                     ))
@@ -2445,10 +2442,7 @@ function LessonStatusTracking({
             <button
               type="button"
               onClick={() =>
-                setHistoryReloadKey(
-                  (current) =>
-                    current + 1
-                )
+                historyQuery.refetch()
               }
             >
               Tekrar Dene

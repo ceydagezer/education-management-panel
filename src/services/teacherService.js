@@ -259,23 +259,14 @@ async function createSignedUrl(
   return data?.signedUrl ?? ''
 }
 
-async function attachFileUrls(
+async function attachPhotoUrl(
   teacher
 ) {
-  const [
-    photoUrl,
-    cvUrl
-  ] = await Promise.all([
-    createSignedUrl(
+  const photoUrl =
+    await createSignedUrl(
       PHOTO_BUCKET,
       teacher.photoPath
-    ),
-
-    createSignedUrl(
-      CV_BUCKET,
-      teacher.cvFilePath
     )
-  ])
 
   return {
     ...teacher,
@@ -286,8 +277,39 @@ async function attachFileUrls(
     profilePhotoUrl:
       photoUrl,
 
-    cvUrl
+    /*
+     * CV bağlantısı liste yüklenirken oluşturulmaz.
+     * CV yalnız kullanıcı görüntülediğinde veya PDF'e
+     * eklemek istediğinde getTeacherCvUrl ile alınır.
+     */
+    cvUrl: ''
   }
+}
+
+export async function getTeacherCvUrl(
+  teacherOrPath
+) {
+  const cvFilePath =
+    typeof teacherOrPath === 'string'
+      ? teacherOrPath
+      : (
+          teacherOrPath?.cvFilePath ||
+          teacherOrPath?.cv_file_path ||
+          ''
+        )
+
+  const cleanPath = String(
+    cvFilePath || ''
+  ).trim()
+
+  if (!cleanPath) {
+    return ''
+  }
+
+  return createSignedUrl(
+    CV_BUCKET,
+    cleanPath
+  )
 }
 
 function validateTeacherFile(
@@ -628,7 +650,7 @@ async function getTeacherById(
     )
   }
 
-  return attachFileUrls(
+  return attachPhotoUrl(
     mapTeacherFromDb(data)
   )
 }
@@ -656,7 +678,7 @@ export async function getTeachers() {
   return Promise.all(
     (data ?? []).map(
       (row) =>
-        attachFileUrls(
+        attachPhotoUrl(
           mapTeacherFromDb(row)
         )
     )

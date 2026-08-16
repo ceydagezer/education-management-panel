@@ -6,14 +6,11 @@ import {createSpecialty} from '../services/catalogService'
 
 import {
   createTeacher,
+  getTeacherCvUrl,
   reactivateTeacher,
   setTeacherPassive,
   updateTeacher
 } from '../services/teacherService'
-
-import pdfMake from 'pdfmake/build/pdfmake'
-import pdfFonts from 'pdfmake/build/vfs_fonts'
-import { PDFDocument } from 'pdf-lib'
 
 import '../styles/teachers.css'
 
@@ -33,12 +30,64 @@ const formatDateTime = (date = new Date()) =>date.toLocaleString('tr-TR', {day: 
 
 const sanitizeFileName = (value) =>String(value || 'ogretmen').trim().toLocaleLowerCase('tr-TR').replaceAll('ç', 'c').replaceAll('ğ', 'g').replaceAll('ı', 'i').replaceAll('ö', 'o').replaceAll('ş', 's').replaceAll('ü', 'u').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ogretmen'
 
-const configurePdfMakeFonts = () => {const virtualFonts =pdfFonts?.pdfMake?.vfs ||pdfFonts?.vfs ||pdfFonts
+let pdfMakePromise = null
+let pdfDocumentPromise = null
 
-if (typeof pdfMake.addVirtualFileSystem === 'function') {pdfMake.addVirtualFileSystem(virtualFonts)
-return}
+const getPdfMake = async () => {
+  if (!pdfMakePromise) {
+    pdfMakePromise = Promise.all([
+      import('pdfmake/build/pdfmake'),
+      import('pdfmake/build/vfs_fonts')
+    ]).then(
+      ([
+        pdfMakeModule,
+        pdfFontsModule
+      ]) => {
+        const pdfMake =
+          pdfMakeModule.default ||
+          pdfMakeModule
 
-pdfMake.vfs = virtualFonts}
+        const pdfFonts =
+          pdfFontsModule.default ||
+          pdfFontsModule
+
+        const virtualFonts =
+          pdfFonts?.pdfMake?.vfs ||
+          pdfFonts?.vfs ||
+          pdfFonts
+
+        if (
+          typeof pdfMake
+            .addVirtualFileSystem ===
+          'function'
+        ) {
+          pdfMake.addVirtualFileSystem(
+            virtualFonts
+          )
+        } else {
+          pdfMake.vfs =
+            virtualFonts
+        }
+
+        return pdfMake
+      }
+    )
+  }
+
+  return pdfMakePromise
+}
+
+const getPdfDocument = async () => {
+  if (!pdfDocumentPromise) {
+    pdfDocumentPromise =
+      import('pdf-lib').then(
+        (pdfLibModule) =>
+          pdfLibModule.PDFDocument
+      )
+  }
+
+  return pdfDocumentPromise
+}
 
 const getFileExtension = (value) =>
   String(value || '')
@@ -108,11 +157,15 @@ const getTeacherCvPdfBytes = async (teacher) => {
     return new Uint8Array(await teacher.cvFile.arrayBuffer())
   }
 
-  if (!teacher.cvUrl) {
+  const cvUrl =
+    teacher.cvUrl ||
+    await getTeacherCvUrl(teacher)
+
+  if (!cvUrl) {
     return null
   }
 
-  const response = await fetch(teacher.cvUrl)
+  const response = await fetch(cvUrl)
 
   if (!response.ok) {
     throw new Error(`CV dosyası alınamadı (${response.status}).`)
@@ -121,48 +174,98 @@ const getTeacherCvPdfBytes = async (teacher) => {
   return new Uint8Array(await response.arrayBuffer())
 }
 
-const createPdfBlob = (documentDefinition) =>
-  new Promise((resolve, reject) => {
-    let completed = false
+const createPdfBlob = async (
+  documentDefinition
+) => {
+  const pdfMake =
+    await getPdfMake()
 
-    const finish = (callback, value) => {
-      if (completed) {
-        return
+  return new Promise(
+    (resolve, reject) => {
+      let completed = false
+
+      const finish = (
+        callback,
+        value
+      ) => {
+        if (completed) {
+          return
+        }
+
+        completed = true
+        window.clearTimeout(
+          timeoutId
+        )
+        callback(value)
       }
 
-      completed = true
-      window.clearTimeout(timeoutId)
-      callback(value)
-    }
+      const timeoutId =
+        window.setTimeout(() => {
+          finish(
+            reject,
+            new Error(
+              'PDF oluşturma işlemi zaman aşımına uğradı.'
+            )
+          )
+        }, 30000)
 
-    const timeoutId = window.setTimeout(() => {
-      finish(
-        reject,
-        new Error('PDF oluşturma işlemi zaman aşımına uğradı.')
-      )
-    }, 30000)
+      try {
+        const result = pdfMake
+          .createPdf(
+            documentDefinition
+          )
+          .getBlob(
+            (blob) =>
+              finish(
+                resolve,
+                blob
+              )
+          )
 
-    try {
-      const result = pdfMake
-        .createPdf(documentDefinition)
-        .getBlob((blob) => finish(resolve, blob))
-
-      if (result && typeof result.then === 'function') {
-        result
-          .then((blob) => finish(resolve, blob))
-          .catch((error) => finish(reject, error))
+        if (
+          result &&
+          typeof result.then ===
+            'function'
+        ) {
+          result
+            .then(
+              (blob) =>
+                finish(
+                  resolve,
+                  blob
+                )
+            )
+            .catch(
+              (error) =>
+                finish(
+                  reject,
+                  error
+                )
+            )
+        }
+      } catch (error) {
+        finish(
+          reject,
+          error
+        )
       }
-    } catch (error) {
-      finish(reject, error)
     }
-  })
+  )
+}
 
-const mergePdfWithCv = async (teacherPdfBlob, cvPdfBytes) => {
+const mergePdfWithCv = async (
+  teacherPdfBlob,
+  cvPdfBytes
+) => {
   if (!cvPdfBytes) {
     return teacherPdfBlob
   }
 
-  const mergedPdf = await PDFDocument.create()
+  const PDFDocument =
+    await getPdfDocument()
+
+  const mergedPdf =
+    await PDFDocument.create()
   const teacherPdf = await PDFDocument.load(
     await teacherPdfBlob.arrayBuffer()
   )
@@ -228,6 +331,7 @@ const [newSpecialty,setNewSpecialty] = useState(() =>teacherFormDraftCache?.newS
 const [isCvDragActive, setIsCvDragActive] = useState(false)
 const [teacherStatusFilter, setTeacherStatusFilter] = useState('active')
 const [creatingTeacherPdfId, setCreatingTeacherPdfId] = useState(null)
+const [openingTeacherCvId, setOpeningTeacherCvId] = useState(null)
 
 const [isSavingTeacher, setIsSavingTeacher] = useState(false)
 const [isSavingSpecialty, setIsSavingSpecialty] = useState(false)
@@ -868,27 +972,120 @@ try {
 
 }
 
-const openCvFile = (teacher) => {if (teacher.cvUrl) {window.open(teacher.cvUrl,'_blank','noopener,noreferrer')
-return}
+const openCvFile = async (teacher) => {
+  if (!teacher) {
+    return
+  }
 
-if (!teacher.cvFile) {
-  return
-}
+  if (teacher.cvFile instanceof File) {
+    const localCvUrl = URL.createObjectURL(
+      teacher.cvFile
+    )
 
-const cvUrl = URL.createObjectURL(
-  teacher.cvFile
-)
+    window.open(
+      localCvUrl,
+      '_blank',
+      'noopener,noreferrer'
+    )
 
-window.open(
-  cvUrl,
-  '_blank',
-  'noopener,noreferrer'
-)
+    setTimeout(() => {
+      URL.revokeObjectURL(localCvUrl)
+    }, 1000)
 
-setTimeout(() => {
-  URL.revokeObjectURL(cvUrl)
-}, 1000)
+    return
+  }
 
+  if (
+    !teacher.cvUrl &&
+    !teacher.cvFilePath
+  ) {
+    return
+  }
+
+  setOpeningTeacherCvId(
+    teacher.id
+  )
+  setActionError('')
+
+  /*
+   * Async signed URL isteği popup engeline takılmasın diye
+   * pencereyi doğrudan kullanıcı tıklaması sırasında açıyoruz.
+   */
+  const previewWindow =
+    window.open(
+      'about:blank',
+      '_blank'
+    )
+
+  if (previewWindow) {
+    previewWindow.opener = null
+    previewWindow.document.title =
+      'CV yükleniyor...'
+  }
+
+  try {
+    const cvUrl =
+      teacher.cvUrl ||
+      await getTeacherCvUrl(
+        teacher
+      )
+
+    if (!cvUrl) {
+      throw new Error(
+        'CV dosyasına erişim bağlantısı oluşturulamadı.'
+      )
+    }
+
+    if (!teacher.cvUrl) {
+      setTeachers((current) =>
+        current.map((item) =>
+          areIdsEqual(
+            item.id,
+            teacher.id
+          )
+            ? {
+                ...item,
+                cvUrl
+              }
+            : item
+        )
+      )
+    }
+
+    if (previewWindow) {
+      previewWindow.location.replace(
+        cvUrl
+      )
+    } else {
+      window.open(
+        cvUrl,
+        '_blank',
+        'noopener,noreferrer'
+      )
+    }
+  } catch (error) {
+    if (
+      previewWindow &&
+      !previewWindow.closed
+    ) {
+      previewWindow.close()
+    }
+
+    console.error(
+      'CV görüntüleme hatası:',
+      error
+    )
+
+    setActionError(
+      error instanceof Error
+        ? error.message
+        : 'CV dosyası görüntülenemedi.'
+    )
+  } finally {
+    setOpeningTeacherCvId(
+      null
+    )
+  }
 }
 
 const getTeacherPaymentDay = (teacher) =>teacher.paymentDay ??teacher.teacherPaymentDay ??''
@@ -915,8 +1112,6 @@ const createTeacherPdf = async (teacher) => {if (!teacher) {return}
 setCreatingTeacherPdfId(teacher.id)
 
 try {
-  configurePdfMakeFonts()
-
   const paymentDay = getTeacherPaymentDay(teacher)
   const isActive = isTeacherActive(teacher)
   const statusText = isActive ? 'Aktif' : 'Pasif'
@@ -924,7 +1119,7 @@ try {
     getSpecialtyText(teacher)
   const cvText =
     teacher.cvFileName ||
-    (teacher.cvFile || teacher.cvUrl
+    (teacher.cvFile || teacher.cvUrl || teacher.cvFilePath
       ? 'CV dosyası mevcut'
       : 'CV bulunmuyor')
   const teacherPhoto = await getPdfImage(
@@ -1305,7 +1500,7 @@ try {
       'Öğretmen bilgi formu indirildi ancak CV PDF dosyası belgeye eklenemedi. CV bağlantısını ve Storage erişimini kontrol ediniz.'
     )
   } else if (
-    (teacher.cvFile || teacher.cvUrl || teacher.cvFileName) &&
+    (teacher.cvFile || teacher.cvUrl || teacher.cvFilePath || teacher.cvFileName) &&
     !isTeacherCvPdf(teacher)
   ) {
     alert(
@@ -2008,15 +2203,25 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
 
                   <td>
                     {teacher.cvUrl ||
-                    teacher.cvFile ? (
+                    teacher.cvFile ||
+                    teacher.cvFilePath ? (
                       <button
                         className="detail-button"
                         type="button"
                         onClick={() =>
                           openCvFile(teacher)
                         }
+                        disabled={areIdsEqual(
+                          openingTeacherCvId,
+                          teacher.id
+                        )}
                       >
-                        CV Görüntüle
+                        {areIdsEqual(
+                          openingTeacherCvId,
+                          teacher.id
+                        )
+                          ? 'Açılıyor...'
+                          : 'CV Görüntüle'}
                       </button>
                     ) : (
                       teacher.cvFileName || '-'

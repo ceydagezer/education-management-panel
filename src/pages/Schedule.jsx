@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query'
 
 import {
   createGroupLessonPlan,
@@ -25,6 +29,27 @@ import {
   normalizeStatusText
 } from '../utils/textHelpers'
 
+const LESSON_GROUPS_QUERY_KEY = [
+  'lesson-groups',
+  'list',
+  {
+    includeInactive: true
+  }
+]
+
+const LESSON_PLAN_STUDENTS_QUERY_KEY = [
+  'lesson-plan-students',
+  'active'
+]
+
+const getLessonGroupStudentsQueryKey = (
+  groupId
+) => [
+  'lesson-groups',
+  'students',
+  String(groupId || '')
+]
+
 function Schedule({
   lessonPlans = [],
   setLessonPlans,
@@ -33,6 +58,8 @@ function Schedule({
   packages = [],
   scheduleLoading = false
 }) {
+  const queryClient = useQueryClient()
+
   const days = [
     'Pazartesi',
     'Salı',
@@ -95,23 +122,66 @@ function Schedule({
   const [selectedStudentFilter, setSelectedStudentFilter] = useState('all')
   const [studentSearch, setStudentSearch] = useState('')
   const [showStudentSuggestions, setShowStudentSuggestions] = useState(false)
+  const [lessonStudentSearch, setLessonStudentSearch] = useState('')
+  const [showLessonStudentSuggestions, setShowLessonStudentSuggestions] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [expandedCells, setExpandedCells] = useState({})
   const [isSavingLesson, setIsSavingLesson] = useState(false)
   const [deletingLessonId, setDeletingLessonId] = useState(null)
-  const [lessonPlanStudents, setLessonPlanStudents] = useState([])
-  const [groupLinksLoading, setGroupLinksLoading] = useState(false)
 
-  const [lessonGroups, setLessonGroups] =
-    useState([])
+  /*
+   * Program ekranından çıkıp geri dönüldüğünde grup/katılımcı
+   * verilerini yeniden boş loading durumuna düşürme. Son gerçek veri
+   * TanStack Query cache'inden anında gösterilir; stale olduğunda
+   * arka planda sessizce güncellenir.
+   */
+  const lessonPlanStudentsQuery = useQuery({
+    queryKey:
+      LESSON_PLAN_STUDENTS_QUERY_KEY,
+    queryFn:
+      getLessonPlanStudents
+  })
 
-  const [lessonGroupsLoading, setLessonGroupsLoading] =
-    useState(false)
+  const lessonPlanStudents =
+    lessonPlanStudentsQuery.data ?? []
+
+  const groupLinksLoading =
+    lessonPlanStudentsQuery.isPending &&
+    lessonPlanStudentsQuery.data ===
+      undefined
+
+  /*
+   * Ders Grupları sayfasıyla aynı query key kullanılır. Böylece orada
+   * eklenen/pasife alınan gruplar Program ekranına geçildiğinde aynı
+   * cache üzerinden görülebilir.
+   */
+  const lessonGroupsQuery = useQuery({
+    queryKey:
+      LESSON_GROUPS_QUERY_KEY,
+    queryFn: () =>
+      getLessonGroups({
+        includeInactive: true
+      })
+  })
+
+  const lessonGroups =
+    (
+      lessonGroupsQuery.data ?? []
+    ).filter(
+      (group) =>
+        group.isActive !== false
+    )
+
+  const lessonGroupsLoading =
+    lessonGroupsQuery.isPending &&
+    lessonGroupsQuery.data ===
+      undefined
 
   const [selectedGroupLoading, setSelectedGroupLoading] =
     useState(false)
 
   const studentSearchRef = useRef(null)
+  const lessonStudentSearchRef = useRef(null)
 
   const activeTeachers = teachers.filter(
     (teacher) =>
@@ -167,17 +237,31 @@ function Schedule({
     normalizeSearchText(
       [
         getStudentNameFromRecord(student),
-        student?.phone,
-        student?.motherPhone,
-        student?.fatherPhone,
-        student?.tcNo,
-        student?.email
+        student?.tcNo
       ]
         .filter(Boolean)
         .join(' ')
     )
 
   const normalizedStudentSearch = normalizeSearchText(studentSearch)
+  const normalizedLessonStudentSearch =
+    normalizeSearchText(lessonStudentSearch)
+
+  const lessonStudentSuggestions = activeStudents
+    .filter((student) => {
+      if (!normalizedLessonStudentSearch) return false
+
+      return getStudentSearchValue(student).includes(
+        normalizedLessonStudentSearch
+      )
+    })
+    .sort((firstStudent, secondStudent) =>
+      getStudentNameFromRecord(firstStudent).localeCompare(
+        getStudentNameFromRecord(secondStudent),
+        'tr'
+      )
+    )
+    .slice(0, 8)
 
   // Yeni ders eklerken yalnızca aktif öğrenciler kullanılır.
   // Ancak program filtresinde geçmiş/arsivli öğrencilerin dersleri de
@@ -212,12 +296,20 @@ function Schedule({
       ) {
         setShowStudentSuggestions(false)
       }
+
+      if (
+        lessonStudentSearchRef.current &&
+        !lessonStudentSearchRef.current.contains(target)
+      ) {
+        setShowLessonStudentSuggestions(false)
+      }
     }
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setOpenMenuId(null)
         setShowStudentSuggestions(false)
+        setShowLessonStudentSuggestions(false)
       }
     }
 
@@ -233,70 +325,6 @@ function Schedule({
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('scroll', handleScroll, true)
-    }
-  }, [])
-
-  useEffect(() => {
-    let isMounted = true
-
-    const loadLessonPlanStudents = async () => {
-      setGroupLinksLoading(true)
-
-      try {
-        const rows =
-          await getLessonPlanStudents()
-
-        if (isMounted) {
-          setLessonPlanStudents(rows)
-        }
-      } catch (error) {
-        console.error(
-          'Ders katılımcıları alınamadı:',
-          error
-        )
-      } finally {
-        if (isMounted) {
-          setGroupLinksLoading(false)
-        }
-      }
-    }
-
-    loadLessonPlanStudents()
-
-    return () => {
-      isMounted = false
-    }
-  }, [lessonPlans])
-
-  useEffect(() => {
-    let isMounted = true
-
-    const loadLessonGroups = async () => {
-      setLessonGroupsLoading(true)
-
-      try {
-        const rows =
-          await getLessonGroups()
-
-        if (isMounted) {
-          setLessonGroups(rows)
-        }
-      } catch (error) {
-        console.error(
-          'Ders grupları alınamadı:',
-          error
-        )
-      } finally {
-        if (isMounted) {
-          setLessonGroupsLoading(false)
-        }
-      }
-    }
-
-    loadLessonGroups()
-
-    return () => {
-      isMounted = false
     }
   }, [])
 
@@ -574,14 +602,31 @@ function Schedule({
     }))
   }
 
-  const handleStudentSelect = (event) => {
-    const selectedStudentId = event.target.value
+  const clearLessonStudentSelection = () => {
+    setLessonStudentSearch('')
+    setShowLessonStudentSuggestions(false)
 
-    const student = students.find(
-      (item) => String(item.id) === String(selectedStudentId)
-    )
+    setLessonForm((currentForm) => ({
+      ...currentForm,
+      studentId: '',
+      studentName: '',
+      packageId: '',
+      packageName: '',
+      instrument: '',
+      duration: '',
+      lessonCount: '',
+      totalPrice: '',
+      teacherId: '',
+      teacher: '',
+      time: ''
+    }))
+  }
 
-    if (!student) {
+  const handleLessonStudentSearchChange = (event) => {
+    setLessonStudentSearch(event.target.value)
+    setShowLessonStudentSuggestions(true)
+
+    if (lessonForm.studentId) {
       setLessonForm((currentForm) => ({
         ...currentForm,
         studentId: '',
@@ -596,11 +641,22 @@ function Schedule({
         teacher: '',
         time: ''
       }))
+    }
+  }
+
+  const selectLessonStudent = (student) => {
+    if (!student) {
+      clearLessonStudentSelection()
       return
     }
 
     const studentPackages = getStudentPackages(student)
     const firstStudentPackage = studentPackages[0]
+
+    setLessonStudentSearch(
+      getStudentNameFromRecord(student)
+    )
+    setShowLessonStudentSuggestions(false)
 
     setLessonForm((currentForm) => ({
       ...currentForm,
@@ -666,6 +722,8 @@ function Schedule({
       lessonType,
       day: lessonForm.day
     })
+    setLessonStudentSearch('')
+    setShowLessonStudentSuggestions(false)
   }
 
   const handleSavedGroupSelect = async (
@@ -700,9 +758,17 @@ function Schedule({
 
     try {
       const memberships =
-        await getLessonGroupStudents(
-          selectedGroup.id
-        )
+        await queryClient.fetchQuery({
+          queryKey:
+            getLessonGroupStudentsQueryKey(
+              selectedGroup.id
+            ),
+          queryFn: () =>
+            getLessonGroupStudents(
+              selectedGroup.id
+            ),
+          staleTime: 30_000
+        })
 
       if (memberships.length < 2) {
         alert(
@@ -1055,8 +1121,9 @@ function Schedule({
             ''
         }
 
-        setLessonPlanStudents(
-          (currentLinks) => [
+        queryClient.setQueryData(
+          LESSON_PLAN_STUDENTS_QUERY_KEY,
+          (currentLinks = []) => [
             ...currentLinks,
             ...savedLesson.participants.map(
               (participant) => ({
@@ -1112,6 +1179,8 @@ function Schedule({
         day:
           lessonForm.day
       })
+      setLessonStudentSearch('')
+      setShowLessonStudentSuggestions(false)
     } catch (error) {
       console.error(
         'Ders planı kaydetme hatası:',
@@ -1154,6 +1223,18 @@ function Schedule({
               lessonId
             )
         )
+      )
+
+      queryClient.setQueryData(
+        LESSON_PLAN_STUDENTS_QUERY_KEY,
+        (currentLinks = []) =>
+          currentLinks.filter(
+            (link) =>
+              !areIdsEqual(
+                link.lessonPlanId,
+                lessonId
+              )
+          )
       )
 
       setOpenMenuId(null)
@@ -1351,29 +1432,104 @@ function Schedule({
               </>
             ) : (
               <>
-                <div className="form-group">
-                  <label>Öğrenci</label>
-                  <select
-                    name="studentId"
-                    value={lessonForm.studentId}
-                    onChange={handleStudentSelect}
-                  >
-                    <option value="">
-                      Öğrenci seçiniz
-                    </option>
-                    {activeStudents.map(
-                      (student) => (
-                        <option
-                          key={student.id}
-                          value={student.id}
-                        >
-                          {getStudentNameFromRecord(
-                            student
-                          )}
-                        </option>
-                      )
+                <div
+                  className="form-group schedule-student-filter-group"
+                  ref={lessonStudentSearchRef}
+                >
+                  <label htmlFor="lesson-student-search">
+                    Öğrenci
+                  </label>
+
+                  <div className="schedule-student-search-control">
+                    <span
+                      className="schedule-student-search-icon"
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-4-4" />
+                      </svg>
+                    </span>
+
+                    <input
+                      id="lesson-student-search"
+                      type="text"
+                      value={lessonStudentSearch}
+                      onChange={handleLessonStudentSearchChange}
+                      onFocus={() =>
+                        setShowLessonStudentSuggestions(true)
+                      }
+                      placeholder="Ad veya TC yazarak ara"
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={showLessonStudentSuggestions}
+                      aria-controls="lesson-student-results"
+                    />
+
+                    {lessonStudentSearch && (
+                      <button
+                        type="button"
+                        className="schedule-student-search-clear"
+                        onClick={clearLessonStudentSelection}
+                        aria-label="Seçili öğrenciyi temizle"
+                      >
+                        ×
+                      </button>
                     )}
-                  </select>
+                  </div>
+
+                  {showLessonStudentSuggestions &&
+                    normalizedLessonStudentSearch && (
+                    <div
+                      id="lesson-student-results"
+                      className="schedule-student-search-results"
+                      role="listbox"
+                    >
+                      {lessonStudentSuggestions.length > 0 ? (
+                        lessonStudentSuggestions.map((student) => (
+                          <button
+                            type="button"
+                            className={`schedule-student-search-result ${
+                              String(lessonForm.studentId) ===
+                              String(student.id)
+                                ? 'selected'
+                                : ''
+                            }`}
+                            key={student.id}
+                            onClick={() =>
+                              selectLessonStudent(student)
+                            }
+                            role="option"
+                            aria-selected={
+                              String(lessonForm.studentId) ===
+                              String(student.id)
+                            }
+                          >
+                            <span className="schedule-student-result-avatar">
+                              {getStudentNameFromRecord(student)
+                                .charAt(0)
+                                .toLocaleUpperCase('tr-TR') || '?'}
+                            </span>
+
+                            <span className="schedule-student-result-content">
+                              <strong>
+                                {getStudentNameFromRecord(student)}
+                              </strong>
+                              <small>
+                                {student.tcNo
+                                  ? `TC: ${student.tcNo}`
+                                  : 'TC bilgisi yok'}
+                              </small>
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="schedule-student-search-empty">
+                          Eşleşen aktif öğrenci bulunamadı.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -1668,7 +1824,7 @@ function Schedule({
                 value={studentSearch}
                 onChange={handleStudentSearchChange}
                 onFocus={() => setShowStudentSuggestions(true)}
-                placeholder="Ad, telefon veya TC ile ara"
+                placeholder="Ad veya TC ile ara"
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={showStudentSuggestions}
@@ -1718,9 +1874,9 @@ function Schedule({
                       <span className="schedule-student-result-content">
                         <strong>{getStudentNameFromRecord(student)}</strong>
                         <small>
-                          {student.phone ||
-                            student.tcNo ||
-                            'İletişim bilgisi yok'}
+                          {student.tcNo
+                            ? `TC: ${student.tcNo}`
+                            : 'TC bilgisi yok'}
                         </small>
                       </span>
                     </button>

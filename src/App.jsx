@@ -7,6 +7,7 @@ import {
 import './App.css'
 
 import { supabase } from './lib/supabase'
+import { queryClient } from './lib/queryClient'
 
 import {
   getPackages,
@@ -18,6 +19,8 @@ import {
 } from './services/teacherService'
 
 import {
+  getDashboardStudents,
+  getScheduleStudents,
   getStudents
 } from './services/studentService'
 
@@ -25,6 +28,10 @@ import {
   getLessonPlans,
   getLessonOccurrences
 } from './services/lessonService'
+
+import {
+  getPaymentStudents
+} from './services/paymentService'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -58,6 +65,20 @@ const VALID_PAGES = [
   'reports',
   'user-management'
 ]
+
+const FULL_STUDENT_DATA_PAGES = new Set([])
+
+const STUDENT_PACKAGE_SUMMARY_PAGES = new Set([
+  'schedule',
+  'lesson-status'
+])
+
+
+const LESSON_PLAN_DATA_PAGES = new Set([
+  'students',
+  'schedule',
+  'lesson-status'
+])
 
 const getReadableConnectionError = (
   error,
@@ -131,7 +152,7 @@ function App() {
     currentUserRole === 'admin'
 
   const [dataLoading, setDataLoading] =
-    useState(false)
+    useState(true)
 
   const [dataError, setDataError] =
     useState('')
@@ -222,15 +243,163 @@ function App() {
     setTeachers
   ] = useState([])
 
+  /*
+   * Dashboard başlangıçta yalnızca ihtiyaç duyduğu hafif öğrenci
+   * alanlarını kullanır. Veli + paket ilişkilerini içeren tam öğrenci
+   * modeli, gerçekten gereken bir sayfa açılana kadar yüklenmez.
+   */
+  const [
+    dashboardStudents,
+    setDashboardStudents
+  ] = useState([])
+
+  /*
+   * Ders Programı; tam öğrenci profiline değil, kimlik/durum ve
+   * paket-atama özetine ihtiyaç duyar. Bu veri yalnız program
+   * ekranı ilk kez açıldığında yüklenir.
+   */
+  const [
+    scheduleStudents,
+    setScheduleStudents
+  ] = useState([])
+
+  const [
+    scheduleStudentsLoaded,
+    setScheduleStudentsLoaded
+  ] = useState(false)
+
+  const [
+    scheduleStudentsLoading,
+    setScheduleStudentsLoading
+  ] = useState(false)
+
+  const [
+    scheduleStudentsError,
+    setScheduleStudentsError
+  ] = useState('')
+
+  const [
+    scheduleStudentsReloadKey,
+    setScheduleStudentsReloadKey
+  ] = useState(0)
+
+  /*
+   * Tahsilatlar ekranı tam öğrenci profiline ihtiyaç duymaz.
+   * Sadece aktif öğrenci ve ödeme için gerekli paket alanları
+   * bu ekrana özel, daha hafif bir sorguyla yüklenir.
+   */
+  const [
+    paymentStudents,
+    setPaymentStudents
+  ] = useState([])
+
+  const [
+    paymentStudentsLoading,
+    setPaymentStudentsLoading
+  ] = useState(false)
+
+  const [
+    paymentStudentsError,
+    setPaymentStudentsError
+  ] = useState('')
+
+  const [
+    paymentStudentsReloadKey,
+    setPaymentStudentsReloadKey
+  ] = useState(0)
+
   const [
     students,
     setStudents
   ] = useState([])
 
   const [
+    studentsLoaded,
+    setStudentsLoaded
+  ] = useState(false)
+
+  const [
+    studentsLoading,
+    setStudentsLoading
+  ] = useState(false)
+
+  const [
+    studentsError,
+    setStudentsError
+  ] = useState('')
+
+  const [
+    studentsReloadKey,
+    setStudentsReloadKey
+  ] = useState(0)
+
+  const needsFullStudentData =
+    FULL_STUDENT_DATA_PAGES.has(
+      activePage
+    )
+
+  const needsStudentPackageSummary =
+    STUDENT_PACKAGE_SUMMARY_PAGES.has(
+      activePage
+    )
+
+
+  const needsLessonPlanData =
+    LESSON_PLAN_DATA_PAGES.has(
+      activePage
+    )
+
+  /*
+   * Öğrenciler sayfası zaten server-side sayfalama + detay sorgusu
+   * kullanıyor. Global ağır öğrenci listesi yerine Dashboard özetini
+   * ortak state olarak kullan; öğrenci değişince hafif öğrenci-paket
+   * özetini stale işaretle ki ilgili ekranlarda güncel atamalar alınsın.
+   */
+  const setStudentCollections = (nextValue) => {
+    const applyUpdate = (current) =>
+      typeof nextValue === 'function'
+        ? nextValue(current)
+        : nextValue
+
+    setDashboardStudents(
+      (current) => applyUpdate(current)
+    )
+
+    if (studentsLoaded) {
+      setStudents(
+        (current) => applyUpdate(current)
+      )
+    }
+
+    setScheduleStudentsLoaded(false)
+    setScheduleStudentsError('')
+  }
+
+  const [
     lessonPlans,
     setLessonPlans
   ] = useState([])
+
+
+  const [
+    lessonPlansLoaded,
+    setLessonPlansLoaded
+  ] = useState(false)
+
+  const [
+    lessonPlansLoading,
+    setLessonPlansLoading
+  ] = useState(false)
+
+  const [
+    lessonPlansError,
+    setLessonPlansError
+  ] = useState('')
+
+  const [
+    lessonPlansReloadKey,
+    setLessonPlansReloadKey
+  ] = useState(0)
 
   const [
     lessonOccurrences,
@@ -268,11 +437,37 @@ function App() {
     setExpenses
   ] = useState([])
   const clearAppData = () => {
+    /*
+     * Öğrenciler, Ders Grupları, Tahsilatlar, Raporlar ve Ders
+     * Programı artık ortak QueryClient kullanıyor. Oturum kapanırken
+     * tüm kullanıcıya bağlı cache'i tek seferde temizle; farklı bir
+     * kullanıcı giriş yaptığında önceki oturum verisi görünmesin.
+     */
+    queryClient.clear()
+
     setSpecialties([])
     setPackages([])
     setTeachers([])
+    setDashboardStudents([])
+    setScheduleStudents([])
+    setScheduleStudentsLoaded(false)
+    setScheduleStudentsLoading(false)
+    setScheduleStudentsError('')
+    setScheduleStudentsReloadKey(0)
+    setPaymentStudents([])
+    setPaymentStudentsLoading(false)
+    setPaymentStudentsError('')
+    setPaymentStudentsReloadKey(0)
     setStudents([])
+    setStudentsLoaded(false)
+    setStudentsLoading(false)
+    setStudentsError('')
+    setStudentsReloadKey(0)
     setLessonPlans([])
+    setLessonPlansLoaded(false)
+    setLessonPlansLoading(false)
+    setLessonPlansError('')
+    setLessonPlansReloadKey(0)
     setLessonOccurrences([])
     setLessonOccurrencesLoaded(false)
     setLessonOccurrencesLoading(false)
@@ -324,8 +519,7 @@ function App() {
               getSpecialties(),
               getPackages(),
               getTeachers(),
-              getStudents(),
-              getLessonPlans()
+              getDashboardStudents()
             ])
 
           const timeoutPromise =
@@ -349,8 +543,7 @@ function App() {
             specialtiesResult,
             packagesResult,
             teachersResult,
-            studentsResult,
-            lessonPlansResult
+            dashboardStudentsResult
           ] = await Promise.race([
             panelDataPromise,
             timeoutPromise
@@ -378,12 +571,8 @@ function App() {
             teachersResult
           )
 
-          setStudents(
-            studentsResult
-          )
-
-          setLessonPlans(
-            lessonPlansResult
+          setDashboardStudents(
+            dashboardStudentsResult
           )
 } catch (error) {
           console.error(
@@ -423,8 +612,13 @@ function App() {
         )
       }
     }
+  /*
+   * Session token'ı yenilendiğinde Supabase yeni bir session nesnesi
+   * üretebilir. Panel verilerini yalnız kullanıcı gerçekten değiştiğinde
+   * veya manuel reload istendiğinde tekrar yükle.
+   */
   }, [
-    session,
+    session?.user?.id,
     catalogReloadKey
   ])
 
@@ -435,6 +629,360 @@ function App() {
           current + 1
       )
     }
+
+  /*
+   * Ağır öğrenci sorgusunu uygulama açılışından çıkar.
+   * students tablosunun veli + paket ilişkilerini içeren tam modeli
+   * yalnızca bu modele ihtiyaç duyan bir ekran açıldığında yüklenir.
+   */
+  useEffect(() => {
+    if (
+      !session ||
+      dataLoading ||
+      !needsFullStudentData ||
+      studentsLoaded
+    ) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadFullStudents = async () => {
+      setStudentsLoading(true)
+      setStudentsError('')
+
+      try {
+        const result = await getStudents()
+
+        if (!isMounted) {
+          return
+        }
+
+        setStudents(result)
+        setStudentsLoaded(true)
+      } catch (error) {
+        console.error(
+          'Tam öğrenci verileri alınamadı:',
+          error
+        )
+
+        if (isMounted) {
+          setStudentsError(
+            getReadableConnectionError(
+              error,
+              'Öğrenci verileri şu anda alınamadı. Lütfen tekrar deneyiniz.'
+            )
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setStudentsLoading(false)
+        }
+      }
+    }
+
+    loadFullStudents()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    session?.user?.id,
+    dataLoading,
+    needsFullStudentData,
+    studentsLoaded,
+    studentsReloadKey
+  ])
+
+  const retryFullStudentsLoad = () => {
+    setStudentsError('')
+    setStudentsLoaded(false)
+    setStudentsReloadKey(
+      (current) => current + 1
+    )
+  }
+
+  /*
+   * Bütün aktif ders planlarını panel açılışında indirme.
+   * Bu veri yalnız Öğrenciler, Ders Programı veya Ders Durumu
+   * ekranlarından biri gerçekten açıldığında yüklenir.
+   */
+  useEffect(() => {
+    if (
+      !session ||
+      dataLoading ||
+      !needsLessonPlanData ||
+      lessonPlansLoaded
+    ) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadLessonPlans = async () => {
+      setLessonPlansLoading(true)
+      setLessonPlansError('')
+
+      try {
+        const result = await getLessonPlans()
+
+        if (!isMounted) {
+          return
+        }
+
+        setLessonPlans(result)
+        setLessonPlansLoaded(true)
+      } catch (error) {
+        console.error(
+          'Ders planları alınamadı:',
+          error
+        )
+
+        if (isMounted) {
+          setLessonPlansError(
+            getReadableConnectionError(
+              error,
+              'Ders planları şu anda alınamadı. Lütfen tekrar deneyiniz.'
+            )
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setLessonPlansLoading(false)
+        }
+      }
+    }
+
+    loadLessonPlans()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    session?.user?.id,
+    dataLoading,
+    needsLessonPlanData,
+    lessonPlansLoaded,
+    lessonPlansReloadKey
+  ])
+
+  const retryLessonPlansLoad = () => {
+    setLessonPlansError('')
+    setLessonPlansLoaded(false)
+    setLessonPlansReloadKey(
+      (current) => current + 1
+    )
+  }
+
+  useEffect(() => {
+    if (
+      !session ||
+      dataLoading ||
+      !needsStudentPackageSummary ||
+      scheduleStudentsLoaded
+    ) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadScheduleStudents = async () => {
+      setScheduleStudentsLoading(true)
+      setScheduleStudentsError('')
+
+      try {
+        /*
+         * Tam öğrenci modeli daha önce başka bir ekran için zaten
+         * yüklendiyse yeni istek atmaya gerek yok; aynı veri ders
+         * programı ve ders durumu için yeterli bir üst kümedir.
+         */
+        const result = studentsLoaded
+          ? students
+          : await getScheduleStudents()
+
+        if (!isMounted) {
+          return
+        }
+
+        setScheduleStudents(result)
+        setScheduleStudentsLoaded(true)
+      } catch (error) {
+        console.error(
+          'Öğrenci-paket özetleri alınamadı:',
+          error
+        )
+
+        if (isMounted) {
+          setScheduleStudentsError(
+            getReadableConnectionError(
+              error,
+              'Öğrenci-paket bilgileri şu anda alınamadı. Lütfen tekrar deneyiniz.'
+            )
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setScheduleStudentsLoading(false)
+        }
+      }
+    }
+
+    loadScheduleStudents()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    session?.user?.id,
+    dataLoading,
+    needsStudentPackageSummary,
+    scheduleStudentsLoaded,
+    scheduleStudentsReloadKey,
+    studentsLoaded,
+    students
+  ])
+
+  const retryScheduleStudentsLoad = () => {
+    setScheduleStudentsError('')
+    setScheduleStudentsLoaded(false)
+    setScheduleStudentsReloadKey(
+      (current) => current + 1
+    )
+  }
+
+  /*
+   * Tahsilatlar öğrenci/paket verisini TanStack Query cache'inde tut.
+   * Sayfaya geri dönüldüğünde son gerçek veri anında gösterilir;
+   * 30 saniyeden eskiyse aynı veri ekranda kalırken arka planda yenilenir.
+   */
+  useEffect(() => {
+    const userId = session?.user?.id || ''
+
+    if (
+      !userId ||
+      dataLoading ||
+      activePage !== 'payments'
+    ) {
+      return undefined
+    }
+
+    let isMounted = true
+    const queryKey = [
+      'payment-students',
+      userId
+    ]
+    const cachedStudents =
+      queryClient.getQueryData(queryKey)
+    const hasCachedStudents =
+      Array.isArray(cachedStudents)
+
+    if (hasCachedStudents) {
+      setPaymentStudents(cachedStudents)
+      setPaymentStudentsLoading(false)
+    } else {
+      setPaymentStudentsLoading(true)
+    }
+
+    setPaymentStudentsError('')
+
+    const loadPaymentStudents = async () => {
+      try {
+        const result =
+          await queryClient.fetchQuery({
+            queryKey,
+            queryFn: getPaymentStudents,
+            staleTime: 30_000
+          })
+
+        if (!isMounted) {
+          return
+        }
+
+        setPaymentStudents(result)
+      } catch (error) {
+        console.error(
+          'Tahsilat öğrenci-paket bilgileri alınamadı:',
+          error
+        )
+
+        /*
+         * Cache'de kullanılabilir veri varsa kullanıcıyı tekrar boş
+         * loading/error ekranına düşürme; son gerçek veriyi koru.
+         */
+        if (
+          isMounted &&
+          !hasCachedStudents
+        ) {
+          setPaymentStudentsError(
+            getReadableConnectionError(
+              error,
+              'Tahsilat için öğrenci ve paket bilgileri şu anda alınamadı. Lütfen tekrar deneyiniz.'
+            )
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setPaymentStudentsLoading(false)
+        }
+      }
+    }
+
+    loadPaymentStudents()
+
+    return () => {
+      isMounted = false
+    }
+  }, [
+    session?.user?.id,
+    dataLoading,
+    activePage,
+    paymentStudentsReloadKey
+  ])
+
+  const retryPaymentStudentsLoad = () => {
+    setPaymentStudentsError('')
+
+    const userId = session?.user?.id || ''
+
+    if (userId) {
+      queryClient.invalidateQueries({
+        queryKey: [
+          'payment-students',
+          userId
+        ]
+      })
+    }
+
+    setPaymentStudentsReloadKey(
+      (current) => current + 1
+    )
+  }
+
+  const setPaymentStudentCollections = (
+    nextValue
+  ) => {
+    setPaymentStudents((current) => {
+      const nextStudents =
+        typeof nextValue === 'function'
+          ? nextValue(current)
+          : nextValue
+
+      const userId =
+        session?.user?.id || ''
+
+      if (userId) {
+        queryClient.setQueryData(
+          [
+            'payment-students',
+            userId
+          ],
+          nextStudents
+        )
+      }
+
+      return nextStudents
+    })
+  }
 
   useEffect(() => {
     const retryWhenOnline = () => {
@@ -533,7 +1081,7 @@ function App() {
       isMounted = false
     }
   }, [
-    session,
+    session?.user?.id,
     activePage,
     lessonOccurrencesLoaded,
     lessonOccurrencesReloadKey
@@ -661,7 +1209,27 @@ function App() {
           }
 
           setSession(
-            currentSession
+            (previousSession) => {
+              const previousUserId =
+                previousSession?.user?.id || ''
+
+              const nextUserId =
+                currentSession?.user?.id || ''
+
+              /*
+               * TOKEN_REFRESHED / tekrar eden SIGNED_IN olaylarında
+               * kullanıcı aynıysa React state'ini gereksiz değiştirme.
+               * Supabase client güncel token'ı kendi içinde yönetir.
+               */
+              if (
+                previousUserId &&
+                previousUserId === nextUserId
+              ) {
+                return previousSession
+              }
+
+              return currentSession
+            }
           )
           setAuthError('')
           setAuthLoading(false)
@@ -1096,6 +1664,7 @@ function App() {
       }
 
       setLoginLoading(true)
+      setDataLoading(true)
 
       try {
         const { error } =
@@ -1312,7 +1881,7 @@ function App() {
     return (
       <div className="app-loading-screen">
         <LoadingState
-          text="Branşlar, paketler, öğretmenler, öğrenciler, ders programı ve öğretmen ödeme kayıtları yükleniyor..."
+          text="Panel verileri yükleniyor..."
         />
       </div>
     )
@@ -1365,17 +1934,56 @@ function App() {
       />
 
       <main className="dashboard">
+        {needsFullStudentData &&
+        !studentsLoaded ? (
+          studentsError ? (
+            <ErrorState
+              title="Öğrenci verileri yüklenemedi"
+              message={studentsError}
+              onRetry={
+                retryFullStudentsLoad
+              }
+            />
+          ) : (
+            <LoadingState
+              text={
+                studentsLoading
+                  ? 'Öğrenci detayları yükleniyor...'
+                  : 'Öğrenci detayları hazırlanıyor...'
+              }
+            />
+          )
+        ) : needsLessonPlanData &&
+          !lessonPlansLoaded ? (
+          lessonPlansError ? (
+            <ErrorState
+              title="Ders planları yüklenemedi"
+              message={lessonPlansError}
+              onRetry={
+                retryLessonPlansLoad
+              }
+            />
+          ) : (
+            <LoadingState
+              text={
+                lessonPlansLoading
+                  ? 'Ders planları yükleniyor...'
+                  : 'Ders planları hazırlanıyor...'
+              }
+            />
+          )
+        ) : (
+          <>
         {activePage ===
           'dashboard' && (
           <Dashboard
             students={
-              students
+              studentsLoaded
+                ? students
+                : dashboardStudents
             }
             teachers={
               teachers
-            }
-            lessonPlans={
-              lessonPlans
             }
             onNavigate={
               handleMenuClick
@@ -1387,10 +1995,12 @@ function App() {
           'students' && (
           <Students
             students={
-              students
+              studentsLoaded
+                ? students
+                : dashboardStudents
             }
             setStudents={
-              setStudents
+              setStudentCollections
             }
             lessonPlans={
               lessonPlans
@@ -1451,9 +2061,6 @@ function App() {
             students={
               students
             }
-            lessonPlans={
-              lessonPlans
-            }
             unsavedChanges={createUnsavedPageApi(
               'teachers',
               'Öğretmen işlemleri'
@@ -1463,35 +2070,69 @@ function App() {
 
         {activePage ===
           'schedule' && (
-          <Schedule
-            lessonPlans={
-              lessonPlans
-            }
-            setLessonPlans={
-              setLessonPlans
-            }
-            students={
-              students
-            }
-            teachers={
-              teachers
-            }
-            packages={
-              packages
-            }
-            unsavedChanges={createUnsavedPageApi(
-              'schedule',
-              'Ders programı işlemleri'
-            )}
-          />
+          scheduleStudentsLoading &&
+          !scheduleStudentsLoaded ? (
+            <LoadingState
+              text="Ders programı öğrenci listesi yükleniyor..."
+            />
+          ) : scheduleStudentsError &&
+            !scheduleStudentsLoaded ? (
+            <ErrorState
+              title="Ders programı öğrenci listesi yüklenemedi"
+              message={
+                scheduleStudentsError
+              }
+              onRetry={
+                retryScheduleStudentsLoad
+              }
+            />
+          ) : (
+            <Schedule
+              lessonPlans={
+                lessonPlans
+              }
+              setLessonPlans={
+                setLessonPlans
+              }
+              students={
+                scheduleStudents
+              }
+              teachers={
+                teachers
+              }
+              packages={
+                packages
+              }
+              unsavedChanges={createUnsavedPageApi(
+                'schedule',
+                'Ders programı işlemleri'
+              )}
+            />
+          )
         )}
 
         {activePage ===
           'lesson-status' && (
-          lessonOccurrencesLoading &&
-          !lessonOccurrencesLoaded ? (
+          scheduleStudentsLoading &&
+          !scheduleStudentsLoaded ? (
             <LoadingState
-              text="Ders durum kayıtları yükleniyor..."
+              text="Ders durumu öğrenci listesi yükleniyor..."
+            />
+          ) : scheduleStudentsError &&
+            !scheduleStudentsLoaded ? (
+            <ErrorState
+              title="Ders durumu öğrenci listesi yüklenemedi"
+              message={
+                scheduleStudentsError
+              }
+              onRetry={
+                retryScheduleStudentsLoad
+              }
+            />
+          ) : lessonOccurrencesLoading &&
+            !lessonOccurrencesLoaded ? (
+            <LoadingState
+              text="Bu haftanın ders durumları yükleniyor..."
             />
           ) : lessonOccurrencesError &&
             !lessonOccurrencesLoaded ? (
@@ -1523,7 +2164,7 @@ function App() {
                 teachers
               }
               students={
-                students
+                scheduleStudents
               }
               packages={
                 packages
@@ -1545,12 +2186,6 @@ function App() {
             teachers={
               teachers
             }
-            students={
-              students
-            }
-            packages={
-              packages
-            }
             unsavedChanges={createUnsavedPageApi(
               'lesson-groups',
               'Ders grubu işlemleri'
@@ -1560,43 +2195,44 @@ function App() {
 
         {activePage ===
           'payments' && (
-          <Payments
-            students={
-              students
-            }
-            setStudents={
-              setStudents
-            }
-            unsavedChanges={createUnsavedPageApi(
-              'payments',
-              'Tahsilat işlemleri'
-            )}
-          />
+          paymentStudentsLoading &&
+          paymentStudents.length === 0 ? (
+            <LoadingState message="Tahsilat öğrenci bilgileri yükleniyor..." />
+          ) : paymentStudentsError &&
+            paymentStudents.length === 0 ? (
+            <ErrorState
+              title="Tahsilat öğrenci bilgileri yüklenemedi"
+              message={
+                paymentStudentsError
+              }
+              onRetry={
+                retryPaymentStudentsLoad
+              }
+            />
+          ) : (
+            <Payments
+              students={
+                paymentStudents
+              }
+              setStudents={
+                setPaymentStudentCollections
+              }
+              unsavedChanges={createUnsavedPageApi(
+                'payments',
+                'Tahsilat işlemleri'
+              )}
+            />
+          )
         )}
 
         {activePage ===
           'finance' && (
           <Finance
-            students={
-              students
-            }
             teachers={
               teachers
             }
-            packages={
-              packages
-            }
-            lessonPlans={
-              lessonPlans
-            }
-            otherIncomes={
-              otherIncomes
-            }
             setOtherIncomes={
               setOtherIncomes
-            }
-            expenses={
-              expenses
             }
             setExpenses={
               setExpenses
@@ -1618,6 +2254,8 @@ function App() {
         isAdmin && (
         <UserManagement />
       )}
+          </>
+        )}
 
       </main>
 

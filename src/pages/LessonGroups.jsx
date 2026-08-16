@@ -3,13 +3,19 @@ import {
   useMemo,
   useState
 } from 'react'
+import {
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query'
 
 import {
   addStudentToLessonGroup,
   createLessonGroup,
   getLessonGroups,
+  getLessonGroupStudentPackages,
   getLessonGroupStudents,
   removeStudentFromLessonGroup,
+  searchLessonGroupStudents,
   setLessonGroupActive
 } from '../services/groupService'
 
@@ -24,10 +30,9 @@ const normalizeText = (value) =>
 function LessonGroups({
   specialties = [],
   teachers = [],
-  students = [],
-  packages = [],
   unsavedChanges
 }) {
+  const queryClient = useQueryClient()
   const emptyForm = {
     name: '',
     specialtyId: '',
@@ -40,17 +45,8 @@ function LessonGroups({
   const [form, setForm] =
     useState(emptyForm)
 
-  const [groups, setGroups] =
-    useState([])
-
-  const [loading, setLoading] =
-    useState(true)
-
   const [saving, setSaving] =
     useState(false)
-
-  const [error, setError] =
-    useState('')
 
   const [
     selectedGroupId,
@@ -58,18 +54,38 @@ function LessonGroups({
   ] = useState('')
 
   const [
-    groupStudents,
-    setGroupStudents
+    studentSearch,
+    setStudentSearch
+  ] = useState('')
+
+  const [
+    studentResults,
+    setStudentResults
   ] = useState([])
 
   const [
-    groupStudentsLoading,
-    setGroupStudentsLoading
+    studentSearchLoading,
+    setStudentSearchLoading
   ] = useState(false)
 
   const [
-    studentSearch,
-    setStudentSearch
+    studentSearchError,
+    setStudentSearchError
+  ] = useState('')
+
+  const [
+    selectedStudentPackages,
+    setSelectedStudentPackages
+  ] = useState([])
+
+  const [
+    studentPackagesLoading,
+    setStudentPackagesLoading
+  ] = useState(false)
+
+  const [
+    studentPackagesError,
+    setStudentPackagesError
   ] = useState('')
 
   const [
@@ -92,95 +108,70 @@ function LessonGroups({
     setRemovingMembershipId
   ] = useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const loadGroups = async () => {
-      setLoading(true)
-      setError('')
-
-      try {
-        const result =
-          await getLessonGroups({
-            includeInactive: true
-          })
-
-        if (isMounted) {
-          setGroups(result)
-        }
-      } catch (loadError) {
-        console.error(
-          'Ders grupları alınamadı:',
-          loadError
-        )
-
-        if (isMounted) {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : 'Ders grupları alınamadı.'
-          )
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false)
-        }
+  const lessonGroupsQuery = useQuery({
+    queryKey: [
+      'lesson-groups',
+      'list',
+      {
+        includeInactive: true
       }
-    }
+    ],
+    queryFn: () =>
+      getLessonGroups({
+        includeInactive: true
+      })
+  })
 
-    loadGroups()
+  const groups =
+    lessonGroupsQuery.data ?? []
 
-    return () => {
-      isMounted = false
-    }
-  }, [])
+  const loading =
+    lessonGroupsQuery.isPending &&
+    !lessonGroupsQuery.data
 
-  useEffect(() => {
-    if (!selectedGroupId) {
-      setGroupStudents([])
-      return undefined
-    }
-
-    let isMounted = true
-
-    const loadGroupStudents = async () => {
-      setGroupStudentsLoading(true)
-
-      try {
-        const result =
-          await getLessonGroupStudents(
-            selectedGroupId
-          )
-
-        if (isMounted) {
-          setGroupStudents(result)
-        }
-      } catch (loadError) {
-        console.error(
-          'Grup öğrencileri alınamadı:',
-          loadError
+  const error =
+    !lessonGroupsQuery.data &&
+    lessonGroupsQuery.error
+      ? (
+          lessonGroupsQuery.error instanceof Error
+            ? lessonGroupsQuery.error.message
+            : 'Ders grupları alınamadı.'
         )
+      : ''
 
-        if (isMounted) {
-          alert(
-            loadError instanceof Error
-              ? loadError.message
-              : 'Grup öğrencileri alınamadı.'
-          )
-        }
-      } finally {
-        if (isMounted) {
-          setGroupStudentsLoading(false)
-        }
-      }
-    }
+  const groupStudentsQuery = useQuery({
+    queryKey: [
+      'lesson-groups',
+      'students',
+      String(selectedGroupId || '')
+    ],
+    queryFn: () =>
+      getLessonGroupStudents(
+        selectedGroupId
+      ),
+    enabled: Boolean(selectedGroupId)
+  })
 
-    loadGroupStudents()
+  const groupStudents =
+    selectedGroupId
+      ? (groupStudentsQuery.data ?? [])
+      : []
 
-    return () => {
-      isMounted = false
-    }
-  }, [selectedGroupId])
+  const groupStudentsLoading =
+    Boolean(selectedGroupId) &&
+    groupStudentsQuery.isPending &&
+    !groupStudentsQuery.data
+
+  const groupStudentsError =
+    selectedGroupId &&
+    !groupStudentsQuery.data &&
+    groupStudentsQuery.error
+      ? (
+          groupStudentsQuery.error instanceof Error
+            ? groupStudentsQuery.error.message
+            : 'Grup öğrencileri alınamadı.'
+        )
+      : ''
 
   const selectedGroup =
     groups.find(
@@ -188,84 +179,6 @@ function LessonGroups({
         String(group.id) ===
         String(selectedGroupId)
     ) || null
-
-  const selectedStudent =
-    students.find(
-      (student) =>
-        String(student.id) ===
-        String(selectedStudentId)
-    ) || null
-
-  const getStudentPackages = (student) => {
-    if (!student) {
-      return []
-    }
-
-    const enrolledPackages =
-      Array.isArray(
-        student.enrolledPackages
-      )
-        ? student.enrolledPackages
-        : []
-
-    return enrolledPackages
-      .filter(
-        (item) =>
-          item.isActive !== false &&
-          normalizeText(item.status) !==
-            'sonlandırıldı'
-      )
-      .map((item) => {
-        const packageId =
-          item.packageId ||
-          item.id ||
-          ''
-
-        const packageDetail =
-          packages.find(
-            (packageItem) =>
-              String(packageItem.id) ===
-              String(packageId)
-          )
-
-        return {
-          studentPackageId:
-            item.studentPackageId ||
-            item.enrollmentId ||
-            item.assignmentId ||
-            '',
-
-          packageId,
-
-          packageName:
-            item.packageName ||
-            packageDetail?.name ||
-            'Tanımsız Paket',
-
-          specialtyName:
-            item.instrument ||
-            packageDetail?.instrument ||
-            packageDetail?.specialtyName ||
-            ''
-        }
-      })
-      .filter(
-        (item) =>
-          item.studentPackageId
-      )
-  }
-
-  const selectedStudentPackages =
-    useMemo(
-      () =>
-        getStudentPackages(
-          selectedStudent
-        ),
-      [
-        selectedStudent,
-        packages
-      ]
-    )
 
   const compatiblePackages =
     selectedGroup
@@ -281,43 +194,150 @@ function LessonGroups({
       : []
 
   const existingStudentIds =
-    new Set(
-      groupStudents.map(
-        (item) =>
-          String(item.studentId)
-      )
+    useMemo(
+      () =>
+        new Set(
+          groupStudents.map(
+            (item) =>
+              String(item.studentId)
+          )
+        ),
+      [groupStudents]
     )
 
   const normalizedSearch =
     normalizeText(studentSearch)
 
-  const studentResults =
-    normalizedSearch
-      ? students
-          .filter(
-            (student) =>
-              student.isActive !== false &&
-              student.isArchived !== true &&
-              !existingStudentIds.has(
-                String(student.id)
+  useEffect(() => {
+    if (
+      !selectedGroupId ||
+      selectedStudentId ||
+      normalizedSearch.length < 2
+    ) {
+      setStudentResults([])
+      setStudentSearchLoading(false)
+      setStudentSearchError('')
+      return undefined
+    }
+
+    let isMounted = true
+
+    const timeoutId =
+      window.setTimeout(
+        async () => {
+          setStudentSearchLoading(true)
+          setStudentSearchError('')
+
+          try {
+            const result =
+              await searchLessonGroupStudents(
+                studentSearch,
+                {
+                  limit: 12
+                }
               )
-          )
-          .filter((student) =>
-            normalizeText(
-              [
-                student.fullName ||
-                  student.name,
-                student.tcNo,
-                student.phone
-              ]
-                .filter(Boolean)
-                .join(' ')
-            ).includes(
-              normalizedSearch
+
+            if (!isMounted) {
+              return
+            }
+
+            setStudentResults(
+              result
+                .filter(
+                  (student) =>
+                    !existingStudentIds.has(
+                      String(student.id)
+                    )
+                )
+                .slice(0, 8)
             )
+          } catch (searchError) {
+            console.error(
+              'Öğrenci araması yapılamadı:',
+              searchError
+            )
+
+            if (isMounted) {
+              setStudentResults([])
+              setStudentSearchError(
+                searchError instanceof Error
+                  ? searchError.message
+                  : 'Öğrenci araması yapılamadı.'
+              )
+            }
+          } finally {
+            if (isMounted) {
+              setStudentSearchLoading(false)
+            }
+          }
+        },
+        250
+      )
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [
+    selectedGroupId,
+    selectedStudentId,
+    normalizedSearch,
+    studentSearch,
+    existingStudentIds
+  ])
+
+  useEffect(() => {
+    if (!selectedStudentId) {
+      setSelectedStudentPackages([])
+      setStudentPackagesLoading(false)
+      setStudentPackagesError('')
+      return undefined
+    }
+
+    let isMounted = true
+
+    const loadStudentPackages = async () => {
+      setStudentPackagesLoading(true)
+      setStudentPackagesError('')
+
+      try {
+        const result =
+          await getLessonGroupStudentPackages(
+            selectedStudentId
           )
-          .slice(0, 8)
-      : []
+
+        if (isMounted) {
+          setSelectedStudentPackages(
+            result
+          )
+        }
+      } catch (packageError) {
+        console.error(
+          'Öğrenci paketleri alınamadı:',
+          packageError
+        )
+
+        if (isMounted) {
+          setSelectedStudentPackages([])
+          setStudentPackagesError(
+            packageError instanceof Error
+              ? packageError.message
+              : 'Öğrenci paketleri alınamadı.'
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setStudentPackagesLoading(false)
+        }
+      }
+    }
+
+    loadStudentPackages()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedStudentId])
 
   const handleChange = (event) => {
     const {
@@ -356,15 +376,24 @@ function LessonGroups({
       const savedGroup =
         await createLessonGroup(form)
 
-      setGroups((current) => [
-        ...current,
-        savedGroup
-      ].sort((first, second) =>
-        first.name.localeCompare(
-          second.name,
-          'tr'
+      queryClient.setQueryData(
+        [
+          'lesson-groups',
+          'list',
+          {
+            includeInactive: true
+          }
+        ],
+        (current = []) => [
+          ...current,
+          savedGroup
+        ].sort((first, second) =>
+          first.name.localeCompare(
+            second.name,
+            'tr'
+          )
         )
-      ))
+      )
 
       resetForm()
     } catch (saveError) {
@@ -393,12 +422,20 @@ function LessonGroups({
           !group.isActive
         )
 
-      setGroups((current) =>
-        current.map((item) =>
-          item.id === group.id
-            ? updatedGroup
-            : item
-        )
+      queryClient.setQueryData(
+        [
+          'lesson-groups',
+          'list',
+          {
+            includeInactive: true
+          }
+        ],
+        (current = []) =>
+          current.map((item) =>
+            item.id === group.id
+              ? updatedGroup
+              : item
+          )
       )
     } catch (statusError) {
       console.error(
@@ -419,7 +456,11 @@ function LessonGroups({
   ) => {
     setSelectedGroupId(group.id)
     setStudentSearch('')
+    setStudentResults([])
+    setStudentSearchError('')
     setSelectedStudentId('')
+    setSelectedStudentPackages([])
+    setStudentPackagesError('')
     setSelectedStudentPackageId('')
   }
 
@@ -432,6 +473,10 @@ function LessonGroups({
       student.name ||
       ''
     )
+    setStudentResults([])
+    setStudentSearchError('')
+    setSelectedStudentPackages([])
+    setStudentPackagesError('')
     setSelectedStudentPackageId('')
   }
 
@@ -475,13 +520,24 @@ function LessonGroups({
             selectedStudentPackageId
         })
 
-      setGroupStudents((current) => [
-        ...current,
-        savedMembership
-      ])
+      queryClient.setQueryData(
+        [
+          'lesson-groups',
+          'students',
+          String(selectedGroup.id)
+        ],
+        (current = []) => [
+          ...current,
+          savedMembership
+        ]
+      )
 
       setStudentSearch('')
-      setSelectedStudentId('')
+      setStudentResults([])
+      setStudentSearchError('')
+        setSelectedStudentId('')
+      setSelectedStudentPackages([])
+      setStudentPackagesError('')
       setSelectedStudentPackageId('')
     } catch (addError) {
       console.error(
@@ -520,12 +576,18 @@ function LessonGroups({
         membership.id
       )
 
-      setGroupStudents((current) =>
-        current.filter(
-          (item) =>
-            item.id !==
-            membership.id
-        )
+      queryClient.setQueryData(
+        [
+          'lesson-groups',
+          'students',
+          String(selectedGroupId)
+        ],
+        (current = []) =>
+          current.filter(
+            (item) =>
+              item.id !==
+              membership.id
+          )
       )
     } catch (removeError) {
       console.error(
@@ -948,6 +1010,10 @@ function LessonGroups({
                   <div className="lesson-group-empty">
                     Grup öğrencileri yükleniyor...
                   </div>
+                ) : groupStudentsError ? (
+                  <div className="lesson-group-empty">
+                    {groupStudentsError}
+                  </div>
                 ) : groupStudents.length === 0 ? (
                   <div className="lesson-group-empty compact">
                     Bu gruba henüz öğrenci eklenmedi.
@@ -997,7 +1063,7 @@ function LessonGroups({
                 <div className="lesson-group-detail-section-head">
                   <div>
                     <h3>Öğrenci Ekle</h3>
-                    <p>Ad, TC veya telefon ile öğrenciyi bulun.</p>
+                    <p>Ad veya TC ile öğrenciyi bulun.</p>
                   </div>
                 </div>
 
@@ -1009,15 +1075,28 @@ function LessonGroups({
                       value={studentSearch}
                       onChange={(event) => {
                         setStudentSearch(event.target.value)
+                        setStudentResults([])
+                        setStudentSearchError('')
                         setSelectedStudentId('')
+                        setSelectedStudentPackages([])
+                        setStudentPackagesError('')
                         setSelectedStudentPackageId('')
                       }}
-                      placeholder="Ad, TC veya telefon ile ara"
+                      placeholder="Ad veya TC ile ara"
                     />
 
-                    {normalizedSearch && !selectedStudentId && (
+                    {normalizedSearch.length >= 2 &&
+                      !selectedStudentId && (
                       <div className="lesson-group-search-results">
-                        {studentResults.length > 0 ? (
+                        {studentSearchLoading ? (
+                          <div className="lesson-group-no-result">
+                            Öğrenciler aranıyor...
+                          </div>
+                        ) : studentSearchError ? (
+                          <div className="lesson-group-no-result">
+                            {studentSearchError}
+                          </div>
+                        ) : studentResults.length > 0 ? (
                           studentResults.map((student) => (
                             <button
                               type="button"
@@ -1030,7 +1109,7 @@ function LessonGroups({
                               <span>
                                 {student.tcNo
                                   ? `TC: ${student.tcNo}`
-                                  : student.phone || 'İletişim bilgisi yok'}
+                                  : 'TC bilgisi yok'}
                               </span>
                             </button>
                           ))
@@ -1051,14 +1130,19 @@ function LessonGroups({
                       onChange={(event) =>
                         setSelectedStudentPackageId(event.target.value)
                       }
-                      disabled={!selectedStudentId}
+                      disabled={
+                        !selectedStudentId ||
+                        studentPackagesLoading
+                      }
                     >
                       <option value="">
                         {!selectedStudentId
                           ? 'Önce öğrenci seçiniz'
-                          : compatiblePackages.length > 0
-                            ? 'Paket seçiniz'
-                            : 'Uygun aktif paket bulunamadı'}
+                          : studentPackagesLoading
+                            ? 'Paketler yükleniyor...'
+                            : compatiblePackages.length > 0
+                              ? 'Paket seçiniz'
+                              : 'Uygun aktif paket bulunamadı'}
                       </option>
 
                       {compatiblePackages.map((item) => (
@@ -1082,7 +1166,18 @@ function LessonGroups({
                   </button>
                 </div>
 
-                {selectedStudentId && compatiblePackages.length === 0 && (
+                {selectedStudentId &&
+                  !studentPackagesLoading &&
+                  studentPackagesError && (
+                  <div className="lesson-group-warning">
+                    {studentPackagesError}
+                  </div>
+                )}
+
+                {selectedStudentId &&
+                  !studentPackagesLoading &&
+                  !studentPackagesError &&
+                  compatiblePackages.length === 0 && (
                   <div className="lesson-group-warning">
                     Seçilen öğrencinin bu grubun branşına uygun aktif
                     paketi bulunmuyor.

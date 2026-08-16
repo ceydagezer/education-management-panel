@@ -1,5 +1,108 @@
 import { supabase } from '../lib/supabase'
 
+const FINANCE_OVERVIEW_CACHE_MAX_AGE_MS = 30_000
+
+const financeOverviewCache = {
+  incomeSummary: null,
+  expenseSummary: null,
+  teacherSummaries: null,
+  staffPaymentSummary: null,
+  updatedAt: {
+    incomeSummary: 0,
+    expenseSummary: 0,
+    teacherSummaries: 0,
+    staffPaymentSummary: 0
+  }
+}
+
+let financeOverviewPrefetchPromise = null
+
+function setFinanceOverviewCacheEntry(key, value) {
+  financeOverviewCache[key] = value
+  financeOverviewCache.updatedAt[key] = Date.now()
+  return value
+}
+
+function invalidateFinanceOverviewCacheEntry(...keys) {
+  keys.forEach((key) => {
+    financeOverviewCache.updatedAt[key] = 0
+  })
+}
+
+function isFinanceOverviewCacheEntryFresh(
+  key,
+  maxAgeMs = FINANCE_OVERVIEW_CACHE_MAX_AGE_MS
+) {
+  return (
+    financeOverviewCache[key] !== null &&
+    Date.now() - Number(financeOverviewCache.updatedAt[key] || 0) <= maxAgeMs
+  )
+}
+
+export function invalidateFinanceIncomeSummaryCache() {
+  invalidateFinanceOverviewCacheEntry('incomeSummary')
+}
+
+export async function refreshFinanceIncomeSummaryCache() {
+  invalidateFinanceIncomeSummaryCache()
+  return getFinanceIncomeSummary()
+}
+
+export function getFinanceOverviewCache() {
+  return {
+    incomeSummary:
+      financeOverviewCache.incomeSummary,
+    expenseSummary:
+      financeOverviewCache.expenseSummary,
+    teacherSummaries:
+      financeOverviewCache.teacherSummaries,
+    staffPaymentSummary:
+      financeOverviewCache.staffPaymentSummary,
+    updatedAt: {
+      ...financeOverviewCache.updatedAt
+    }
+  }
+}
+
+export async function prefetchFinanceOverview({
+  maxAgeMs = FINANCE_OVERVIEW_CACHE_MAX_AGE_MS
+} = {}) {
+  if (financeOverviewPrefetchPromise) {
+    return financeOverviewPrefetchPromise
+  }
+
+  const tasks = []
+
+  if (!isFinanceOverviewCacheEntryFresh('incomeSummary', maxAgeMs)) {
+    tasks.push(getFinanceIncomeSummary())
+  }
+
+  if (!isFinanceOverviewCacheEntryFresh('expenseSummary', maxAgeMs)) {
+    tasks.push(getFinanceExpenseSummary())
+  }
+
+  if (!isFinanceOverviewCacheEntryFresh('teacherSummaries', maxAgeMs)) {
+    tasks.push(getTeacherEarningsSummary())
+  }
+
+  if (!isFinanceOverviewCacheEntryFresh('staffPaymentSummary', maxAgeMs)) {
+    tasks.push(getStaffPaymentSummary())
+  }
+
+  if (tasks.length === 0) {
+    return getFinanceOverviewCache()
+  }
+
+  financeOverviewPrefetchPromise = Promise
+    .allSettled(tasks)
+    .then(() => getFinanceOverviewCache())
+    .finally(() => {
+      financeOverviewPrefetchPromise = null
+    })
+
+  return financeOverviewPrefetchPromise
+}
+
 const otherIncomeSelect = `
   id,
   title,
@@ -443,12 +546,17 @@ export async function getFinanceIncomeSummary() {
       ))
   }
 
-  return {
+  const result = {
     studentIncome: Number(data?.student_income || 0),
     otherIncome: Number(data?.other_income || 0),
     totalIncome: Number(data?.total_income || 0),
     recordCount: Number(data?.record_count || 0)
   }
+
+  return setFinanceOverviewCacheEntry(
+    'incomeSummary',
+    result
+  )
 }
 
 export async function getOtherIncomes() {
@@ -549,6 +657,7 @@ export async function createOtherIncome(form) {
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('incomeSummary')
   return mapOtherIncomeFromDb(data)
 }
 
@@ -585,6 +694,7 @@ export async function cancelOtherIncome(
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('incomeSummary')
   return mapOtherIncomeFromDb(data)
 }
 
@@ -755,7 +865,7 @@ export async function getFinanceExpenseSummary() {
     )
   }
 
-  return {
+  const result = {
     totalExpense: Number(
       data?.total_expense || 0
     ),
@@ -763,6 +873,11 @@ export async function getFinanceExpenseSummary() {
       data?.record_count || 0
     )
   }
+
+  return setFinanceOverviewCacheEntry(
+    'expenseSummary',
+    result
+  )
 }
 
 export async function getExpenses() {
@@ -863,6 +978,7 @@ export async function createExpense(form) {
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('expenseSummary')
   return mapExpenseFromDb(data)
 }
 
@@ -899,6 +1015,7 @@ export async function cancelExpense(
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('expenseSummary')
   return mapExpenseFromDb(data)
 }
 
@@ -928,8 +1045,13 @@ export async function getTeacherEarningsSummary() {
     )
   }
 
-  return (data || []).map(
+  const result = (data || []).map(
     mapTeacherEarningSummaryFromDb
+  )
+
+  return setFinanceOverviewCacheEntry(
+    'teacherSummaries',
+    result
   )
 }
 
@@ -1198,6 +1320,7 @@ export async function createTeacherPayment(
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('teacherSummaries')
   return mapTeacherPaymentFromDb(data)
 }
 
@@ -1234,6 +1357,7 @@ export async function cancelTeacherPayment(
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('teacherSummaries')
   return mapTeacherPaymentFromDb(data)
 }
 
@@ -1441,7 +1565,7 @@ export async function getStaffPaymentSummary() {
     )
   }
 
-  return {
+  const result = {
     totalPaid: (data || []).reduce(
       (total, row) =>
         total +
@@ -1451,6 +1575,11 @@ export async function getStaffPaymentSummary() {
     recordCount:
       Number(count || 0)
   }
+
+  return setFinanceOverviewCacheEntry(
+    'staffPaymentSummary',
+    result
+  )
 }
 
 export async function createStaffPayment(
@@ -1551,6 +1680,7 @@ export async function createStaffPayment(
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('staffPaymentSummary')
   return mapStaffPaymentFromDb(data)
 }
 
@@ -1590,5 +1720,6 @@ export async function cancelStaffPayment(
     )
   }
 
+  invalidateFinanceOverviewCacheEntry('staffPaymentSummary')
   return mapStaffPaymentFromDb(data)
 }

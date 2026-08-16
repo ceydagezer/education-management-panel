@@ -5,6 +5,11 @@ import {
 } from 'react'
 
 import {
+  keepPreviousData,
+  useQuery
+} from '@tanstack/react-query'
+
+import {
   getAllFinanceIncomeExpenseReportRows,
   getAllStaffPaymentsReportRows,
   getAllStudentPaymentReportRows,
@@ -30,6 +35,166 @@ import {
 } from '../utils/dateHelpers'
 
 import '../styles/reports.css'
+
+
+const REPORT_CACHE_GC_TIME =
+  15 * 60 * 1000
+
+function useDebouncedReportFilters(
+  filters,
+  delay = 0
+) {
+  const serializedFilters =
+    JSON.stringify(filters)
+
+  const [
+    debouncedSerializedFilters,
+    setDebouncedSerializedFilters
+  ] = useState(serializedFilters)
+
+  useEffect(() => {
+    if (delay <= 0) {
+      setDebouncedSerializedFilters(
+        serializedFilters
+      )
+
+      return undefined
+    }
+
+    const timeoutId =
+      window.setTimeout(
+        () => {
+          setDebouncedSerializedFilters(
+            serializedFilters
+          )
+        },
+        delay
+      )
+
+    return () => {
+      window.clearTimeout(
+        timeoutId
+      )
+    }
+  }, [
+    serializedFilters,
+    delay
+  ])
+
+  return JSON.parse(
+    debouncedSerializedFilters
+  )
+}
+
+function usePagedReportQuery({
+  reportKey,
+  page,
+  pageSize,
+  filters,
+  sortOption,
+  queryFn,
+  setPage,
+  errorMessage,
+  debounce = false
+}) {
+  const debouncedFilters =
+    useDebouncedReportFilters(
+      filters,
+      debounce
+        ? 350
+        : 0
+    )
+
+  const query = useQuery({
+    queryKey: [
+      'reports',
+      reportKey,
+      'page',
+      page,
+      pageSize,
+      debouncedFilters,
+      sortOption
+    ],
+    queryFn: () =>
+      queryFn({
+        page,
+        pageSize,
+        ...debouncedFilters,
+        sortOption
+      }),
+    placeholderData:
+      keepPreviousData,
+
+    // Raporlar başka modüllerde yapılan kayıt değişikliklerinden etkilenir.
+    // Cache'deki son gerçek veriyi anında gösterip her geri dönüşte
+    // arka planda sessizce doğruluyoruz.
+    staleTime: 0,
+    gcTime:
+      REPORT_CACHE_GC_TIME,
+    refetchOnMount: 'always'
+  })
+
+  const result =
+    query.data
+
+  const total =
+    Number(
+      result?.total || 0
+    )
+
+  useEffect(() => {
+    if (!result) {
+      return
+    }
+
+    const totalPages =
+      Math.max(
+        1,
+        Math.ceil(
+          total /
+            pageSize
+        )
+      )
+
+    if (
+      page >
+      totalPages
+    ) {
+      setPage(
+        totalPages
+      )
+    }
+  }, [
+    result,
+    total,
+    page,
+    pageSize,
+    setPage
+  ])
+
+  const hasVisibleData =
+    Boolean(result)
+
+  return {
+    rows:
+      result?.data || [],
+    total,
+    loading:
+      query.isPending &&
+      !hasVisibleData,
+    refreshing:
+      query.isFetching &&
+      hasVisibleData,
+    error:
+      !hasVisibleData &&
+      query.error
+        ? query.error instanceof Error
+          ? query.error.message
+          : errorMessage
+        : '',
+    debouncedFilters
+  }
+}
 
 const reportGroups = [
   {
@@ -464,12 +629,6 @@ function ReportPagination({
 }
 
 function StudentTrackingReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
   const [page, setPage] =
     useState(1)
 
@@ -491,95 +650,34 @@ function StudentTrackingReport() {
     setSortOption
   ] = useState('nameAsc')
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getStudentTrackingReportPage({
-                page,
-                pageSize,
-                searchText,
-                studentStatus,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (
-              page >
-              totalPages
-            ) {
-              setPage(totalPages)
-              return
-            }
-
-            setRows(result.data)
-            setTotal(result.total)
-          } catch (loadError) {
-            console.error(
-              'Öğrenci takip raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Öğrenci takip raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
-        searchText.trim()
-          ? 350
-          : 0
-      )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
+  const {
+    rows,
+    total,
+    loading,
+    error
+  } = usePagedReportQuery({
+    reportKey:
+      'student-tracking',
     page,
     pageSize,
-    searchText,
-    studentStatus,
-    sortOption
-  ])
+    filters: {
+      searchText,
+      studentStatus
+    },
+    sortOption,
+    queryFn:
+      getStudentTrackingReportPage,
+    setPage,
+    errorMessage:
+      'Öğrenci takip raporu yüklenemedi.',
+    debounce:
+      Boolean(
+        searchText.trim()
+      )
+  })
 
   const exportFilters = {
     searchText,
@@ -1162,12 +1260,6 @@ function StudentTrackingReport() {
 }
 
 function StudentPaymentReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
   const [page, setPage] =
     useState(1)
 
@@ -1194,97 +1286,35 @@ function StudentPaymentReport() {
     setSortOption
   ] = useState('nameAsc')
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getStudentPaymentReportPage({
-                page,
-                pageSize,
-                searchText,
-                studentStatus,
-                paymentStatus,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (
-              page >
-              totalPages
-            ) {
-              setPage(totalPages)
-              return
-            }
-
-            setRows(result.data)
-            setTotal(result.total)
-          } catch (loadError) {
-            console.error(
-              'Öğrenci ödeme raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Öğrenci ödeme raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
-        searchText.trim()
-          ? 350
-          : 0
-      )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
+  const {
+    rows,
+    total,
+    loading,
+    error
+  } = usePagedReportQuery({
+    reportKey:
+      'student-payments',
     page,
     pageSize,
-    searchText,
-    studentStatus,
-    paymentStatus,
-    sortOption
-  ])
+    filters: {
+      searchText,
+      studentStatus,
+      paymentStatus
+    },
+    sortOption,
+    queryFn:
+      getStudentPaymentReportPage,
+    setPage,
+    errorMessage:
+      'Öğrenci ödeme raporu yüklenemedi.',
+    debounce:
+      Boolean(
+        searchText.trim()
+      )
+  })
 
   const exportFilters = {
     searchText,
@@ -2041,12 +2071,6 @@ function StudentPaymentReport() {
 }
 
 function TeacherTrackingReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
   const [page, setPage] =
     useState(1)
 
@@ -2098,98 +2122,38 @@ function TeacherTrackingReport() {
     setDetailErrors
   ] = useState({})
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getTeacherTrackingReportPage({
-                page,
-                pageSize,
-                searchText,
-                teacherStatus,
-                specialtyText,
-                packageText,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (page > totalPages) {
-              setPage(totalPages)
-              return
-            }
-
-            setRows(result.data)
-            setTotal(result.total)
-          } catch (loadError) {
-            console.error(
-              'Öğretmen takip raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Öğretmen takip raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
+  const {
+    rows,
+    total,
+    loading,
+    error
+  } = usePagedReportQuery({
+    reportKey:
+      'teacher-tracking',
+    page,
+    pageSize,
+    filters: {
+      searchText,
+      teacherStatus,
+      specialtyText,
+      packageText
+    },
+    sortOption,
+    queryFn:
+      getTeacherTrackingReportPage,
+    setPage,
+    errorMessage:
+      'Öğretmen takip raporu yüklenemedi.',
+    debounce:
+      Boolean(
         searchText.trim() ||
         specialtyText.trim() ||
         packageText.trim()
-          ? 350
-          : 0
       )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
-    page,
-    pageSize,
-    searchText,
-    teacherStatus,
-    specialtyText,
-    packageText,
-    sortOption
-  ])
+  })
 
   useEffect(() => {
     setExpandedTeacherId('')
@@ -3566,12 +3530,6 @@ function TeacherTrackingReport() {
 
 
 function TeacherEarningsReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
   const [page, setPage] =
     useState(1)
 
@@ -3623,97 +3581,37 @@ function TeacherEarningsReport() {
     setDetailErrors
   ] = useState({})
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getTeacherEarningsReportPage({
-                page,
-                pageSize,
-                searchText,
-                teacherStatus,
-                branchText,
-                earningStatus,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (page > totalPages) {
-              setPage(totalPages)
-              return
-            }
-
-            setRows(result.data)
-            setTotal(result.total)
-          } catch (loadError) {
-            console.error(
-              'Öğretmen hakediş raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Öğretmen hakediş raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
-        searchText.trim() ||
-        branchText.trim()
-          ? 350
-          : 0
-      )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
+  const {
+    rows,
+    total,
+    loading,
+    error
+  } = usePagedReportQuery({
+    reportKey:
+      'teacher-earnings',
     page,
     pageSize,
-    searchText,
-    teacherStatus,
-    branchText,
-    earningStatus,
-    sortOption
-  ])
+    filters: {
+      searchText,
+      teacherStatus,
+      branchText,
+      earningStatus
+    },
+    sortOption,
+    queryFn:
+      getTeacherEarningsReportPage,
+    setPage,
+    errorMessage:
+      'Öğretmen hakediş raporu yüklenemedi.',
+    debounce:
+      Boolean(
+        searchText.trim() ||
+        branchText.trim()
+      )
+  })
 
   useEffect(() => {
     setExpandedTeacherId('')
@@ -5237,12 +5135,6 @@ function TeacherEarningsReport() {
 
 
 function TeacherPaymentsReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
   const [page, setPage] =
     useState(1)
 
@@ -5274,96 +5166,36 @@ function TeacherPaymentsReport() {
     setSortOption
   ] = useState('newest')
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getTeacherPaymentsReportPage({
-                page,
-                pageSize,
-                searchText,
-                paymentMethod,
-                startDate,
-                endDate,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (page > totalPages) {
-              setPage(totalPages)
-              return
-            }
-
-            setRows(result.data)
-            setTotal(result.total)
-          } catch (loadError) {
-            console.error(
-              'Öğretmen ödemeleri raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Öğretmen ödemeleri raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
-        searchText.trim()
-          ? 350
-          : 0
-      )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
+  const {
+    rows,
+    total,
+    loading,
+    error
+  } = usePagedReportQuery({
+    reportKey:
+      'teacher-payments',
     page,
     pageSize,
-    searchText,
-    paymentMethod,
-    startDate,
-    endDate,
-    sortOption
-  ])
+    filters: {
+      searchText,
+      paymentMethod,
+      startDate,
+      endDate
+    },
+    sortOption,
+    queryFn:
+      getTeacherPaymentsReportPage,
+    setPage,
+    errorMessage:
+      'Öğretmen ödemeleri raporu yüklenemedi.',
+    debounce:
+      Boolean(
+        searchText.trim()
+      )
+  })
 
   const exportFilters = {
     searchText,
@@ -6207,12 +6039,6 @@ function TeacherPaymentsReport() {
 
 
 function StaffPaymentsReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
   const [page, setPage] =
     useState(1)
 
@@ -6249,103 +6075,37 @@ function StaffPaymentsReport() {
     setSortOption
   ] = useState('newest')
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getStaffPaymentsReportPage({
-                page,
-                pageSize,
-                searchText,
-                paymentType,
-                paymentMethod,
-                startDate,
-                endDate,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (page > totalPages) {
-              setPage(totalPages)
-              return
-            }
-
-            setRows(
-              result.data
-            )
-
-            setTotal(
-              result.total
-            )
-          } catch (loadError) {
-            console.error(
-              'Personel ödemeleri raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Personel ödemeleri raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
-        searchText.trim()
-          ? 350
-          : 0
-      )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
+  const {
+    rows,
+    total,
+    loading,
+    error
+  } = usePagedReportQuery({
+    reportKey:
+      'staff-payments',
     page,
     pageSize,
-    searchText,
-    paymentType,
-    paymentMethod,
-    startDate,
-    endDate,
-    sortOption
-  ])
+    filters: {
+      searchText,
+      paymentType,
+      paymentMethod,
+      startDate,
+      endDate
+    },
+    sortOption,
+    queryFn:
+      getStaffPaymentsReportPage,
+    setPage,
+    errorMessage:
+      'Personel ödemeleri raporu yüklenemedi.',
+    debounce:
+      Boolean(
+        searchText.trim()
+      )
+  })
 
   const exportFilters = {
     searchText,
@@ -7350,20 +7110,6 @@ function StaffPaymentsReport() {
 
 
 function IncomeExpenseReport() {
-  const [rows, setRows] =
-    useState([])
-
-  const [total, setTotal] =
-    useState(0)
-
-  const [summary, setSummary] =
-    useState({
-      totalIncome: 0,
-      totalExpense: 0,
-      netBalance: 0,
-      recordCount: 0
-    })
-
   const [page, setPage] =
     useState(1)
 
@@ -7405,17 +7151,6 @@ function IncomeExpenseReport() {
     setSortOption
   ] = useState('newest')
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [
-    summaryLoading,
-    setSummaryLoading
-  ] = useState(true)
-
-  const [error, setError] =
-    useState('')
-
   const [exporting, setExporting] =
     useState('')
 
@@ -7428,145 +7163,64 @@ function IncomeExpenseReport() {
     endDate
   }
 
-  useEffect(() => {
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setLoading(true)
-          setError('')
-
-          try {
-            const result =
-              await getFinanceIncomeExpenseReportPage({
-                page,
-                pageSize,
-                ...reportFilters,
-                sortOption
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    pageSize
-                )
-              )
-
-            if (
-              page >
-              totalPages
-            ) {
-              setPage(
-                totalPages
-              )
-
-              return
-            }
-
-            setRows(
-              result.data
-            )
-
-            setTotal(
-              result.total
-            )
-          } catch (loadError) {
-            console.error(
-              'Gelir-gider raporu yüklenemedi:',
-              loadError
-            )
-
-            if (isMounted) {
-              setError(
-                loadError instanceof Error
-                  ? loadError.message
-                  : 'Gelir-gider raporu yüklenemedi.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setLoading(false)
-            }
-          }
-        },
-        searchText.trim()
-          ? 350
-          : 0
-      )
-
-    return () => {
-      isMounted = false
-
-      window.clearTimeout(
-        timeoutId
-      )
-    }
-  }, [
+  const {
+    rows,
+    total,
+    loading,
+    error,
+    debouncedFilters:
+      debouncedReportFilters
+  } = usePagedReportQuery({
+    reportKey:
+      'income-expense',
     page,
     pageSize,
-    searchText,
-    direction,
-    sourceType,
-    paymentMethod,
-    startDate,
-    endDate,
-    sortOption
-  ])
+    filters:
+      reportFilters,
+    sortOption,
+    queryFn:
+      getFinanceIncomeExpenseReportPage,
+    setPage,
+    errorMessage:
+      'Gelir-gider raporu yüklenemedi.',
+    debounce:
+      Boolean(
+        searchText.trim()
+      )
+  })
 
-  useEffect(() => {
-    let isMounted = true
+  const summaryQuery =
+    useQuery({
+      queryKey: [
+        'reports',
+        'income-expense',
+        'summary',
+        debouncedReportFilters
+      ],
+      queryFn: () =>
+        getFinanceIncomeExpenseReportSummary(
+          debouncedReportFilters
+        ),
+      placeholderData:
+        keepPreviousData,
+      staleTime: 0,
+      gcTime:
+        REPORT_CACHE_GC_TIME,
+      refetchOnMount:
+        'always'
+    })
 
-    const loadSummary =
-      async () => {
-        setSummaryLoading(
-          true
-        )
-
-        try {
-          const result =
-            await getFinanceIncomeExpenseReportSummary(
-              reportFilters
-            )
-
-          if (isMounted) {
-            setSummary(
-              result
-            )
-          }
-        } catch (summaryError) {
-          console.error(
-            'Gelir-gider özeti yüklenemedi:',
-            summaryError
-          )
-        } finally {
-          if (isMounted) {
-            setSummaryLoading(
-              false
-            )
-          }
-        }
-      }
-
-    loadSummary()
-
-    return () => {
-      isMounted = false
+  const summary =
+    summaryQuery.data || {
+      totalIncome: 0,
+      totalExpense: 0,
+      netBalance: 0,
+      recordCount: 0
     }
-  }, [
-    searchText,
-    direction,
-    sourceType,
-    paymentMethod,
-    startDate,
-    endDate
-  ])
+
+  const summaryLoading =
+    summaryQuery.isPending &&
+    !summaryQuery.data
 
   const clearFilters = () => {
     setSearchText('')

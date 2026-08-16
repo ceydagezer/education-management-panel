@@ -430,6 +430,290 @@ function validatePaymentInput(form) {
 }
 
 
+
+const paymentStudentSelect = `
+  id,
+  tc_no,
+  full_name,
+  status,
+  is_active,
+  is_archived,
+  is_anonymized,
+
+  student_packages (
+    id,
+    student_id,
+    package_id,
+    default_teacher_id,
+    agreed_price,
+    payment_period,
+    payment_day,
+    first_payment_date,
+    next_payment_date,
+    total_lesson_count,
+    status,
+    is_active,
+    created_at,
+
+    package:packages (
+      id,
+      name,
+      duration_minutes,
+      lesson_count,
+      total_price,
+
+      specialty:specialties (
+        id,
+        name
+      )
+    ),
+
+    default_teacher:teachers (
+      id,
+      full_name,
+      status,
+      is_active
+    )
+  )
+`
+
+function normalizePaymentStudentStatus(
+  value
+) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+}
+
+function mapPaymentStudentPackageFromDb(
+  row
+) {
+  const packageRecord =
+    row.package || null
+
+  const teacherRecord =
+    row.default_teacher || null
+
+  const packageStatus =
+    normalizePaymentStudentStatus(
+      row.status
+    )
+
+  const isActive =
+    row.is_active !== false &&
+    packageStatus !==
+      'sonlandırıldı' &&
+    packageStatus !==
+      'pasif'
+
+  const agreedPrice =
+    Number(
+      row.agreed_price || 0
+    )
+
+  const lessonDuration =
+    Number(
+      packageRecord
+        ?.duration_minutes || 0
+    )
+
+  const lessonCount =
+    Number(
+      packageRecord
+        ?.lesson_count || 0
+    )
+
+  return {
+    studentPackageId:
+      row.id || '',
+    enrollmentId:
+      row.id || '',
+    assignmentId:
+      row.id || '',
+
+    studentId:
+      row.student_id || '',
+
+    packageId:
+      row.package_id || '',
+    packageName:
+      packageRecord?.name ||
+      'Tanımsız Paket',
+
+    instrument:
+      packageRecord
+        ?.specialty
+        ?.name || '',
+    branch:
+      packageRecord
+        ?.specialty
+        ?.name || '',
+
+    lessonDuration:
+      lessonDuration
+        ? `${lessonDuration} dk`
+        : '',
+    duration:
+      lessonDuration
+        ? `${lessonDuration} dk`
+        : '',
+
+    lessonCount,
+    totalLessonCount:
+      Number(
+        row.total_lesson_count ??
+        lessonCount
+      ),
+
+    totalPrice:
+      Number(
+        packageRecord
+          ?.total_price || 0
+      ),
+    packagePrice:
+      Number(
+        packageRecord
+          ?.total_price || 0
+      ),
+
+    teacherId:
+      row.default_teacher_id || '',
+    defaultTeacherId:
+      row.default_teacher_id || '',
+    teacher:
+      teacherRecord
+        ?.full_name || '',
+    teacherName:
+      teacherRecord
+        ?.full_name || '',
+    defaultTeacherName:
+      teacherRecord
+        ?.full_name || '',
+
+    agreedPrice,
+    monthlyFee:
+      agreedPrice,
+
+    paymentPeriod:
+      row.payment_period ||
+      'Aylık',
+    paymentDay:
+      row.payment_day || '',
+    firstPaymentDate:
+      row.first_payment_date || '',
+    nextPaymentDate:
+      row.next_payment_date || '',
+
+    status:
+      isActive
+        ? 'Aktif'
+        : 'Sonlandırıldı',
+    isActive,
+
+    createdAt:
+      row.created_at || null
+  }
+}
+
+function mapPaymentStudentFromDb(
+  row
+) {
+  const enrolledPackages =
+    (row.student_packages || [])
+      .map(
+        mapPaymentStudentPackageFromDb
+      )
+      .filter(
+        (item) =>
+          item.isActive !== false
+      )
+      .sort(
+        (first, second) =>
+          String(
+            second.createdAt || ''
+          ).localeCompare(
+            String(
+              first.createdAt || ''
+            )
+          )
+      )
+
+  return {
+    id:
+      row.id,
+
+    tcNo:
+      row.tc_no || '',
+
+    fullName:
+      row.full_name || '',
+
+    status:
+      row.status || '',
+
+    isActive:
+      row.is_active !== false,
+
+    isArchived:
+      row.is_archived === true,
+
+    isAnonymized:
+      row.is_anonymized === true,
+
+    enrolledPackages
+  }
+}
+
+export async function getPaymentStudents() {
+  const {
+    data,
+    error
+  } = await supabase
+    .from('students')
+    .select(
+      paymentStudentSelect
+    )
+    .eq('is_active', true)
+    .order(
+      'full_name',
+      {
+        ascending: true
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      getPaymentErrorMessage(
+        error,
+        'Tahsilat için öğrenci ve paket bilgileri şu anda alınamadı.'
+      )
+    )
+  }
+
+  return (data || [])
+    .filter(
+      (row) => {
+        const normalizedStatus =
+          normalizePaymentStudentStatus(
+            row.status
+          )
+
+        return (
+          row.is_active !== false &&
+          row.is_archived !== true &&
+          row.is_anonymized !== true &&
+          normalizedStatus !==
+            'pasif' &&
+          normalizedStatus !==
+            'arşiv'
+        )
+      }
+    )
+    .map(
+      mapPaymentStudentFromDb
+    )
+}
+
 export async function getDashboardPayments({
   monthsBack = 18
 } = {}) {

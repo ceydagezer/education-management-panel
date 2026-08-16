@@ -17,7 +17,8 @@ import {
   getTeacherEarningsSummary,
   getTeacherEarningLessons,
   getTeacherPaymentsPage,
-  getStaffPaymentSummary
+  getStaffPaymentSummary,
+  getFinanceOverviewCache
 } from '../services/financeService'
 
 import {
@@ -71,6 +72,20 @@ function Finance({
   unsavedChanges
 }) {
   const today = getTodayKey()
+
+  /*
+   * Finans özetleri sayfalar arası geçişte kaybolmasın.
+   * financeService modülündeki RAM cache uygulama oturumu boyunca
+   * son başarılı değerleri tutar. Cache yoksa ilk açılışta skeleton,
+   * cache varsa eski değer anında gösterilip gerektiğinde arkada yenilenir.
+   */
+  const initialOverviewCache =
+    useMemo(
+      () => getFinanceOverviewCache(),
+      []
+    )
+
+  const FINANCE_CACHE_FRESH_MS = 30_000
 
   const financeTabs = [
     'overview',
@@ -130,16 +145,21 @@ function Finance({
   const [incomeReloadKey, setIncomeReloadKey] =
     useState(0)
   const [incomeSummary, setIncomeSummary] =
-    useState({
-      studentIncome: 0,
-      otherIncome: 0,
-      totalIncome: 0,
-      recordCount: 0
-    })
+    useState(
+      () =>
+        initialOverviewCache.incomeSummary || {
+          studentIncome: 0,
+          otherIncome: 0,
+          totalIncome: 0,
+          recordCount: 0
+        }
+    )
   const [
     incomeSummaryLoading,
     setIncomeSummaryLoading
-  ] = useState(true)
+  ] = useState(
+    () => !initialOverviewCache.incomeSummary
+  )
   const [expenseSearch, setExpenseSearch] =
     useState('')
   const [
@@ -183,26 +203,36 @@ function Finance({
   const [
     expenseSummary,
     setExpenseSummary
-  ] = useState({
-    totalExpense: 0,
-    recordCount: 0
-  })
+  ] = useState(
+    () =>
+      initialOverviewCache.expenseSummary || {
+        totalExpense: 0,
+        recordCount: 0
+      }
+  )
   const [
     expenseSummaryLoading,
     setExpenseSummaryLoading
-  ] = useState(true)
+  ] = useState(
+    () => !initialOverviewCache.expenseSummary
+  )
   const [teacherSearch, setTeacherSearch] =
     useState('')
 
   const [
     teacherSummaries,
     setTeacherSummaries
-  ] = useState([])
+  ] = useState(
+    () =>
+      initialOverviewCache.teacherSummaries || []
+  )
 
   const [
     teacherEarningsLoading,
     setTeacherEarningsLoading
-  ] = useState(true)
+  ] = useState(
+    () => !initialOverviewCache.teacherSummaries
+  )
 
   const [
     ,
@@ -283,15 +313,20 @@ function Finance({
   const [
     staffPaymentSummary,
     setStaffPaymentSummary
-  ] = useState({
-    totalPaid: 0,
-    recordCount: 0
-  })
+  ] = useState(
+    () =>
+      initialOverviewCache.staffPaymentSummary || {
+        totalPaid: 0,
+        recordCount: 0
+      }
+  )
 
   const [
     staffPaymentSummaryLoading,
     setStaffPaymentSummaryLoading
-  ] = useState(true)
+  ] = useState(
+    () => !initialOverviewCache.staffPaymentSummary
+  )
 
   const [
     staffPaymentReloadKey,
@@ -304,9 +339,33 @@ function Finance({
 
     const loadStaffPaymentSummary =
       async () => {
-        setStaffPaymentSummaryLoading(
-          true
-        )
+        const cache = getFinanceOverviewCache()
+        const cachedValue =
+          cache.staffPaymentSummary
+        const cacheAge =
+          Date.now() -
+          Number(
+            cache.updatedAt
+              ?.staffPaymentSummary || 0
+          )
+        const cacheIsFresh =
+          Boolean(cachedValue) &&
+          cacheAge <=
+            FINANCE_CACHE_FRESH_MS
+
+        if (cachedValue) {
+          setStaffPaymentSummary(cachedValue)
+          setStaffPaymentSummaryLoading(false)
+        } else {
+          setStaffPaymentSummaryLoading(true)
+        }
+
+        if (
+          staffPaymentReloadKey === 0 &&
+          cacheIsFresh
+        ) {
+          return
+        }
 
         try {
           const result =
@@ -342,7 +401,32 @@ function Finance({
     let isMounted = true
 
     const loadIncomeSummary = async () => {
-      setIncomeSummaryLoading(true)
+      const cache = getFinanceOverviewCache()
+      const cachedValue =
+        cache.incomeSummary
+      const cacheAge =
+        Date.now() -
+        Number(
+          cache.updatedAt?.incomeSummary || 0
+        )
+      const cacheIsFresh =
+        Boolean(cachedValue) &&
+        cacheAge <=
+          FINANCE_CACHE_FRESH_MS
+
+      if (cachedValue) {
+        setIncomeSummary(cachedValue)
+        setIncomeSummaryLoading(false)
+      } else {
+        setIncomeSummaryLoading(true)
+      }
+
+      if (
+        incomeReloadKey === 0 &&
+        cacheIsFresh
+      ) {
+        return
+      }
 
       try {
         const result =
@@ -459,7 +543,42 @@ function Finance({
 
     const loadExpenseSummary =
       async () => {
-        setExpenseSummaryLoading(true)
+        const cache = getFinanceOverviewCache()
+        const cachedValue =
+          cache.expenseSummary
+        const cacheAge =
+          Date.now() -
+          Number(
+            cache.updatedAt?.expenseSummary || 0
+          )
+        const cacheIsFresh =
+          Boolean(cachedValue) &&
+          cacheAge <=
+            FINANCE_CACHE_FRESH_MS
+
+        /*
+         * Normal sayfa açılışında cache varsa rakamı anında gösteririz.
+         * Ancak gider ekleme/iptal sonrası zorunlu yenilemede cache artık
+         * eski değeri temsil edebilir. Bu durumda ekrandaki güncel/optimistik
+         * değeri eski cache ile geri ezmeyiz; sunucudan yeni özeti sessizce alırız.
+         */
+        if (expenseReloadKey === 0) {
+          if (cachedValue) {
+            setExpenseSummary(cachedValue)
+            setExpenseSummaryLoading(false)
+          } else {
+            setExpenseSummaryLoading(true)
+          }
+        } else {
+          setExpenseSummaryLoading(false)
+        }
+
+        if (
+          expenseReloadKey === 0 &&
+          cacheIsFresh
+        ) {
+          return
+        }
 
         try {
           const result =
@@ -599,10 +718,35 @@ function Finance({
 
     const loadTeacherEarnings =
       async () => {
-        setTeacherEarningsLoading(
-          true
-        )
+        const cache = getFinanceOverviewCache()
+        const cachedValue =
+          cache.teacherSummaries
+        const cacheAge =
+          Date.now() -
+          Number(
+            cache.updatedAt
+              ?.teacherSummaries || 0
+          )
+        const cacheIsFresh =
+          Array.isArray(cachedValue) &&
+          cacheAge <=
+            FINANCE_CACHE_FRESH_MS
+
         setTeacherEarningsError('')
+
+        if (Array.isArray(cachedValue)) {
+          setTeacherSummaries(cachedValue)
+          setTeacherEarningsLoading(false)
+        } else {
+          setTeacherEarningsLoading(true)
+        }
+
+        if (
+          teacherEarningsReloadKey === 0 &&
+          cacheIsFresh
+        ) {
+          return
+        }
 
         try {
           const result =
@@ -1518,7 +1662,10 @@ useEffect(() => {
       return
     }
 
-    const expenseAmount = Number(expenseForm.amount)
+    const rawExpenseAmount = Number(expenseForm.amount)
+    const expenseAmount = Number.isFinite(rawExpenseAmount)
+      ? Math.round((rawExpenseAmount + Number.EPSILON) * 100) / 100
+      : NaN
 
     if (!Number.isFinite(expenseAmount) || expenseAmount <= 0) {
       alert('Gider tutarı 0’dan büyük olmalıdır.')
@@ -1547,7 +1694,37 @@ useEffect(() => {
         savedExpense
       ])
 
-      setExpensePage(1)
+      /*
+       * Kullanıcı kaydettiği gideri anında görsün:
+       * - üst özet tutarını optimistik olarak güncelle,
+       * - yeni kaydı tablo state'ine hemen ekle,
+       * - aktif filtreleri temizle (aksi halde yeni kayıt filtreye uymuyorsa
+       *   kayıt başarıyla kaydedildiği halde tabloda görünmüyordu),
+       * - ardından server-side liste ve özet sessizce yeniden doğrulansın.
+       */
+      setExpenseSummary((current) => ({
+        totalExpense:
+          Math.round(
+            (Number(current.totalExpense || 0) +
+              Number(savedExpense.amount || 0) +
+              Number.EPSILON) *
+              100
+          ) / 100,
+        recordCount:
+          Number(current.recordCount || 0) + 1
+      }))
+      setExpenseSummaryLoading(false)
+
+      setExpenseRows((current) => [
+        savedExpense,
+        ...current.filter(
+          (expense) =>
+            String(expense.id) !== String(savedExpense.id)
+        )
+      ].slice(0, expensePageSize))
+      setExpenseTotal((current) => Number(current || 0) + 1)
+
+      clearExpenseFilters()
       setExpenseReloadKey(
         (current) => current + 1
       )
@@ -1756,12 +1933,29 @@ setTeacherHistoryPage(1)
     teacherEarningsLoading ||
     staffPaymentSummaryLoading
 
+  const renderValueSkeleton = (
+    width = '5.5rem'
+  ) => (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-block',
+        width,
+        height: '0.9em',
+        borderRadius: '999px',
+        background:
+          'rgba(148, 163, 184, 0.28)',
+        verticalAlign: 'middle'
+      }}
+    />
+  )
+
   const renderCurrencyValue = (
     value,
     isLoading = financeSummaryLoading
   ) =>
     isLoading
-      ? '₺—'
+      ? renderValueSkeleton('5.8rem')
       : `₺${formatPrice(value)}`
 
   const renderCountValue = (
@@ -1769,7 +1963,7 @@ setTeacherHistoryPage(1)
     isLoading = financeSummaryLoading
   ) =>
     isLoading
-      ? '—'
+      ? renderValueSkeleton('2.8rem')
       : value
 
   const renderTopMetrics = () => (
