@@ -31,12 +31,14 @@ The project was initially developed during my software development internship an
 ## 🛠️ Tech Stack
 
 ### Frontend
+
 - React
 - JavaScript
 - Vite
 - Tailwind CSS
 
 ### Backend & Database
+
 - Supabase
 - PostgreSQL
 - Supabase Authentication
@@ -44,6 +46,7 @@ The project was initially developed during my software development internship an
 - Row Level Security (RLS)
 
 ### Tools
+
 - Git
 - GitHub
 - Postman
@@ -71,21 +74,27 @@ The project was initially developed during my software development internship an
 ## 📊 Main Modules
 
 ### Students
+
 Manages student records, active/passive status, packages, payment information, and related educational data.
 
 ### Teachers
+
 Manages teacher information, specialties, assigned students, lesson data, and teacher earnings.
 
 ### Lesson Scheduling
+
 Handles lesson plans, lesson statuses, group lessons, and make-up lessons.
 
 ### Payments
+
 Tracks student payments, payment periods, due dates, partial payments, and payment statuses.
 
 ### Finance
+
 Manages income, expenses, teacher payments, and financial summaries.
 
 ### Reports
+
 Provides administrative reports and PDF/Excel data export functionality.
 
 ---
@@ -145,35 +154,25 @@ The long-term goal is to transform the project into a more independent and scala
 
 Clone the repository:
 
-```bash
-git clone https://github.com/ceydagezer/education-management-panel.git
-cd education-management-panel
-```
+    git clone https://github.com/ceydagezer/education-management-panel.git
+    cd education-management-panel
 
 Install dependencies:
 
-```bash
-npm install
-```
+    npm install
 
 Create a `.env.local` file in the project root:
 
-```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
-```
+    VITE_SUPABASE_URL=your_supabase_url
+    VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
 
 Start the development server:
 
-```bash
-npm run dev
-```
+    npm run dev
 
 Create a production build:
 
-```bash
-npm run build
-```
+    npm run build
 
 ---
 
