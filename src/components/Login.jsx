@@ -1,3 +1,5 @@
+import academyLogo from '../assets/LOGO.JPG'
+
 function Login({
   email,
   password,
@@ -10,18 +12,25 @@ function Login({
   return (
     <div className="login-page">
       <div className="login-card">
-        <div
-          className="login-logo"
-          aria-hidden="true"
-        >
-          ♪
+        <div className="login-brand">
+          <div className="login-logo-frame">
+            <img
+              src={academyLogo}
+              alt="Artı Bilim ve Sanat Akademisi"
+              className="login-logo-image"
+            />
+          </div>
+
+          <div className="login-brand-text">
+            <h1>
+              Artı Bilim ve Sanat Akademisi
+            </h1>
+
+            <p>
+              Yönetim paneline giriş yapınız.
+            </p>
+          </div>
         </div>
-
-        <h1>Artı Bilim Sanat Akademisi</h1>
-
-        <p>
-          Yönetim paneline giriş yapınız.
-        </p>
 
         <form
           onSubmit={handleLogin}
@@ -81,7 +90,7 @@ function Login({
           </button>
         </form>
 
-        <span>
+        <span className="login-authorized-note">
           Bu panel yalnızca yetkili kullanıcılar
           içindir.
         </span>

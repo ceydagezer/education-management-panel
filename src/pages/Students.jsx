@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import RequiredStar from '../components/RequiredStar'
 
 import {
@@ -14,10 +15,15 @@ import {
   getStudentById,
   getStudentListCounts,
   getStudentsPage,
+  extendStudentPackage,
   reactivateStudent,
   setStudentPassive,
   updateStudent
 } from '../services/studentService'
+
+import {
+  getPaymentsByStudentPackage
+} from '../services/paymentService'
 
 import '../styles/students.css'
 
@@ -26,7 +32,6 @@ import {
   addYearsToDate,
   formatDate,
   formatPrice,
-  getDateKey,
   getTodayKey
 } from '../utils/dateHelpers'
 
@@ -65,6 +70,8 @@ function Students({
   onUnsavedChangesChange,
   requestUnsavedAction
 }) {
+  const queryClient = useQueryClient()
+
   const [studentView, setStudentView] = useState('list')
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [editingSection, setEditingSection] = useState(null)
@@ -79,10 +86,24 @@ function Students({
     phone: '',
     email: '',
     address: '',
-    motherName: '',
-    motherPhone: '',
-    fatherName: '',
-    fatherPhone: '',
+    guardian1Id: '',
+    guardian1Name: '',
+    guardian1Relationship: '',
+    guardian1Phone: '',
+    guardian1Email: '',
+    guardian1Address: '',
+    guardian1SameAddress: false,
+    guardian1IsPrimary: true,
+    guardian1Notes: '',
+    guardian2Id: '',
+    guardian2Name: '',
+    guardian2Relationship: '',
+    guardian2Phone: '',
+    guardian2Email: '',
+    guardian2Address: '',
+    guardian2SameAddress: false,
+    guardian2IsPrimary: false,
+    guardian2Notes: '',
     packageIds: [],
     enrolledPackages: [],
     lessonPlans: [],
@@ -137,27 +158,6 @@ function Students({
   const [statusFilter, setStatusFilter] = useState('active')
 
   const [
-    studentListRows,
-    setStudentListRows
-  ] = useState([])
-
-  const [
-    studentListTotal,
-    setStudentListTotal
-  ] = useState(0)
-
-  const [
-    studentListCounts,
-    setStudentListCounts
-  ] = useState({
-    active: 0,
-    passive: 0,
-    archived: 0,
-    review: 0,
-    all: 0
-  })
-
-  const [
     studentListSearch,
     setStudentListSearch
   ] = useState('')
@@ -188,23 +188,23 @@ function Students({
   ] = useState(10)
 
   const [
-    studentListLoading,
-    setStudentListLoading
-  ] = useState(false)
-
-  const [
-    studentListError,
-    setStudentListError
-  ] = useState('')
-
-  const [
     studentListReloadKey,
     setStudentListReloadKey
   ] = useState(0)
+
+  const [
+    debouncedStudentListSearch,
+    setDebouncedStudentListSearch
+  ] = useState('')
   const [isCreatingPdf, setIsCreatingPdf] = useState(false)
   const [isSavingStudent, setIsSavingStudent] = useState(false)
   const [changingStudentStatus, setChangingStudentStatus] = useState(false)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+
+  const [
+    extendingPackageId,
+    setExtendingPackageId
+  ] = useState('')
 
   /*
    * ÖĞRENCİ EKRANI KAYDEDİLMEMİŞ DEĞİŞİKLİK TAKİBİ
@@ -511,115 +511,187 @@ function Students({
   const canPermanentlyDeleteStudent = (student) =>
     getDeletionBlockers(student).length === 0
 
+  /*
+   * Öğrenci listesi TanStack Query ile sayfa/filtre bazında cache'lenir.
+   * Sayfadan çıkıp geri dönüldüğünde son gerçek veri anında gösterilir;
+   * veri stale ise arka planda sessizce yenilenir.
+   */
   useEffect(() => {
-    if (studentView !== 'list') {
-      return undefined
-    }
-
-    let isMounted = true
-
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setStudentListLoading(true)
-          setStudentListError('')
-
-          try {
-            const [
-              pageResult,
-              countsResult
-            ] = await Promise.all([
-              getStudentsPage({
-                page:
-                  studentListPage,
-                pageSize:
-                  studentListPageSize,
-                status:
-                  statusFilter,
-                searchText:
-                  studentListSearch,
-                packageId:
-                  studentListPackageId,
-                teacherId:
-                  studentListTeacherId,
-                sortOption:
-                  studentListSort
-              }),
-              getStudentListCounts()
-            ])
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  pageResult.total /
-                    studentListPageSize
-                )
-              )
-
-            if (
-              studentListPage >
-              totalPages
-            ) {
-              setStudentListPage(
-                totalPages
-              )
-              return
-            }
-
-            setStudentListRows(
-              pageResult.data
-            )
-            setStudentListTotal(
-              pageResult.total
-            )
-            setStudentListCounts(
-              countsResult
-            )
-          } catch (error) {
-            console.error(
-              'Öğrenci listesi alınamadı:',
-              error
-            )
-
-            if (isMounted) {
-              setStudentListError(
-                error instanceof Error
-                  ? error.message
-                  : 'Öğrenci listesi alınamadı.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setStudentListLoading(false)
-            }
-          }
-        },
-        studentListSearch.trim()
-          ? 350
-          : 0
-      )
+    const timeoutId = window.setTimeout(
+      () => {
+        setDebouncedStudentListSearch(
+          studentListSearch
+        )
+      },
+      studentListSearch.trim()
+        ? 350
+        : 0
+    )
 
     return () => {
-      isMounted = false
-      window.clearTimeout(
-        timeoutId
+      window.clearTimeout(timeoutId)
+    }
+  }, [studentListSearch])
+
+  const studentListQuery = useQuery({
+    queryKey: [
+      'students',
+      'list',
+      {
+        page: studentListPage,
+        pageSize: studentListPageSize,
+        status: statusFilter,
+        searchText:
+          debouncedStudentListSearch,
+        packageId:
+          studentListPackageId,
+        teacherId:
+          studentListTeacherId,
+        sortOption:
+          studentListSort
+      }
+    ],
+    queryFn: () =>
+      getStudentsPage({
+        page: studentListPage,
+        pageSize: studentListPageSize,
+        status: statusFilter,
+        searchText:
+          debouncedStudentListSearch,
+        packageId:
+          studentListPackageId,
+        teacherId:
+          studentListTeacherId,
+        sortOption:
+          studentListSort
+      }),
+    enabled: studentView === 'list'
+  })
+
+  const studentListCountsQuery = useQuery({
+    queryKey: [
+      'students',
+      'counts'
+    ],
+    queryFn: getStudentListCounts,
+    enabled: studentView === 'list'
+  })
+
+  /*
+   * Mevcut mutation akışlarını değiştirmeden koruyoruz.
+   * studentListReloadKey arttığında aynı cache anahtarları stale olur;
+   * eldeki veri kaybolmadan arka planda güncel kayıt çekilir.
+   */
+  useEffect(() => {
+    if (studentListReloadKey === 0) {
+      return
+    }
+
+    queryClient.invalidateQueries({
+      queryKey: ['students']
+    })
+  }, [
+    studentListReloadKey,
+    queryClient
+  ])
+
+  const studentListRows =
+    studentListQuery.data?.data ?? []
+
+  const studentListTotal =
+    Number(
+      studentListQuery.data?.total ?? 0
+    )
+
+  const studentListCounts =
+    studentListCountsQuery.data ?? {
+      active: 0,
+      passive: 0,
+      archived: 0,
+      review: 0,
+      all: 0
+    }
+
+  const studentListLoading =
+    (
+      studentListQuery.isPending &&
+      !studentListQuery.data
+    ) ||
+    (
+      studentListCountsQuery.isPending &&
+      !studentListCountsQuery.data
+    )
+
+  const studentListError = (() => {
+    if (studentListQuery.data) {
+      return ''
+    }
+
+    const error =
+      studentListQuery.error
+
+    if (!error) {
+      return ''
+    }
+
+    const isOffline =
+      typeof navigator !== 'undefined' &&
+      !navigator.onLine
+
+    const errorMessage =
+      String(
+        error?.message || ''
+      ).toLocaleLowerCase('tr-TR')
+
+    const isNetworkError =
+      errorMessage.includes(
+        'failed to fetch'
+      ) ||
+      errorMessage.includes(
+        'network'
+      ) ||
+      errorMessage.includes(
+        'fetch'
+      )
+
+    return isOffline
+      ? 'İnternet bağlantısı bulunamadı. Öğrenci listesi yüklenemedi.'
+      : isNetworkError
+        ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+        : 'Öğrenci listesi şu anda yüklenemedi.'
+  })()
+
+  /*
+   * Silme/filtre değişimi sonrası mevcut sayfa artık yoksa
+   * son geçerli sayfaya dön.
+   */
+  useEffect(() => {
+    if (!studentListQuery.data) {
+      return
+    }
+
+    const totalPages =
+      Math.max(
+        1,
+        Math.ceil(
+          studentListTotal /
+            studentListPageSize
+        )
+      )
+
+    if (
+      studentListPage >
+      totalPages
+    ) {
+      setStudentListPage(
+        totalPages
       )
     }
   }, [
-    studentView,
-    statusFilter,
+    studentListQuery.data,
+    studentListTotal,
     studentListPage,
-    studentListPageSize,
-    studentListSearch,
-    studentListPackageId,
-    studentListTeacherId,
-    studentListSort,
-    studentListReloadKey
+    studentListPageSize
   ])
 
   const studentListTotalPages =
@@ -849,6 +921,23 @@ function Students({
           instrument: student.instrument || '',
           lessonDuration: student.lessonDuration || '',
           lessonCount: Number(student.lessonCount || 0),
+          totalLessonCount: Number(
+            student.totalLessonCount ??
+            student.lessonCount ??
+            0
+          ),
+          usedLessonCount: Number(
+            student.usedLessonCount || 0
+          ),
+          remainingLessonCount: Number(
+            student.remainingLessonCount ??
+            student.totalLessonCount ??
+            student.lessonCount ??
+            0
+          ),
+          lessonRightsStatus:
+            student.lessonRightsStatus ||
+            'Devam Ediyor',
           monthlyFee: Number(
             student.agreedPrice ?? student.monthlyFee ?? 0
           ),
@@ -1055,7 +1144,12 @@ function Students({
   }
 
   const handleStudentChange = (event) => {
-    const { name, value } = event.target
+    const {
+      name,
+      value,
+      type,
+      checked
+    } = event.target
 
     updateDirtyFlags({
       studentForm: true
@@ -1063,12 +1157,20 @@ function Students({
 
     setStudentForm((current) => ({
       ...current,
-      [name]: value
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : value
     }))
   }
 
   const handleEditChange = (event) => {
-    const { name, value } = event.target
+    const {
+      name,
+      value,
+      type,
+      checked
+    } = event.target
 
     updateDirtyFlags({
       editForm: true
@@ -1076,7 +1178,10 @@ function Students({
 
     setEditForm((current) => ({
       ...current,
-      [name]: value
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : value
     }))
   }
 
@@ -1412,6 +1517,120 @@ function Students({
     }
   }
 
+
+  const handleExtendStudentPackage =
+    async (packageItem) => {
+      if (
+        !selectedStudent ||
+        extendingPackageId
+      ) {
+        return
+      }
+
+      if (!isPackageActive(packageItem)) {
+        alert(
+          'Sonlandırılmış paket uzatılamaz.'
+        )
+        return
+      }
+
+      const currentTotal =
+        Number(
+          packageItem.totalLessonCount ??
+          packageItem.lessonCount ??
+          0
+        )
+
+      const defaultExtension =
+        Number(
+          packageItem.lessonCount ||
+          1
+        )
+
+      const inputValue =
+        window.prompt(
+          `${packageItem.packageName} paketine kaç ders eklensin?\n\nMevcut toplam: ${currentTotal}\nÖnerilen ek ders: ${defaultExtension}`,
+          String(defaultExtension)
+        )
+
+      if (inputValue === null) {
+        return
+      }
+
+      const lessonCountToAdd =
+        Number(inputValue)
+
+      if (
+        !Number.isInteger(
+          lessonCountToAdd
+        ) ||
+        lessonCountToAdd <= 0
+      ) {
+        alert(
+          'Eklenecek ders sayısı pozitif bir tam sayı olmalıdır.'
+        )
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `${currentTotal} olan toplam ders hakkı ${currentTotal + lessonCountToAdd} olacak. Devam etmek istiyor musunuz?`
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      setExtendingPackageId(
+        packageItem.studentPackageId
+      )
+
+      try {
+        const updatedStudent =
+          await extendStudentPackage(
+            packageItem.studentPackageId,
+            lessonCountToAdd
+          )
+
+        setStudents((current) =>
+          current.map((student) =>
+            areIdsEqual(
+              student.id,
+              updatedStudent.id
+            )
+              ? updatedStudent
+              : student
+          )
+        )
+
+        setSelectedStudent(
+          updatedStudent
+        )
+
+        setEditForm({
+          ...updatedStudent
+        })
+
+        setStudentListReloadKey(
+          (current) =>
+            current + 1
+        )
+      } catch (error) {
+        console.error(
+          'Paket uzatma hatası:',
+          error
+        )
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : 'Paket uzatılamadı.'
+        )
+      } finally {
+        setExtendingPackageId('')
+      }
+    }
+
   const togglePackageStatusInForm = (
     target,
     setTarget,
@@ -1650,9 +1869,17 @@ function Students({
       async () => {
         try {
           const fullStudent =
-            await getStudentById(
-              student.id
-            )
+            await queryClient.fetchQuery({
+              queryKey: [
+                'students',
+                'detail',
+                String(student.id)
+              ],
+              queryFn: () =>
+                getStudentById(
+                  student.id
+                )
+            })
 
           performShowStudentDetail(
             fullStudent
@@ -2202,7 +2429,7 @@ function Students({
     }
 
     const confirmDelete = window.confirm(
-      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Veritabanında paket, tahsilat, güncel ders veya ders geçmişi bağlantısı varsa işlem otomatik olarak engellenecektir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
+      `${selectedStudent.fullName} adlı öğrenci kalıcı olarak silinecek. Veritabanında paket, tahsilat, ders planı, ders geçmişi, grup üyeliği veya ders katılımcı bağlantısı varsa işlem otomatik olarak engellenecektir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
     )
 
     if (!confirmDelete) {
@@ -2251,359 +2478,281 @@ function Students({
   }
 
   const exportStudentsToExcel = async () => {
-    if (!students.length) {
-      alert('Excel’e aktarılacak öğrenci bulunmamaktadır.')
+    const activeStudentsForExcel =
+      students
+        .filter(
+          (student) =>
+            isStudentActive(student) &&
+            !isStudentAnonymized(student)
+        )
+        .sort((first, second) =>
+          String(
+            first.fullName || ''
+          ).localeCompare(
+            String(
+              second.fullName || ''
+            ),
+            'tr-TR'
+          )
+        )
+
+    if (
+      activeStudentsForExcel.length === 0
+    ) {
+      alert(
+        'Excel’e aktarılacak aktif öğrenci bulunmamaktadır.'
+      )
       return
     }
 
     try {
       /*
-       * ExcelJS yalnızca Excel düğmesine basıldığında yüklenir.
-       * Böylece öğrenci ekranının ilk açılışı gereksiz yere
-       * ağırlaşmaz.
+       * ExcelJS yalnızca düğmeye basıldığında yüklenir.
+       * Çıktı, günlük kullanım için sade bir aktif öğrenci
+       * listesi olarak hazırlanır.
        */
-      const excelModule = await import('exceljs')
-      const ExcelJS = excelModule.default || excelModule
+      const excelModule =
+        await import('exceljs')
 
-      const workbook = new ExcelJS.Workbook()
-      workbook.creator = 'Artı Akademi - Bilim Sanat'
-      workbook.company = 'Artı Akademi - Bilim Sanat'
-      workbook.subject = 'Öğrenci Listesi'
-      workbook.created = new Date()
+      const ExcelJS =
+        excelModule.default ||
+        excelModule
 
-      const worksheet = workbook.addWorksheet(
-        'Öğrenci Listesi',
-        {
-          properties: {
-            defaultRowHeight: 20
-          },
-          pageSetup: {
-            paperSize: 9,
-            orientation: 'landscape',
-            fitToPage: true,
-            fitToWidth: 1,
-            fitToHeight: 0,
-            margins: {
-              left: 0.25,
-              right: 0.25,
-              top: 0.5,
-              bottom: 0.5,
-              header: 0.2,
-              footer: 0.2
+      const workbook =
+        new ExcelJS.Workbook()
+
+      workbook.creator =
+        'Artı Akademi - Bilim Sanat'
+
+      workbook.company =
+        'Artı Akademi - Bilim Sanat'
+
+      workbook.subject =
+        'Aktif Öğrenci Listesi'
+
+      workbook.created =
+        new Date()
+
+      const worksheet =
+        workbook.addWorksheet(
+          'Aktif Öğrenci Listesi',
+          {
+            properties: {
+              defaultRowHeight: 22
+            },
+            pageSetup: {
+              paperSize: 9,
+              orientation: 'portrait',
+              fitToPage: true,
+              fitToWidth: 1,
+              fitToHeight: 0,
+              margins: {
+                left: 0.4,
+                right: 0.4,
+                top: 0.5,
+                bottom: 0.5,
+                header: 0.2,
+                footer: 0.2
+              }
             }
           }
-        }
-      )
+        )
 
       worksheet.columns = [
-        { key: 'fullName', width: 24 },
-        { key: 'packages', width: 34 },
-        { key: 'teachers', width: 24 },
-        { key: 'totalFee', width: 20 },
-        { key: 'nextPaymentDate', width: 21 },
-        { key: 'status', width: 14 },
-        { key: 'passiveDate', width: 19 },
-        { key: 'passiveReason', width: 34 },
-        { key: 'archiveDate', width: 17 },
-        { key: 'retentionReviewDate', width: 23 },
-        { key: 'retentionStatus', width: 25 },
-        { key: 'anonymizedDate', width: 22 }
+        {
+          key: 'fullName',
+          width: 34
+        },
+        {
+          key: 'gender',
+          width: 14
+        },
+        {
+          key: 'phone',
+          width: 22
+        }
       ]
 
-      worksheet.mergeCells('A1:L1')
-      const titleCell = worksheet.getCell('A1')
-      titleCell.value = 'ARTI AKADEMİ - ÖĞRENCİ LİSTESİ'
+      worksheet.mergeCells('A1:C1')
+
+      const titleCell =
+        worksheet.getCell('A1')
+
+      titleCell.value =
+        'ARTI AKADEMİ - AKTİF ÖĞRENCİ LİSTESİ'
+
       titleCell.font = {
         name: 'Calibri',
-        size: 18,
+        size: 14,
         bold: true,
-        color: { argb: 'FFFFFFFF' }
+        color: {
+          argb: 'FF111827'
+        }
       }
-      titleCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF0F766E' }
-      }
+
       titleCell.alignment = {
         horizontal: 'left',
         vertical: 'middle'
       }
-      worksheet.getRow(1).height = 34
 
-      worksheet.mergeCells('A2:L2')
-      const infoCell = worksheet.getCell('A2')
+      worksheet.getRow(1).height = 26
+
+      worksheet.mergeCells('A2:C2')
+
+      const infoCell =
+        worksheet.getCell('A2')
+
       infoCell.value =
-        `Oluşturulma tarihi: ${new Date().toLocaleString('tr-TR')}  •  ` +
-        `Toplam öğrenci: ${students.length}`
+        `Oluşturulma tarihi: ${new Date().toLocaleDateString(
+          'tr-TR'
+        )}  •  Aktif öğrenci: ${
+          activeStudentsForExcel.length
+        }`
+
       infoCell.font = {
         name: 'Calibri',
         size: 10,
         italic: true,
-        color: { argb: 'FF475569' }
+        color: {
+          argb: 'FF475569'
+        }
       }
-      infoCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFF0FDFA' }
-      }
+
       infoCell.alignment = {
         horizontal: 'left',
         vertical: 'middle'
       }
+
       worksheet.getRow(2).height = 24
 
-      const headerRow = worksheet.getRow(4)
+      const headerRow =
+        worksheet.getRow(4)
+
       headerRow.values = [
         'Ad Soyad',
-        'Paketler',
-        'Öğretmenler',
-        'Aylık Toplam Ücret',
-        'Sonraki Ödeme Tarihi',
-        'Durum',
-        'Pasife Alma Tarihi',
-        'Pasife Alma Nedeni',
-        'Arşiv Tarihi',
-        'Saklama İnceleme Tarihi',
-        'Saklama Durumu',
-        'Anonimleştirme Tarihi'
+        'Cinsiyet',
+        'Telefon'
       ]
-      headerRow.height = 32
 
-      headerRow.eachCell((cell) => {
-        cell.font = {
-          name: 'Calibri',
-          size: 10,
-          bold: true,
-          color: { argb: 'FFFFFFFF' }
-        }
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF0EA5A4' }
-        }
-        cell.alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-          wrapText: true
-        }
-        cell.border = {
-          top: {
-            style: 'thin',
-            color: { argb: 'FF0F766E' }
-          },
-          left: {
-            style: 'thin',
-            color: { argb: 'FFD5E4E8' }
-          },
-          bottom: {
-            style: 'thin',
-            color: { argb: 'FF0F766E' }
-          },
-          right: {
-            style: 'thin',
-            color: { argb: 'FFD5E4E8' }
-          }
-        }
-      })
+      headerRow.height = 28
 
-      const toExcelDate = (value) => {
-        if (!value) return null
-
-        const date = new Date(
-          `${String(value).slice(0, 10)}T00:00:00`
-        )
-
-        return Number.isNaN(date.getTime())
-          ? null
-          : date
-      }
-
-      students.forEach((student, index) => {
-        const row = worksheet.addRow({
-          fullName: student.fullName || '-',
-          packages: getPackagesText(student),
-          teachers: getTeachersText(student),
-          totalFee: getTotalFee(student),
-          nextPaymentDate: toExcelDate(
-            getNearestPaymentDate(student)
-          ),
-          status: getStudentStatusLabel(student),
-          passiveDate: toExcelDate(
-            getPassiveDate(student)
-          ),
-          passiveReason:
-            student.passiveReason ||
-            student.archiveReason ||
-            '-',
-          archiveDate: isArchivedStudent(student)
-            ? toExcelDate(student.archivedAt)
-            : null,
-          retentionReviewDate: toExcelDate(
-            getRetentionReviewDate(student)
-          ),
-          retentionStatus:
-            student.retentionStatus || '-',
-          anonymizedDate: toExcelDate(
-            student.anonymizedAt
-          )
-        })
-
-        row.height = 29
-
-        row.eachCell(
-          { includeEmpty: true },
-          (cell) => {
-            cell.font = {
-              name: 'Calibri',
-              size: 10,
-              color: { argb: 'FF334155' }
-            }
-            cell.alignment = {
-              vertical: 'middle',
-              wrapText: true
-            }
-            cell.border = {
-              top: {
-                style: 'thin',
-                color: { argb: 'FFE2E8F0' }
-              },
-              left: {
-                style: 'thin',
-                color: { argb: 'FFE2E8F0' }
-              },
-              bottom: {
-                style: 'thin',
-                color: { argb: 'FFE2E8F0' }
-              },
-              right: {
-                style: 'thin',
-                color: { argb: 'FFE2E8F0' }
-              }
-            }
-
-            if (index % 2 === 1) {
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFF8FAFC' }
-              }
-            }
-          }
-        )
-
-        const statusCell = row.getCell(6)
-        statusCell.font = {
-          name: 'Calibri',
-          size: 10,
-          bold: true,
-          color: { argb: 'FF334155' }
-        }
-        statusCell.alignment = {
-          horizontal: 'center',
-          vertical: 'middle'
-        }
-
-        const status = getStudentStatusLabel(student)
-        const statusStyle = {
-          Aktif: {
-            fill: 'FFDCFCE7',
-            text: 'FF15803D'
-          },
-          Pasif: {
-            fill: 'FFF1F5F9',
-            text: 'FF64748B'
-          },
-          Arşiv: {
-            fill: 'FFEDE9FE',
-            text: 'FF6D28D9'
-          },
-          İnceleme: {
-            fill: 'FFFEF3C7',
-            text: 'FFB45309'
-          },
-          Anonim: {
-            fill: 'FFE2E8F0',
-            text: 'FF475569'
-          }
-        }[status]
-
-        if (statusStyle) {
-          statusCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: statusStyle.fill }
-          }
-          statusCell.font = {
+      headerRow.eachCell(
+        (cell) => {
+          cell.font = {
             name: 'Calibri',
             size: 10,
             bold: true,
-            color: { argb: statusStyle.text }
+            color: {
+              argb: 'FF111827'
+            }
           }
-        }
-      })
 
-      worksheet.getColumn(4).numFmt = '₺#,##0.00'
-      ;[5, 7, 9, 10, 12].forEach(
-        (columnNumber) => {
-          worksheet.getColumn(columnNumber).numFmt =
-            'dd.mm.yyyy'
-          worksheet.getColumn(columnNumber).alignment = {
-            horizontal: 'center',
+          cell.alignment = {
+            horizontal: 'left',
             vertical: 'middle'
+          }
+
+          cell.border = {
+            bottom: {
+              style: 'thin',
+              color: {
+                argb: 'FF9CA3AF'
+              }
+            }
           }
         }
       )
 
-      worksheet.getColumn(4).alignment = {
-        horizontal: 'right',
-        vertical: 'middle'
-      }
-      worksheet.getColumn(6).alignment = {
-        horizontal: 'center',
-        vertical: 'middle'
-      }
+      activeStudentsForExcel.forEach(
+        (student, index) => {
+          const row =
+            worksheet.addRow({
+              fullName:
+                student.fullName ||
+                student.name ||
+                '-',
+              gender:
+                student.gender ||
+                '-',
+              phone:
+                student.phone ||
+                '-'
+            })
 
-      worksheet.views = [
-        {
-          state: 'frozen',
-          ySplit: 4,
-          activeCell: 'A5'
+          row.height = 25
+
+          row.eachCell(
+            {
+              includeEmpty: true
+            },
+            (cell) => {
+              cell.font = {
+                name: 'Calibri',
+                size: 11,
+                color: {
+                  argb: 'FF334155'
+                }
+              }
+
+              cell.alignment = {
+                vertical: 'middle'
+              }
+
+              cell.border = {
+                bottom: {
+                  style: 'hair',
+                  color: {
+                    argb: 'FFD1D5DB'
+                  }
+                }
+              }
+            }
+          )
         }
-      ]
-
-      worksheet.autoFilter = {
-        from: 'A4',
-        to: `L${worksheet.rowCount}`
-      }
+      )
 
       worksheet.headerFooter.oddFooter =
         '&LArtı Akademi - Bilim Sanat' +
         '&CSayfa &P / &N' +
-        '&RÖğrenci Listesi'
+        '&RAktif Öğrenci Listesi'
 
-      const buffer = await workbook.xlsx.writeBuffer()
-      const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      })
+      const buffer =
+        await workbook.xlsx.writeBuffer()
 
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
+      const blob =
+        new Blob(
+          [buffer],
+          {
+            type:
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          }
+        )
+
+      const url =
+        URL.createObjectURL(blob)
+
+      const link =
+        document.createElement('a')
+
       link.href = url
       link.download =
-        `ogrenci-listesi-${getTodayKey()}.xlsx`
+        `aktif-ogrenci-listesi-${getTodayKey()}.xlsx`
 
       document.body.appendChild(link)
       link.click()
       link.remove()
+
       window.setTimeout(
-        () => URL.revokeObjectURL(url),
+        () =>
+          URL.revokeObjectURL(url),
         100
       )
     } catch (error) {
       console.error(
-        'Öğrenci Excel dosyası oluşturulamadı:',
+        'Aktif öğrenci Excel dosyası oluşturulamadı:',
         error
       )
+
       alert(
         'Excel dosyası oluşturulamadı. ExcelJS paketinin kurulu olduğundan emin olun.'
       )
@@ -2655,13 +2804,73 @@ function Students({
         selectedStudent
       )
 
-      const studentPayments = getStudentPayments(
-        selectedStudent
-      ).sort((first, second) =>
-        String(getPaymentDateForPdf(second)).localeCompare(
-          String(getPaymentDateForPdf(first))
+      /*
+       * Öğrenci listesi artık bütün tahsilatları bellekte tutmuyor.
+       * PDF hazırlanırken öğrencinin her paketine ait aktif
+       * tahsilatlar doğrudan veritabanından alınır.
+       */
+      const studentPackageIds =
+        studentPackages
+          .map(
+            (packageItem) =>
+              packageItem.studentPackageId ??
+              packageItem.enrollmentId ??
+              packageItem.assignmentId ??
+              ''
+          )
+          .map(
+            (studentPackageId) =>
+              String(
+                studentPackageId || ''
+              ).trim()
+          )
+          .filter(Boolean)
+
+      const paymentGroups =
+        await Promise.all(
+          studentPackageIds.map(
+            (studentPackageId) =>
+              getPaymentsByStudentPackage(
+                studentPackageId
+              )
+          )
         )
-      )
+
+      const paymentMap =
+        new Map()
+
+      paymentGroups
+        .flat()
+        .forEach((payment) => {
+          const paymentKey =
+            payment?.id
+              ? String(payment.id)
+              : [
+                  getPaymentDate(payment),
+                  getPaymentPeriod(payment),
+                  getPaymentAmount(payment),
+                  payment?.referenceNumber || ''
+                ].join('-')
+
+          paymentMap.set(
+            paymentKey,
+            payment
+          )
+        })
+
+      const studentPayments =
+        Array.from(
+          paymentMap.values()
+        ).sort(
+          (first, second) =>
+            String(
+              getPaymentDate(second)
+            ).localeCompare(
+              String(
+                getPaymentDate(first)
+              )
+            )
+        )
 
       const dayOrder = {
         Pazartesi: 1,
@@ -3145,17 +3354,43 @@ function Students({
             'Veli Bilgileri',
             informationGrid([
               [
-                fieldCell('Anne Adı', selectedStudent.motherName),
                 fieldCell(
-                  'Anne Telefonu',
-                  selectedStudent.motherPhone
+                  '1. Veli',
+                  selectedStudent.guardian1Name
+                ),
+                fieldCell(
+                  'Yakınlık',
+                  selectedStudent.guardian1Relationship
                 )
               ],
               [
-                fieldCell('Baba Adı', selectedStudent.fatherName),
                 fieldCell(
-                  'Baba Telefonu',
-                  selectedStudent.fatherPhone
+                  'Telefon',
+                  selectedStudent.guardian1Phone
+                ),
+                fieldCell(
+                  'E-posta',
+                  selectedStudent.guardian1Email
+                )
+              ],
+              [
+                fieldCell(
+                  '2. Veli',
+                  selectedStudent.guardian2Name
+                ),
+                fieldCell(
+                  'Yakınlık',
+                  selectedStudent.guardian2Relationship
+                )
+              ],
+              [
+                fieldCell(
+                  'Telefon',
+                  selectedStudent.guardian2Phone
+                ),
+                fieldCell(
+                  'E-posta',
+                  selectedStudent.guardian2Email
                 )
               ]
             ])
@@ -3698,6 +3933,7 @@ function Students({
     items,
     {
       onEdit = null,
+      onExtend = null,
       onRemove = null,
       onToggleStatus = null
     } = {}
@@ -3712,6 +3948,7 @@ function Students({
 
     const hasActions =
       Boolean(onEdit) ||
+      Boolean(onExtend) ||
       Boolean(onRemove) ||
       Boolean(onToggleStatus)
 
@@ -3726,6 +3963,7 @@ function Students({
               <th>İlk Ödeme</th>
               <th>Ödeme Günü</th>
               <th>Sonraki Ödeme</th>
+              <th>Ders Hakkı</th>
               <th>Durum</th>
               {hasActions && <th>İşlem</th>}
             </tr>
@@ -3734,6 +3972,47 @@ function Students({
           <tbody>
             {items.map((item) => {
               const active = isPackageActive(item)
+
+              const totalLessonCount =
+                Number(
+                  item.totalLessonCount ??
+                  item.lessonCount ??
+                  0
+                )
+
+              const usedLessonCount =
+                Number(
+                  item.usedLessonCount || 0
+                )
+
+              const remainingLessonCount =
+                Math.max(
+                  Number(
+                    item.remainingLessonCount ??
+                    (
+                      totalLessonCount -
+                      usedLessonCount
+                    )
+                  ),
+                  0
+                )
+
+              const lessonRightsStatus =
+                item.lessonRightsStatus ||
+                (
+                  remainingLessonCount === 0
+                    ? 'Ders Hakkı Bitti'
+                    : remainingLessonCount === 1
+                      ? 'Bitmek Üzere'
+                      : 'Devam Ediyor'
+                )
+
+              const lessonRightsClass =
+                remainingLessonCount === 0
+                  ? 'ended'
+                  : remainingLessonCount === 1
+                    ? 'warning'
+                    : 'active'
 
               return (
                 <tr
@@ -3785,6 +4064,24 @@ function Students({
                   </td>
 
                   <td>
+                    <div className="package-lesson-rights">
+                      <strong>
+                        {usedLessonCount}/{totalLessonCount}
+                      </strong>
+
+                      <span>
+                        {remainingLessonCount} ders kaldı
+                      </span>
+
+                      <small
+                        className={`package-lesson-rights-badge ${lessonRightsClass}`}
+                      >
+                        {lessonRightsStatus}
+                      </small>
+                    </div>
+                  </td>
+
+                  <td>
                     <span
                       className={`package-status-badge ${
                         active ? 'active' : 'ended'
@@ -3812,6 +4109,29 @@ function Students({
                             onClick={() => onEdit(item)}
                           >
                             Düzenle
+                          </button>
+                        )}
+
+                        {onExtend && active && (
+                          <button
+                            className="package-extend-button"
+                            type="button"
+                            onClick={() =>
+                              onExtend(item)
+                            }
+                            disabled={
+                              areIdsEqual(
+                                extendingPackageId,
+                                item.studentPackageId
+                              )
+                            }
+                          >
+                            {areIdsEqual(
+                              extendingPackageId,
+                              item.studentPackageId
+                            )
+                              ? 'Uzatılıyor...'
+                              : 'Uzat'}
                           </button>
                         )}
 
@@ -3960,36 +4280,206 @@ function Students({
 
         <div className="form-section">
           <h2>Veli Bilgileri</h2>
+          <p className="package-section-description">
+            Veli anne veya baba olmak zorunda değildir. Dede, teyze,
+            vasi ya da başka bir yakın da eklenebilir.
+          </p>
+
           <div className="form-grid">
+            <div className="form-group full-width">
+              <h3>1. Veli</h3>
+            </div>
+
             <div className="form-group">
-              <label>Anne Adı</label>
+              <label>Ad Soyad</label>
               <input
-                name="motherName"
-                value={studentForm.motherName}
+                name="guardian1Name"
+                value={studentForm.guardian1Name}
                 onChange={handleStudentChange}
               />
             </div>
+
             <div className="form-group">
-              <label>Anne Telefonu</label>
+              <label>Yakınlık Derecesi</label>
+              <select
+                name="guardian1Relationship"
+                value={studentForm.guardian1Relationship}
+                onChange={handleStudentChange}
+              >
+                  <option value="">Seçiniz</option>
+                  <option value="Anne">Anne</option>
+                  <option value="Baba">Baba</option>
+                  <option value="Dede">Dede</option>
+                  <option value="Nine">Nine</option>
+                  <option value="Teyze">Teyze</option>
+                  <option value="Dayı">Dayı</option>
+                  <option value="Hala">Hala</option>
+                  <option value="Amca">Amca</option>
+                  <option value="Abla">Abla</option>
+                  <option value="Ağabey">Ağabey</option>
+                  <option value="Vasi">Vasi</option>
+                  <option value="Diğer">Diğer</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Telefon</label>
               <input
-                name="motherPhone"
-                value={studentForm.motherPhone}
+                name="guardian1Phone"
+                value={studentForm.guardian1Phone}
                 onChange={handleStudentChange}
               />
             </div>
+
             <div className="form-group">
-              <label>Baba Adı</label>
+              <label>E-posta</label>
               <input
-                name="fatherName"
-                value={studentForm.fatherName}
+                type="email"
+                name="guardian1Email"
+                value={studentForm.guardian1Email}
                 onChange={handleStudentChange}
               />
             </div>
+
+            <div className="form-group full-width">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="guardian1SameAddress"
+                  checked={studentForm.guardian1SameAddress}
+                  onChange={handleStudentChange}
+                />
+                Öğrenciyle aynı adreste yaşıyor
+              </label>
+            </div>
+
+            {!studentForm.guardian1SameAddress && (
+              <div className="form-group full-width">
+                <label>Veli Adresi</label>
+                <textarea
+                  name="guardian1Address"
+                  value={studentForm.guardian1Address}
+                  onChange={handleStudentChange}
+                />
+              </div>
+            )}
+
             <div className="form-group">
-              <label>Baba Telefonu</label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="guardian1IsPrimary"
+                  checked={studentForm.guardian1IsPrimary}
+                  onChange={handleStudentChange}
+                />
+                Birincil iletişim kişisi
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label>Not</label>
               <input
-                name="fatherPhone"
-                value={studentForm.fatherPhone}
+                name="guardian1Notes"
+                value={studentForm.guardian1Notes}
+                onChange={handleStudentChange}
+              />
+            </div>
+
+            <div className="form-group full-width">
+              <h3>2. Veli <small>(İsteğe bağlı)</small></h3>
+            </div>
+
+            <div className="form-group">
+              <label>Ad Soyad</label>
+              <input
+                name="guardian2Name"
+                value={studentForm.guardian2Name}
+                onChange={handleStudentChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Yakınlık Derecesi</label>
+              <select
+                name="guardian2Relationship"
+                value={studentForm.guardian2Relationship}
+                onChange={handleStudentChange}
+              >
+                  <option value="">Seçiniz</option>
+                  <option value="Anne">Anne</option>
+                  <option value="Baba">Baba</option>
+                  <option value="Dede">Dede</option>
+                  <option value="Nine">Nine</option>
+                  <option value="Teyze">Teyze</option>
+                  <option value="Dayı">Dayı</option>
+                  <option value="Hala">Hala</option>
+                  <option value="Amca">Amca</option>
+                  <option value="Abla">Abla</option>
+                  <option value="Ağabey">Ağabey</option>
+                  <option value="Vasi">Vasi</option>
+                  <option value="Diğer">Diğer</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Telefon</label>
+              <input
+                name="guardian2Phone"
+                value={studentForm.guardian2Phone}
+                onChange={handleStudentChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>E-posta</label>
+              <input
+                type="email"
+                name="guardian2Email"
+                value={studentForm.guardian2Email}
+                onChange={handleStudentChange}
+              />
+            </div>
+
+            <div className="form-group full-width">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="guardian2SameAddress"
+                  checked={studentForm.guardian2SameAddress}
+                  onChange={handleStudentChange}
+                />
+                Öğrenciyle aynı adreste yaşıyor
+              </label>
+            </div>
+
+            {!studentForm.guardian2SameAddress && (
+              <div className="form-group full-width">
+                <label>Veli Adresi</label>
+                <textarea
+                  name="guardian2Address"
+                  value={studentForm.guardian2Address}
+                  onChange={handleStudentChange}
+                />
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="guardian2IsPrimary"
+                  checked={studentForm.guardian2IsPrimary}
+                  onChange={handleStudentChange}
+                />
+                Birincil iletişim kişisi
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label>Not</label>
+              <input
+                name="guardian2Notes"
+                value={studentForm.guardian2Notes}
                 onChange={handleStudentChange}
               />
             </div>
@@ -4433,31 +4923,138 @@ function Students({
               {renderSectionButtons('parent')}
             </div>
 
-            {editingSection === 'parent' ? (
+                        {editingSection === 'parent' ? (
               <div className="form-grid">
-                <div className="form-group">
-                  <label>Anne Adı</label>
-                  <input name="motherName" value={editForm.motherName} onChange={handleEditChange} />
+                <div className="form-group full-width">
+                  <h3>1. Veli</h3>
                 </div>
                 <div className="form-group">
-                  <label>Anne Telefonu</label>
-                  <input name="motherPhone" value={editForm.motherPhone} onChange={handleEditChange} />
+                  <label>Ad Soyad</label>
+                  <input name="guardian1Name" value={editForm.guardian1Name || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group">
-                  <label>Baba Adı</label>
-                  <input name="fatherName" value={editForm.fatherName} onChange={handleEditChange} />
+                  <label>Yakınlık Derecesi</label>
+                  <select name="guardian1Relationship" value={editForm.guardian1Relationship || ''} onChange={handleEditChange}>
+                  <option value="">Seçiniz</option>
+                  <option value="Anne">Anne</option>
+                  <option value="Baba">Baba</option>
+                  <option value="Dede">Dede</option>
+                  <option value="Nine">Nine</option>
+                  <option value="Teyze">Teyze</option>
+                  <option value="Dayı">Dayı</option>
+                  <option value="Hala">Hala</option>
+                  <option value="Amca">Amca</option>
+                  <option value="Abla">Abla</option>
+                  <option value="Ağabey">Ağabey</option>
+                  <option value="Vasi">Vasi</option>
+                  <option value="Diğer">Diğer</option>
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label>Baba Telefonu</label>
-                  <input name="fatherPhone" value={editForm.fatherPhone} onChange={handleEditChange} />
+                  <label>Telefon</label>
+                  <input name="guardian1Phone" value={editForm.guardian1Phone || ''} onChange={handleEditChange} />
+                </div>
+                <div className="form-group">
+                  <label>E-posta</label>
+                  <input type="email" name="guardian1Email" value={editForm.guardian1Email || ''} onChange={handleEditChange} />
+                </div>
+                <div className="form-group full-width">
+                  <label className="checkbox-label">
+                    <input type="checkbox" name="guardian1SameAddress" checked={editForm.guardian1SameAddress === true} onChange={handleEditChange} />
+                    Öğrenciyle aynı adreste yaşıyor
+                  </label>
+                </div>
+                {!editForm.guardian1SameAddress && (
+                  <div className="form-group full-width">
+                    <label>Veli Adresi</label>
+                    <textarea name="guardian1Address" value={editForm.guardian1Address || ''} onChange={handleEditChange} />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input type="checkbox" name="guardian1IsPrimary" checked={editForm.guardian1IsPrimary === true} onChange={handleEditChange} />
+                    Birincil iletişim kişisi
+                  </label>
+                </div>
+                <div className="form-group">
+                  <label>Not</label>
+                  <input name="guardian1Notes" value={editForm.guardian1Notes || ''} onChange={handleEditChange} />
+                </div>
+
+                <div className="form-group full-width">
+                  <h3>2. Veli <small>(İsteğe bağlı)</small></h3>
+                </div>
+                <div className="form-group">
+                  <label>Ad Soyad</label>
+                  <input name="guardian2Name" value={editForm.guardian2Name || ''} onChange={handleEditChange} />
+                </div>
+                <div className="form-group">
+                  <label>Yakınlık Derecesi</label>
+                  <select name="guardian2Relationship" value={editForm.guardian2Relationship || ''} onChange={handleEditChange}>
+                  <option value="">Seçiniz</option>
+                  <option value="Anne">Anne</option>
+                  <option value="Baba">Baba</option>
+                  <option value="Dede">Dede</option>
+                  <option value="Nine">Nine</option>
+                  <option value="Teyze">Teyze</option>
+                  <option value="Dayı">Dayı</option>
+                  <option value="Hala">Hala</option>
+                  <option value="Amca">Amca</option>
+                  <option value="Abla">Abla</option>
+                  <option value="Ağabey">Ağabey</option>
+                  <option value="Vasi">Vasi</option>
+                  <option value="Diğer">Diğer</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Telefon</label>
+                  <input name="guardian2Phone" value={editForm.guardian2Phone || ''} onChange={handleEditChange} />
+                </div>
+                <div className="form-group">
+                  <label>E-posta</label>
+                  <input type="email" name="guardian2Email" value={editForm.guardian2Email || ''} onChange={handleEditChange} />
+                </div>
+                <div className="form-group full-width">
+                  <label className="checkbox-label">
+                    <input type="checkbox" name="guardian2SameAddress" checked={editForm.guardian2SameAddress === true} onChange={handleEditChange} />
+                    Öğrenciyle aynı adreste yaşıyor
+                  </label>
+                </div>
+                {!editForm.guardian2SameAddress && (
+                  <div className="form-group full-width">
+                    <label>Veli Adresi</label>
+                    <textarea name="guardian2Address" value={editForm.guardian2Address || ''} onChange={handleEditChange} />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input type="checkbox" name="guardian2IsPrimary" checked={editForm.guardian2IsPrimary === true} onChange={handleEditChange} />
+                    Birincil iletişim kişisi
+                  </label>
+                </div>
+                <div className="form-group">
+                  <label>Not</label>
+                  <input name="guardian2Notes" value={editForm.guardian2Notes || ''} onChange={handleEditChange} />
                 </div>
               </div>
             ) : (
               <div className="detail-grid">
-                <p><strong>Anne Adı:</strong> {selectedStudent.motherName || '-'}</p>
-                <p><strong>Anne Telefonu:</strong> {selectedStudent.motherPhone || '-'}</p>
-                <p><strong>Baba Adı:</strong> {selectedStudent.fatherName || '-'}</p>
-                <p><strong>Baba Telefonu:</strong> {selectedStudent.fatherPhone || '-'}</p>
+                <p><strong>1. Veli:</strong> {selectedStudent.guardian1Name || '-'}</p>
+                <p><strong>Yakınlık:</strong> {selectedStudent.guardian1Relationship || '-'}</p>
+                <p><strong>Telefon:</strong> {selectedStudent.guardian1Phone || '-'}</p>
+                <p><strong>E-posta:</strong> {selectedStudent.guardian1Email || '-'}</p>
+                <p className="full-width"><strong>Adres:</strong> {selectedStudent.guardian1SameAddress ? selectedStudent.address || '-' : selectedStudent.guardian1Address || '-'}</p>
+                <p><strong>Birincil İletişim:</strong> {selectedStudent.guardian1IsPrimary ? 'Evet' : 'Hayır'}</p>
+                <p><strong>Not:</strong> {selectedStudent.guardian1Notes || '-'}</p>
+
+                <p className="full-width"><strong>2. Veli</strong></p>
+                <p><strong>Ad Soyad:</strong> {selectedStudent.guardian2Name || '-'}</p>
+                <p><strong>Yakınlık:</strong> {selectedStudent.guardian2Relationship || '-'}</p>
+                <p><strong>Telefon:</strong> {selectedStudent.guardian2Phone || '-'}</p>
+                <p><strong>E-posta:</strong> {selectedStudent.guardian2Email || '-'}</p>
+                <p className="full-width"><strong>Adres:</strong> {selectedStudent.guardian2SameAddress ? selectedStudent.address || '-' : selectedStudent.guardian2Address || '-'}</p>
+                <p><strong>Birincil İletişim:</strong> {selectedStudent.guardian2IsPrimary ? 'Evet' : 'Hayır'}</p>
+                <p><strong>Not:</strong> {selectedStudent.guardian2Notes || '-'}</p>
               </div>
             )}
           </div>
@@ -4537,6 +5134,8 @@ function Students({
                             setEditPackageEditingId,
                             setEditPackageEditorOpen
                           ),
+                        onExtend:
+                          handleExtendStudentPackage,
                         onToggleStatus: (id) =>
                           togglePackageStatusInForm(
                             editForm,
@@ -4562,7 +5161,11 @@ function Students({
             ) : (
               <>
                 {renderPackageTable(
-                  normalizeStudentPackages(selectedStudent)
+                  normalizeStudentPackages(selectedStudent),
+                  {
+                    onExtend:
+                      handleExtendStudentPackage
+                  }
                 )}
                 <div className="detail-grid" style={{ marginTop: '18px' }}>
                   <p><strong>Aylık Toplam Ücret:</strong> ₺{formatPrice(getTotalFee(selectedStudent))}</p>
@@ -4624,8 +5227,12 @@ function Students({
           <p>Öğrenci kayıtlarını, paketlerini ve ödeme tarihlerini yönetin.</p>
         </div>
         <div className="student-actions">
-          <button className="excel-button" type="button" onClick={exportStudentsToExcel}>
-            Excel’e Aktar
+          <button
+            className="excel-button"
+            type="button"
+            onClick={exportStudentsToExcel}
+          >
+            Aktif Öğrenci Listesi
           </button>
           <button
             className="primary-button"
@@ -4644,7 +5251,9 @@ function Students({
             <p>Kayıtlı öğrenciler ve temel bilgileri</p>
           </div>
           <button className="lesson-count" type="button">
-            {studentListTotal} öğrenci
+            {studentListLoading
+              ? '— öğrenci'
+              : `${studentListTotal} öğrenci`}
           </button>
         </div>
 
@@ -4658,7 +5267,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('active')}
             >
               Aktif
-              <span>{studentListCounts.active}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.active}
+              </span>
             </button>
 
             <button
@@ -4669,7 +5282,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('passive')}
             >
               Pasif
-              <span>{studentListCounts.passive}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.passive}
+              </span>
             </button>
 
             <button
@@ -4680,7 +5297,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('archived')}
             >
               Arşiv
-              <span>{studentListCounts.archived}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.archived}
+              </span>
             </button>
 
             <button
@@ -4691,7 +5312,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('review')}
             >
               İnceleme
-              <span>{studentListCounts.review}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.review}
+              </span>
             </button>
 
             <button
@@ -4702,7 +5327,11 @@ function Students({
               onClick={() => changeStudentStatusFilter('all')}
             >
               Tümü
-              <span>{studentListCounts.all}</span>
+              <span>
+                {studentListLoading
+                  ? '—'
+                  : studentListCounts.all}
+              </span>
             </button>
           </div>
 
@@ -4931,9 +5560,11 @@ function Students({
 
         <div className="student-list-pagination">
           <div className="student-list-pagination-summary">
-            {studentListTotal === 0
-              ? 'Gösterilecek kayıt yok'
-              : `${studentListFirstRecord}–${studentListLastRecord} / ${studentListTotal} öğrenci`}
+            {studentListLoading
+              ? 'Öğrenci listesi yükleniyor...'
+              : studentListTotal === 0
+                ? 'Gösterilecek kayıt yok'
+                : `${studentListFirstRecord}–${studentListLastRecord} / ${studentListTotal} öğrenci`}
           </div>
 
           <div className="student-list-pagination-controls">

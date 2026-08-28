@@ -20,8 +20,7 @@
 }
 
 .student-table-card,
-.student-form-card,
-.detail-card {
+.student-form-card {
   background: #ffffff;
   border: 1px solid #e7edf5;
   border-radius: 20px;
@@ -30,25 +29,21 @@
   overflow: hidden;
 }
 
-.student-form-card,
-.detail-card {
+.student-form-card {
   padding: 24px;
 }
 
-.form-section,
-.detail-section {
+.form-section {
   margin-bottom: 26px;
 }
 
-.form-section h2,
-.detail-section h2 {
+.form-section h2 {
   margin: 0 0 16px;
   font-size: 19px;
   color: #0f172a;
 }
 
-.form-grid,
-.detail-grid {
+.form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px 18px;
@@ -60,6 +55,9 @@
 }
 
 .form-group label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-bottom: 7px;
   font-size: 13px;
   font-weight: 700;
@@ -79,10 +77,6 @@
 .form-group textarea {
   min-height: 80px;
   resize: vertical;
-}
-
-.full-width {
-  grid-column: 1 / -1;
 }
 
 .form-actions,
@@ -130,18 +124,6 @@
   color: #ea580c;
 }
 
-.detail-grid p {
-  margin: 0;
-  background: #f8fafc;
-  padding: 12px;
-  border-radius: 12px;
-  color: #475569;
-  font-size: 14px;
-}
-
-.detail-grid strong {
-  color: #0f172a;
-}
 .student-actions {
   display: flex;
   gap: 10px;
@@ -160,6 +142,27 @@
 
 .excel-button:hover {
   background: #d1fae5;
+}
+
+
+.primary-button:focus-visible,
+.save-button:focus-visible,
+.pdf-button:focus-visible,
+.cancel-button:focus-visible,
+.detail-button:focus-visible,
+.excel-button:focus-visible,
+.edit-section-button:focus-visible,
+.student-filter-button:focus-visible,
+.student-status-action-button:focus-visible,
+.student-permanent-delete-button:focus-visible,
+.package-edit-button:focus-visible,
+.package-end-button:focus-visible,
+.package-reactivate-button:focus-visible,
+.package-editor-close-button:focus-visible,
+.student-page-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(14, 165, 233, 0.16);
 }
 
 /* DETAIL PAGE SECTION CARD UPDATE */
@@ -262,12 +265,6 @@
   font-size: 14px;
 }
 
-.form-group label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .section-title-row {
   display: flex;
   align-items: center;
@@ -319,250 +316,6 @@
   width: 220px;
   min-width: 220px;
   padding: 14px 24px;
-}
-
-/* =========================================================
-   ÖĞRENCİ DURUM / ARŞİV YÖNETİMİ
-   Bu bölümü src/styles/students.css dosyasının sonuna ekleyin.
-   ========================================================= */
-
-.student-status-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 14px 20px;
-  background: #fbfdff;
-  border-bottom: 1px solid #e7edf5;
-}
-
-.student-status-toolbar p {
-  margin: 0;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.student-status-filters {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px;
-  background: #eef3f8;
-  border-radius: 12px;
-}
-
-.student-filter-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 7px 12px;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  background: transparent;
-  border: 0;
-  border-radius: 9px;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.student-filter-button span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 23px;
-  height: 23px;
-  padding: 0 7px;
-  color: #475569;
-  font-size: 11px;
-  background: #ffffff;
-  border: 1px solid #dbe5ef;
-  border-radius: 999px;
-}
-
-.student-filter-button:hover {
-  color: #0369a1;
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.student-filter-button.selected {
-  color: #0369a1;
-  background: #ffffff;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
-}
-
-.student-filter-button.selected span {
-  color: #0369a1;
-  background: #e0f2fe;
-  border-color: #bae6fd;
-}
-
-.student-status-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 62px;
-  padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 900;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.student-status-badge.active {
-  color: #15803d;
-  background: #dcfce7;
-  border: 1px solid #bbf7d0;
-}
-
-.student-status-badge.passive {
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #dbe5ef;
-}
-
-.student-detail-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.student-detail-title-row .page-badge {
-  margin-bottom: 0;
-}
-
-.student-detail-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.student-status-action-button,
-.student-permanent-delete-button {
-  min-height: 40px;
-  padding: 10px 14px;
-  font-size: 12px;
-  font-weight: 800;
-  border-radius: 11px;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
-}
-
-.student-status-action-button:hover,
-.student-permanent-delete-button:hover {
-  transform: translateY(-1px);
-}
-
-.student-status-action-button.deactivate {
-  color: #a16207;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-}
-
-.student-status-action-button.deactivate:hover {
-  color: #854d0e;
-  background: #fef3c7;
-  border-color: #facc15;
-}
-
-.student-status-action-button.activate {
-  color: #15803d;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-}
-
-.student-status-action-button.activate:hover {
-  color: #166534;
-  background: #dcfce7;
-  border-color: #86efac;
-}
-
-.student-permanent-delete-button {
-  color: #dc2626;
-  background: #fff1f2;
-  border: 1px solid #fecdd3;
-}
-
-.student-permanent-delete-button:hover {
-  color: #b91c1c;
-  background: #ffe4e6;
-  border-color: #fda4af;
-}
-
-.student-passive-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 15px 18px;
-  margin-bottom: 18px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-left: 5px solid #f59e0b;
-  border-radius: 14px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
-}
-
-.student-passive-summary div {
-  min-width: 0;
-}
-
-.student-passive-summary span {
-  display: block;
-  margin-bottom: 4px;
-  color: #a16207;
-  font-size: 11px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.student-passive-summary strong {
-  display: block;
-  color: #713f12;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.student-passive-summary small {
-  flex-shrink: 0;
-  color: #92400e;
-  font-size: 12px;
-}
-
-@media (max-width: 850px) {
-  .student-status-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .student-detail-actions {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 650px) {
-  .student-status-filters {
-    width: 100%;
-  }
-
-  .student-filter-button {
-    flex: 1;
-  }
-
-  .student-passive-summary {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 /* =========================================================
@@ -1644,4 +1397,118 @@
     overflow-x: auto;
     padding-bottom: 3px;
   }
+}
+
+/* =========================================================
+   ÖĞRENCİ PAKETİ DERS HAKKI
+   ========================================================= */
+
+.package-lesson-rights {
+  display: flex;
+  min-width: 105px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.package-lesson-rights > strong {
+  color: #102f4a;
+  font-size: 14px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.package-lesson-rights > span {
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.package-lesson-rights-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.package-lesson-rights-badge.active {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.package-lesson-rights-badge.warning {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.package-lesson-rights-badge.ended {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.package-management-table th,
+.package-management-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.package-management-table .package-table-main {
+  align-items: center;
+  text-align: center;
+}
+
+/* Paket ders hakkı uzatma butonu */
+.package-extend-button {
+  padding: 8px 12px;
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 800;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.package-extend-button:hover:not(:disabled) {
+  color: #075985;
+  background: #bae6fd;
+}
+
+.package-extend-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Veli alanları */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.form-group h3 {
+  margin: 8px 0 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.form-group h3 small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
 }

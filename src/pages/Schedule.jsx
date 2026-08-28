@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query'
 
 import {
+  createGroupLessonPlan,
   createLessonPlan,
-  deleteLessonPlan
+  deleteLessonPlan,
+  getLessonPlanStudents
 } from '../services/lessonService'
+
+import {
+  getLessonGroups,
+  getLessonGroupStudents
+} from '../services/groupService'
 import '../styles/schedule.css'
 
 import {
@@ -18,13 +29,37 @@ import {
   normalizeStatusText
 } from '../utils/textHelpers'
 
+const LESSON_GROUPS_QUERY_KEY = [
+  'lesson-groups',
+  'list',
+  {
+    includeInactive: true
+  }
+]
+
+const LESSON_PLAN_STUDENTS_QUERY_KEY = [
+  'lesson-plan-students',
+  'active'
+]
+
+const getLessonGroupStudentsQueryKey = (
+  groupId
+) => [
+  'lesson-groups',
+  'students',
+  String(groupId || '')
+]
+
 function Schedule({
   lessonPlans = [],
   setLessonPlans,
   students = [],
   teachers = [],
-  packages = []
+  packages = [],
+  scheduleLoading = false
 }) {
+  const queryClient = useQueryClient()
+
   const days = [
     'Pazartesi',
     'Salı',
@@ -63,6 +98,11 @@ function Schedule({
   }
 
   const emptyLessonForm = {
+    lessonType: 'individual',
+    groupId: '',
+    groupName: '',
+    capacity: '6',
+    participants: [],
     studentId: '',
     studentName: '',
     packageId: '',
@@ -82,12 +122,66 @@ function Schedule({
   const [selectedStudentFilter, setSelectedStudentFilter] = useState('all')
   const [studentSearch, setStudentSearch] = useState('')
   const [showStudentSuggestions, setShowStudentSuggestions] = useState(false)
+  const [lessonStudentSearch, setLessonStudentSearch] = useState('')
+  const [showLessonStudentSuggestions, setShowLessonStudentSuggestions] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [expandedCells, setExpandedCells] = useState({})
   const [isSavingLesson, setIsSavingLesson] = useState(false)
   const [deletingLessonId, setDeletingLessonId] = useState(null)
 
+  /*
+   * Program ekranından çıkıp geri dönüldüğünde grup/katılımcı
+   * verilerini yeniden boş loading durumuna düşürme. Son gerçek veri
+   * TanStack Query cache'inden anında gösterilir; stale olduğunda
+   * arka planda sessizce güncellenir.
+   */
+  const lessonPlanStudentsQuery = useQuery({
+    queryKey:
+      LESSON_PLAN_STUDENTS_QUERY_KEY,
+    queryFn:
+      getLessonPlanStudents
+  })
+
+  const lessonPlanStudents =
+    lessonPlanStudentsQuery.data ?? []
+
+  const groupLinksLoading =
+    lessonPlanStudentsQuery.isPending &&
+    lessonPlanStudentsQuery.data ===
+      undefined
+
+  /*
+   * Ders Grupları sayfasıyla aynı query key kullanılır. Böylece orada
+   * eklenen/pasife alınan gruplar Program ekranına geçildiğinde aynı
+   * cache üzerinden görülebilir.
+   */
+  const lessonGroupsQuery = useQuery({
+    queryKey:
+      LESSON_GROUPS_QUERY_KEY,
+    queryFn: () =>
+      getLessonGroups({
+        includeInactive: true
+      })
+  })
+
+  const lessonGroups =
+    (
+      lessonGroupsQuery.data ?? []
+    ).filter(
+      (group) =>
+        group.isActive !== false
+    )
+
+  const lessonGroupsLoading =
+    lessonGroupsQuery.isPending &&
+    lessonGroupsQuery.data ===
+      undefined
+
+  const [selectedGroupLoading, setSelectedGroupLoading] =
+    useState(false)
+
   const studentSearchRef = useRef(null)
+  const lessonStudentSearchRef = useRef(null)
 
   const activeTeachers = teachers.filter(
     (teacher) =>
@@ -143,17 +237,31 @@ function Schedule({
     normalizeSearchText(
       [
         getStudentNameFromRecord(student),
-        student?.phone,
-        student?.motherPhone,
-        student?.fatherPhone,
-        student?.tcNo,
-        student?.email
+        student?.tcNo
       ]
         .filter(Boolean)
         .join(' ')
     )
 
   const normalizedStudentSearch = normalizeSearchText(studentSearch)
+  const normalizedLessonStudentSearch =
+    normalizeSearchText(lessonStudentSearch)
+
+  const lessonStudentSuggestions = activeStudents
+    .filter((student) => {
+      if (!normalizedLessonStudentSearch) return false
+
+      return getStudentSearchValue(student).includes(
+        normalizedLessonStudentSearch
+      )
+    })
+    .sort((firstStudent, secondStudent) =>
+      getStudentNameFromRecord(firstStudent).localeCompare(
+        getStudentNameFromRecord(secondStudent),
+        'tr'
+      )
+    )
+    .slice(0, 8)
 
   // Yeni ders eklerken yalnızca aktif öğrenciler kullanılır.
   // Ancak program filtresinde geçmiş/arsivli öğrencilerin dersleri de
@@ -188,12 +296,20 @@ function Schedule({
       ) {
         setShowStudentSuggestions(false)
       }
+
+      if (
+        lessonStudentSearchRef.current &&
+        !lessonStudentSearchRef.current.contains(target)
+      ) {
+        setShowLessonStudentSuggestions(false)
+      }
     }
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setOpenMenuId(null)
         setShowStudentSuggestions(false)
+        setShowLessonStudentSuggestions(false)
       }
     }
 
@@ -235,6 +351,10 @@ function Schedule({
         )
 
         return {
+          studentPackageId:
+            item.studentPackageId ||
+            item.id ||
+            '',
           packageId: item.packageId ?? packageDetail?.id ?? '',
           packageName:
             item.packageName ||
@@ -284,6 +404,10 @@ function Schedule({
 
       return [
         {
+          studentPackageId:
+            student.studentPackageId ||
+            student.packageEnrollmentId ||
+            '',
           packageId: student.packageId,
           packageName:
             student.packageName ||
@@ -328,6 +452,79 @@ function Schedule({
       )
     : null
 
+  const isGroupMode =
+    lessonForm.lessonType === 'group'
+
+  const getParticipantLinksForLesson = (
+    lessonId
+  ) =>
+    lessonPlanStudents.filter(
+      (link) =>
+        areIdsEqual(
+          link.lessonPlanId,
+          lessonId
+        ) &&
+        link.isActive !== false
+    )
+
+  const getLessonStudentIds = (lesson) => {
+    if (lesson.isGroupLesson) {
+      const linkedIds =
+        getParticipantLinksForLesson(
+          lesson.id
+        ).map(
+          (link) => link.studentId
+        )
+
+      if (linkedIds.length > 0) {
+        return linkedIds
+      }
+    }
+
+    return lesson.studentId
+      ? [lesson.studentId]
+      : []
+  }
+
+  const getGroupParticipantNames = (
+    lesson
+  ) =>
+    getLessonStudentIds(lesson)
+      .map((studentId) => {
+        const student = students.find(
+          (item) =>
+            areIdsEqual(
+              item.id,
+              studentId
+            )
+        )
+
+        return getStudentNameFromRecord(
+          student
+        )
+      })
+      .filter(Boolean)
+
+  const getLessonDisplayStudent = (
+    lesson
+  ) => {
+    if (!lesson.isGroupLesson) {
+      return getLessonStudentName(
+        lesson
+      )
+    }
+
+    const names =
+      getGroupParticipantNames(
+        lesson
+      )
+
+    return names.length > 0
+      ? `${lesson.groupName || 'Grup Dersi'} · ${names.length} öğrenci`
+      : lesson.groupName ||
+        'Grup Dersi'
+  }
+
   const sortedLessonPlans = [...lessonPlans].sort((a, b) => {
     const dayDifference =
       (dayOrder[a.day] ?? 99) - (dayOrder[b.day] ?? 99)
@@ -343,18 +540,46 @@ function Schedule({
       String(lesson.teacherId || '') === String(teacherFilter) ||
       getLessonTeacherName(lesson) === teacherFilter
 
-    const lessonStudent = students.find(
-      (student) => String(student.id) === String(lesson.studentId)
-    )
+    const lessonStudentIds =
+      getLessonStudentIds(lesson)
+
+    const lessonStudents =
+      lessonStudentIds
+        .map((studentId) =>
+          students.find(
+            (student) =>
+              areIdsEqual(
+                student.id,
+                studentId
+              )
+          )
+        )
+        .filter(Boolean)
+
+    const groupSearchValue =
+      normalizeSearchText(
+        lessonStudents
+          .map((student) =>
+            getStudentSearchValue(
+              student
+            )
+          )
+          .join(' ')
+      )
 
     const studentMatches =
       selectedStudentFilter !== 'all'
-        ? String(lesson.studentId) === String(selectedStudentFilter)
+        ? lessonStudentIds.some(
+            (studentId) =>
+              areIdsEqual(
+                studentId,
+                selectedStudentFilter
+              )
+          )
         : !normalizedStudentSearch ||
-          getStudentSearchValue({
-            ...lessonStudent,
-            fullName: getLessonStudentName(lesson)
-          }).includes(normalizedStudentSearch)
+          groupSearchValue.includes(
+            normalizedStudentSearch
+          )
 
     return teacherMatches && studentMatches
   })
@@ -377,14 +602,31 @@ function Schedule({
     }))
   }
 
-  const handleStudentSelect = (event) => {
-    const selectedStudentId = event.target.value
+  const clearLessonStudentSelection = () => {
+    setLessonStudentSearch('')
+    setShowLessonStudentSuggestions(false)
 
-    const student = students.find(
-      (item) => String(item.id) === String(selectedStudentId)
-    )
+    setLessonForm((currentForm) => ({
+      ...currentForm,
+      studentId: '',
+      studentName: '',
+      packageId: '',
+      packageName: '',
+      instrument: '',
+      duration: '',
+      lessonCount: '',
+      totalPrice: '',
+      teacherId: '',
+      teacher: '',
+      time: ''
+    }))
+  }
 
-    if (!student) {
+  const handleLessonStudentSearchChange = (event) => {
+    setLessonStudentSearch(event.target.value)
+    setShowLessonStudentSuggestions(true)
+
+    if (lessonForm.studentId) {
       setLessonForm((currentForm) => ({
         ...currentForm,
         studentId: '',
@@ -399,11 +641,22 @@ function Schedule({
         teacher: '',
         time: ''
       }))
+    }
+  }
+
+  const selectLessonStudent = (student) => {
+    if (!student) {
+      clearLessonStudentSelection()
       return
     }
 
     const studentPackages = getStudentPackages(student)
     const firstStudentPackage = studentPackages[0]
+
+    setLessonStudentSearch(
+      getStudentNameFromRecord(student)
+    )
+    setShowLessonStudentSuggestions(false)
 
     setLessonForm((currentForm) => ({
       ...currentForm,
@@ -458,6 +711,134 @@ function Schedule({
     }))
   }
 
+  const handleLessonTypeChange = (
+    event
+  ) => {
+    const lessonType =
+      event.target.value
+
+    setLessonForm({
+      ...emptyLessonForm,
+      lessonType,
+      day: lessonForm.day
+    })
+    setLessonStudentSearch('')
+    setShowLessonStudentSuggestions(false)
+  }
+
+  const handleSavedGroupSelect = async (
+    event
+  ) => {
+    const groupId =
+      event.target.value
+
+    if (!groupId) {
+      setLessonForm((currentForm) => ({
+        ...emptyLessonForm,
+        lessonType: 'group',
+        day: currentForm.day
+      }))
+      return
+    }
+
+    const selectedGroup =
+      lessonGroups.find(
+        (group) =>
+          areIdsEqual(
+            group.id,
+            groupId
+          )
+      )
+
+    if (!selectedGroup) {
+      return
+    }
+
+    setSelectedGroupLoading(true)
+
+    try {
+      const memberships =
+        await queryClient.fetchQuery({
+          queryKey:
+            getLessonGroupStudentsQueryKey(
+              selectedGroup.id
+            ),
+          queryFn: () =>
+            getLessonGroupStudents(
+              selectedGroup.id
+            ),
+          staleTime: 30_000
+        })
+
+      if (memberships.length < 2) {
+        alert(
+          'Bu grupta ders planlamak için en az iki aktif öğrenci bulunmalıdır.'
+        )
+      }
+
+      const participants =
+        memberships.map(
+          (membership) => ({
+            studentId:
+              membership.studentId,
+            studentName:
+              membership.studentName,
+            packageId:
+              membership.packageId,
+            packageName:
+              membership.packageName,
+            studentPackageId:
+              membership.studentPackageId,
+            instrument:
+              membership.specialtyName ||
+              selectedGroup.specialtyName,
+            duration:
+              `${selectedGroup.defaultDurationMinutes} dk`
+          })
+        )
+
+      setLessonForm((currentForm) => ({
+        ...currentForm,
+        groupId:
+          selectedGroup.id,
+        groupName:
+          selectedGroup.name,
+        capacity:
+          String(
+            selectedGroup.capacity
+          ),
+        participants,
+        teacherId:
+          selectedGroup.defaultTeacherId ||
+          '',
+        teacher:
+          selectedGroup.defaultTeacherName ||
+          '',
+        duration:
+          `${selectedGroup.defaultDurationMinutes} dk`,
+        instrument:
+          selectedGroup.specialtyName ||
+          '',
+        packageName:
+          selectedGroup.name,
+        time: ''
+      }))
+    } catch (error) {
+      console.error(
+        'Grup öğrencileri alınamadı:',
+        error
+      )
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Grup öğrencileri alınamadı.'
+      )
+    } finally {
+      setSelectedGroupLoading(false)
+    }
+  }
+
   const selectTimeSlot = (time) => {
     setLessonForm((currentForm) => ({
       ...currentForm,
@@ -466,45 +847,90 @@ function Schedule({
   }
 
   const getBlockedLesson = (time) => {
-    const teacherConflict = lessonForm.teacherId
-      ? lessonPlans.find(
-          (lesson) =>
-            lesson.day === lessonForm.day &&
-            lesson.time === time &&
-            areIdsEqual(
-              lesson.teacherId,
-              lessonForm.teacherId
-            ) &&
-            isActiveLesson(lesson)
-        )
-      : null
+    const teacherId =
+      isGroupMode
+        ? lessonForm.teacherId
+        : lessonForm.teacherId
+
+    const selectedStudentIds =
+      isGroupMode
+        ? lessonForm.participants.map(
+            (participant) =>
+              participant.studentId
+          )
+        : lessonForm.studentId
+          ? [lessonForm.studentId]
+          : []
+
+    const teacherConflict =
+      teacherId
+        ? lessonPlans.find(
+            (lesson) =>
+              lesson.day ===
+                lessonForm.day &&
+              lesson.time === time &&
+              areIdsEqual(
+                lesson.teacherId,
+                teacherId
+              ) &&
+              isActiveLesson(lesson)
+          )
+        : null
 
     if (teacherConflict) {
       return {
-        message: `Öğretmen dolu · ${getLessonStudentName(
-          teacherConflict
-        )} / ${getLessonInstrument(teacherConflict)}`
+        message:
+          teacherConflict.isGroupLesson
+            ? `Öğretmen dolu · ${
+                teacherConflict.groupName ||
+                'Grup dersi'
+              }`
+            : `Öğretmen dolu · ${getLessonStudentName(
+                teacherConflict
+              )} / ${getLessonInstrument(
+                teacherConflict
+              )}`
       }
     }
 
-    const studentConflict = lessonForm.studentId
-      ? lessonPlans.find(
-          (lesson) =>
-            lesson.day === lessonForm.day &&
-            lesson.time === time &&
-            areIdsEqual(
-              lesson.studentId,
-              lessonForm.studentId
-            ) &&
-            isActiveLesson(lesson)
-        )
-      : null
+    const studentConflict =
+      selectedStudentIds.length > 0
+        ? lessonPlans.find(
+            (lesson) =>
+              lesson.day ===
+                lessonForm.day &&
+              lesson.time === time &&
+              isActiveLesson(
+                lesson
+              ) &&
+              getLessonStudentIds(
+                lesson
+              ).some(
+                (studentId) =>
+                  selectedStudentIds.some(
+                    (selectedId) =>
+                      areIdsEqual(
+                        studentId,
+                        selectedId
+                      )
+                  )
+              )
+          )
+        : null
 
     if (studentConflict) {
       return {
-        message: `Öğrenci dolu · ${getLessonTeacherName(
-          studentConflict
-        )} / ${getLessonInstrument(studentConflict)}`
+        message:
+          studentConflict.isGroupLesson
+            ? `Öğrenci dolu · ${
+                studentConflict.groupName ||
+                'Grup dersi'
+              }`
+            : `Öğrenci dolu · ${getLessonTeacherName(
+                studentConflict
+              )} / ${getLessonInstrument(
+                studentConflict
+              )}`
       }
     }
 
@@ -554,28 +980,52 @@ function Schedule({
     }))
   }
 
-  const handleLessonSubmit = async (event) => {
+  const handleLessonSubmit = async (
+    event
+  ) => {
     event.preventDefault()
 
     if (isSavingLesson) {
       return
     }
 
-    if (!lessonForm.studentId) {
-      alert('Öğrenci seçiniz.')
-      return
-    }
+    if (isGroupMode) {
+      if (!lessonForm.groupId) {
+        alert('Kayıtlı bir ders grubu seçiniz.')
+        return
+      }
 
-    if (!lessonForm.packageId) {
-      alert('Paket seçiniz.')
-      return
-    }
+      if (!lessonForm.teacherId) {
+        alert('Öğretmen seçiniz.')
+        return
+      }
 
-    if (!lessonForm.teacherId) {
-      alert(
-        'Bu pakete atanmış öğretmen bulunamadı. Öğrenci detayından paket öğretmenini seçiniz.'
-      )
-      return
+      if (
+        lessonForm.participants.length <
+        2
+      ) {
+        alert(
+          'Seçilen grupta en az iki aktif öğrenci bulunmalıdır.'
+        )
+        return
+      }
+    } else {
+      if (!lessonForm.studentId) {
+        alert('Öğrenci seçiniz.')
+        return
+      }
+
+      if (!lessonForm.packageId) {
+        alert('Paket seçiniz.')
+        return
+      }
+
+      if (!lessonForm.teacherId) {
+        alert(
+          'Bu pakete atanmış öğretmen bulunamadı. Öğrenci detayından paket öğretmenini seçiniz.'
+        )
+        return
+      }
     }
 
     if (!lessonForm.day.trim()) {
@@ -588,69 +1038,149 @@ function Schedule({
       return
     }
 
-    const hasTeacherConflict = lessonPlans.some(
-      (lesson) =>
-        lesson.day === lessonForm.day &&
-        lesson.time === lessonForm.time &&
-        areIdsEqual(
-          lesson.teacherId,
-          lessonForm.teacherId
-        ) &&
-        isActiveLesson(lesson)
-    )
-
-    if (hasTeacherConflict) {
-      alert(
-        'Bu öğretmenin seçilen gün ve saatte başka bir dersi bulunmaktadır.'
+    const blockedLesson =
+      getBlockedLesson(
+        lessonForm.time
       )
-      return
-    }
 
-    const hasStudentConflict = lessonPlans.some(
-      (lesson) =>
-        lesson.day === lessonForm.day &&
-        lesson.time === lessonForm.time &&
-        areIdsEqual(
-          lesson.studentId,
-          lessonForm.studentId
-        ) &&
-        isActiveLesson(lesson)
-    )
-
-    if (hasStudentConflict) {
-      alert(
-        'Bu öğrencinin seçilen gün ve saatte başka bir dersi bulunmaktadır.'
-      )
+    if (blockedLesson) {
+      alert(blockedLesson.message)
       return
     }
 
     setIsSavingLesson(true)
 
     try {
-      const savedLesson =
-        await createLessonPlan({
-          studentId: lessonForm.studentId,
-          packageId: lessonForm.packageId,
-          teacherId: lessonForm.teacherId,
-          day: lessonForm.day,
-          time: lessonForm.time,
-          duration:
-            lessonForm.duration || '60 dk',
-          status: 'Planlandı',
-          note: '',
-          isMakeup: false,
-          relatedLessonId: null
-        })
+      let savedLesson
 
-      setLessonPlans((currentLessons) => [
-        ...currentLessons,
-        savedLesson
-      ])
+      if (isGroupMode) {
+        savedLesson =
+          await createGroupLessonPlan({
+            groupId:
+              lessonForm.groupId,
+            groupName:
+              lessonForm.groupName,
+            capacity:
+              Number(
+                lessonForm.capacity
+              ),
+            teacherId:
+              lessonForm.teacherId,
+            day:
+              lessonForm.day,
+            time:
+              lessonForm.time,
+            duration:
+              lessonForm.duration ||
+              '60 dk',
+            status:
+              'Planlandı',
+            note: '',
+            participants:
+              lessonForm.participants
+          })
+
+        savedLesson = {
+          ...savedLesson,
+          teacher:
+            getTeacherNameFromRecord(
+              teachers.find(
+                (teacher) =>
+                  areIdsEqual(
+                    teacher.id,
+                    lessonForm.teacherId
+                  )
+              )
+            ),
+          teacherName:
+            getTeacherNameFromRecord(
+              teachers.find(
+                (teacher) =>
+                  areIdsEqual(
+                    teacher.id,
+                    lessonForm.teacherId
+                  )
+              )
+            ),
+          participants:
+            lessonForm.participants,
+          studentIds:
+            lessonForm.participants.map(
+              (participant) =>
+                participant.studentId
+            ),
+          studentCount:
+            lessonForm.participants.length,
+          packageName:
+            lessonForm.participants[0]
+              ?.packageName ||
+            '',
+          instrument:
+            lessonForm.participants[0]
+              ?.instrument ||
+            ''
+        }
+
+        queryClient.setQueryData(
+          LESSON_PLAN_STUDENTS_QUERY_KEY,
+          (currentLinks = []) => [
+            ...currentLinks,
+            ...savedLesson.participants.map(
+              (participant) => ({
+                id:
+                  participant.id ||
+                  `${savedLesson.id}-${participant.studentId}`,
+                lessonPlanId:
+                  savedLesson.id,
+                studentId:
+                  participant.studentId,
+                studentPackageId:
+                  participant.studentPackageId,
+                isActive: true
+              })
+            )
+          ]
+        )
+      } else {
+        savedLesson =
+          await createLessonPlan({
+            studentId:
+              lessonForm.studentId,
+            packageId:
+              lessonForm.packageId,
+            teacherId:
+              lessonForm.teacherId,
+            day:
+              lessonForm.day,
+            time:
+              lessonForm.time,
+            duration:
+              lessonForm.duration ||
+              '60 dk',
+            status:
+              'Planlandı',
+            note: '',
+            isMakeup: false,
+            relatedLessonId: null
+          })
+      }
+
+      setLessonPlans(
+        (currentLessons) => [
+          ...currentLessons,
+          savedLesson
+        ]
+      )
 
       setLessonForm({
         ...emptyLessonForm,
-        day: lessonForm.day
+        lessonType:
+          lessonForm.lessonType,
+        day:
+          lessonForm.day
       })
+      setLessonStudentSearch('')
+      setShowLessonStudentSuggestions(false)
     } catch (error) {
       console.error(
         'Ders planı kaydetme hatası:',
@@ -695,6 +1225,18 @@ function Schedule({
         )
       )
 
+      queryClient.setQueryData(
+        LESSON_PLAN_STUDENTS_QUERY_KEY,
+        (currentLinks = []) =>
+          currentLinks.filter(
+            (link) =>
+              !areIdsEqual(
+                link.lessonPlanId,
+                lessonId
+              )
+          )
+      )
+
       setOpenMenuId(null)
     } catch (error) {
       console.error(
@@ -719,12 +1261,15 @@ function Schedule({
           <span className="page-badge">Ders Programı</span>
           <h1>Ders Programı Yönetimi</h1>
           <p>
-            Öğrenciye kayıtlı paket ve paket öğretmenine göre haftalık ders planı oluşturun.
+            Bireysel öğrenciler veya kayıtlı ders grupları için haftalık program oluşturun.
           </p>
         </div>
 
         <button className="manage-button" type="button">
-          {lessonPlans.length} ders
+          {scheduleLoading ||
+          groupLinksLoading
+            ? '— ders'
+            : `${lessonPlans.length} ders`}
         </button>
       </section>
 
@@ -737,105 +1282,359 @@ function Schedule({
             <div>
               <span>Yeni Kayıt</span>
               <h2>Yeni Ders Ekle</h2>
-              <p>Öğrenci ve paket seçerek uygun ders saatini belirleyin.</p>
+              <p>Bireysel öğrenci veya kayıtlı grup seçerek uygun ders saatini belirleyin.</p>
             </div>
           </div>
 
           <div className="form-grid schedule-form-grid">
-            <div className="form-group">
-              <label>Öğrenci</label>
+            <div className="form-group full-width">
+              <label>Ders Türü</label>
               <select
-                name="studentId"
-                value={lessonForm.studentId}
-                onChange={handleStudentSelect}
+                value={lessonForm.lessonType}
+                onChange={handleLessonTypeChange}
               >
-                <option value="">Öğrenci seçiniz</option>
-                {activeStudents.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {getStudentNameFromRecord(student)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Paket</label>
-              <select
-                name="packageId"
-                value={lessonForm.packageId}
-                onChange={handlePackageSelect}
-                disabled={!lessonForm.studentId}
-              >
-                <option value="">
-                  {lessonForm.studentId
-                    ? 'Paket seçiniz'
-                    : 'Önce öğrenci seçiniz'}
+                <option value="individual">
+                  Bireysel Ders
                 </option>
-
-                {studentPackageOptions.map((item) => (
-                  <option key={item.packageId} value={item.packageId}>
-                    {item.packageName}
-                  </option>
-                ))}
+                <option value="group">
+                  Grup Dersi
+                </option>
               </select>
             </div>
 
-            {selectedPackageInfo && (
-              <div className="selected-package-box full-width">
-                <div>
-                  <span>Seçilen Paket</span>
-                  <strong>{selectedPackageInfo.packageName}</strong>
+            {isGroupMode ? (
+              <>
+                <div className="form-group full-width">
+                  <label>Kayıtlı Ders Grubu</label>
+
+                  <select
+                    value={lessonForm.groupId}
+                    onChange={handleSavedGroupSelect}
+                    disabled={
+                      lessonGroupsLoading ||
+                      selectedGroupLoading
+                    }
+                  >
+                    <option value="">
+                      {lessonGroupsLoading
+                        ? 'Gruplar yükleniyor...'
+                        : 'Grup seçiniz'}
+                    </option>
+
+                    {lessonGroups.map(
+                      (group) => (
+                        <option
+                          key={group.id}
+                          value={group.id}
+                        >
+                          {group.name}
+                          {' · '}
+                          {group.specialtyName}
+                        </option>
+                      )
+                    )}
+                  </select>
                 </div>
 
-                <div className="package-mini-grid">
-                  <p>
-                    <b>Ders:</b> {selectedPackageInfo.instrument || '-'}
-                  </p>
-                  <p>
-                    <b>Öğretmen:</b> {selectedPackageInfo.teacher || '-'}
-                  </p>
-                  <p>
-                    <b>Süre:</b> {selectedPackageInfo.lessonDuration || '-'}
-                  </p>
-                  <p>
-                    <b>Ders Adedi:</b> {selectedPackageInfo.lessonCount || '-'}
-                  </p>
-                  <p>
-                    <b>Ücret:</b> ₺{selectedPackageInfo.monthlyFee || 0}
-                  </p>
+                {lessonForm.groupId && (
+                  <div className="selected-package-box full-width">
+                    <div>
+                      <span>Seçilen Grup</span>
+                      <strong>
+                        {lessonForm.groupName}
+                      </strong>
+                    </div>
+
+                    <div className="package-mini-grid">
+                      <p>
+                        <b>Branş:</b>{' '}
+                        {lessonForm.instrument ||
+                          '-'}
+                      </p>
+
+                      <p>
+                        <b>Öğrenci:</b>{' '}
+                        {lessonForm.participants.length}
+                      </p>
+
+                      <p>
+                        <b>Kontenjan:</b>{' '}
+                        {lessonForm.capacity}
+                      </p>
+
+                      <p>
+                        <b>Süre:</b>{' '}
+                        {lessonForm.duration ||
+                          '-'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label>Öğretmen</label>
+
+                  <select
+                    name="teacherId"
+                    value={lessonForm.teacherId}
+                    onChange={handleLessonChange}
+                    disabled={!lessonForm.groupId}
+                  >
+                    <option value="">
+                      {!lessonForm.groupId
+                        ? 'Önce grup seçiniz'
+                        : 'Öğretmen seçiniz'}
+                    </option>
+
+                    {activeTeachers.map(
+                      (teacher) => (
+                        <option
+                          key={teacher.id}
+                          value={teacher.id}
+                        >
+                          {getTeacherNameFromRecord(
+                            teacher
+                          )}
+                        </option>
+                      )
+                    )}
+                  </select>
                 </div>
-              </div>
+
+                <div className="form-group">
+                  <label>Gün</label>
+
+                  <select
+                    name="day"
+                    value={lessonForm.day}
+                    onChange={handleLessonChange}
+                  >
+                    {days.map((day) => (
+                      <option
+                        key={day}
+                        value={day}
+                      >
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group full-width">
+                  <label>Seçilen Saat</label>
+
+                  <input
+                    value={lessonForm.time}
+                    readOnly
+                    placeholder="Saat seçiniz"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  className="form-group schedule-student-filter-group"
+                  ref={lessonStudentSearchRef}
+                >
+                  <label htmlFor="lesson-student-search">
+                    Öğrenci
+                  </label>
+
+                  <div className="schedule-student-search-control">
+                    <span
+                      className="schedule-student-search-icon"
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-4-4" />
+                      </svg>
+                    </span>
+
+                    <input
+                      id="lesson-student-search"
+                      type="text"
+                      value={lessonStudentSearch}
+                      onChange={handleLessonStudentSearchChange}
+                      onFocus={() =>
+                        setShowLessonStudentSuggestions(true)
+                      }
+                      placeholder="Ad veya TC yazarak ara"
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={showLessonStudentSuggestions}
+                      aria-controls="lesson-student-results"
+                    />
+
+                    {lessonStudentSearch && (
+                      <button
+                        type="button"
+                        className="schedule-student-search-clear"
+                        onClick={clearLessonStudentSelection}
+                        aria-label="Seçili öğrenciyi temizle"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {showLessonStudentSuggestions &&
+                    normalizedLessonStudentSearch && (
+                    <div
+                      id="lesson-student-results"
+                      className="schedule-student-search-results"
+                      role="listbox"
+                    >
+                      {lessonStudentSuggestions.length > 0 ? (
+                        lessonStudentSuggestions.map((student) => (
+                          <button
+                            type="button"
+                            className={`schedule-student-search-result ${
+                              String(lessonForm.studentId) ===
+                              String(student.id)
+                                ? 'selected'
+                                : ''
+                            }`}
+                            key={student.id}
+                            onClick={() =>
+                              selectLessonStudent(student)
+                            }
+                            role="option"
+                            aria-selected={
+                              String(lessonForm.studentId) ===
+                              String(student.id)
+                            }
+                          >
+                            <span className="schedule-student-result-avatar">
+                              {getStudentNameFromRecord(student)
+                                .charAt(0)
+                                .toLocaleUpperCase('tr-TR') || '?'}
+                            </span>
+
+                            <span className="schedule-student-result-content">
+                              <strong>
+                                {getStudentNameFromRecord(student)}
+                              </strong>
+                              <small>
+                                {student.tcNo
+                                  ? `TC: ${student.tcNo}`
+                                  : 'TC bilgisi yok'}
+                              </small>
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="schedule-student-search-empty">
+                          Eşleşen aktif öğrenci bulunamadı.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label>Paket</label>
+                  <select
+                    name="packageId"
+                    value={lessonForm.packageId}
+                    onChange={handlePackageSelect}
+                    disabled={!lessonForm.studentId}
+                  >
+                    <option value="">
+                      {lessonForm.studentId
+                        ? 'Paket seçiniz'
+                        : 'Önce öğrenci seçiniz'}
+                    </option>
+
+                    {studentPackageOptions.map(
+                      (item) => (
+                        <option
+                          key={item.packageId}
+                          value={item.packageId}
+                        >
+                          {item.packageName}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                {selectedPackageInfo && (
+                  <div className="selected-package-box full-width">
+                    <div>
+                      <span>Seçilen Paket</span>
+                      <strong>
+                        {selectedPackageInfo.packageName}
+                      </strong>
+                    </div>
+
+                    <div className="package-mini-grid">
+                      <p>
+                        <b>Ders:</b>{' '}
+                        {selectedPackageInfo.instrument ||
+                          '-'}
+                      </p>
+                      <p>
+                        <b>Öğretmen:</b>{' '}
+                        {selectedPackageInfo.teacher ||
+                          '-'}
+                      </p>
+                      <p>
+                        <b>Süre:</b>{' '}
+                        {selectedPackageInfo.lessonDuration ||
+                          '-'}
+                      </p>
+                      <p>
+                        <b>Ders Adedi:</b>{' '}
+                        {selectedPackageInfo.lessonCount ||
+                          '-'}
+                      </p>
+                      <p>
+                        <b>Ücret:</b>{' '}
+                        ₺{selectedPackageInfo.monthlyFee ||
+                          0}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label>Gün</label>
+                  <select
+                    name="day"
+                    value={lessonForm.day}
+                    onChange={handleLessonChange}
+                  >
+                    {days.map((day) => (
+                      <option
+                        key={day}
+                        value={day}
+                      >
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Seçilen Saat</label>
+                  <input
+                    value={lessonForm.time}
+                    readOnly
+                    placeholder="Saat seçiniz"
+                  />
+                </div>
+              </>
             )}
-
-            <div className="form-group">
-              <label>Gün</label>
-              <select
-                name="day"
-                value={lessonForm.day}
-                onChange={handleLessonChange}
-              >
-                {days.map((day) => (
-                  <option key={day} value={day}>
-                    {day}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Seçilen Saat</label>
-              <input
-                value={lessonForm.time}
-                readOnly
-                placeholder="Saat seçiniz"
-              />
-            </div>
           </div>
 
           <button
             className="save-button schedule-save-button"
             type="submit"
-            disabled={isSavingLesson}
+            disabled={
+              isSavingLesson ||
+              scheduleLoading
+            }
           >
             {isSavingLesson
               ? 'Kaydediliyor...'
@@ -848,28 +1647,64 @@ function Schedule({
             <div>
               <h2>{lessonForm.day} Saat Durumu</h2>
               <p>
-                {lessonForm.studentName && lessonForm.teacher
-                  ? `${lessonForm.studentName} ve ${lessonForm.teacher} için uygun saatler`
-                  : 'Dolu saatleri görmek için öğrenci ve paket seçiniz.'}
+                {isGroupMode
+                  ? lessonForm.groupId &&
+                    lessonForm.teacherId &&
+                    lessonForm.participants.length >= 2
+                    ? `${lessonForm.groupName || 'Grup dersi'} için uygun saatler`
+                    : 'Dolu saatleri görmek için kayıtlı grup ve öğretmen seçiniz.'
+                  : lessonForm.studentName &&
+                      lessonForm.teacher
+                    ? `${lessonForm.studentName} ve ${lessonForm.teacher} için uygun saatler`
+                    : 'Dolu saatleri görmek için öğrenci ve paket seçiniz.'}
               </p>
             </div>
           </div>
 
-          {(lessonForm.studentName ||
-            lessonForm.teacher ||
-            selectedPackageInfo) && (
+          {(isGroupMode
+            ? lessonForm.groupName ||
+              lessonForm.teacherId ||
+              lessonForm.participants.length > 0
+            : lessonForm.studentName ||
+              lessonForm.teacher ||
+              selectedPackageInfo) && (
             <div className="selected-plan-summary">
               <span>Seçilen Plan Özeti</span>
 
               <div className="plan-summary-grid">
                 <p>
-                  <b>Öğrenci:</b> {lessonForm.studentName || '-'}
+                  <b>
+                    {isGroupMode
+                      ? 'Grup'
+                      : 'Öğrenci'}:
+                  </b>{' '}
+                  {isGroupMode
+                    ? lessonForm.groupName || '-'
+                    : lessonForm.studentName || '-'}
                 </p>
                 <p>
-                  <b>Öğretmen:</b> {lessonForm.teacher || '-'}
+                  <b>Öğretmen:</b>{' '}
+                  {isGroupMode
+                    ? getTeacherNameFromRecord(
+                        teachers.find(
+                          (teacher) =>
+                            areIdsEqual(
+                              teacher.id,
+                              lessonForm.teacherId
+                            )
+                        )
+                      ) || '-'
+                    : lessonForm.teacher || '-'}
                 </p>
                 <p>
-                  <b>Paket:</b> {lessonForm.packageName || '-'}
+                  <b>
+                    {isGroupMode
+                      ? 'Öğrenci Sayısı'
+                      : 'Paket'}:
+                  </b>{' '}
+                  {isGroupMode
+                    ? lessonForm.participants.length
+                    : lessonForm.packageName || '-'}
                 </p>
                 <p>
                   <b>Gün:</b> {lessonForm.day}
@@ -891,22 +1726,56 @@ function Schedule({
                     blockedLesson ? 'occupied' : ''
                   } ${isSelected ? 'selected' : ''}`}
                   onClick={() => {
-                    if (!lessonForm.studentId) {
-                      alert('Saat seçmeden önce öğrenci seçiniz.')
-                      return
+                    if (isGroupMode) {
+                      if (!lessonForm.groupId) {
+                        alert(
+                          'Saat seçmeden önce kayıtlı bir grup seçiniz.'
+                        )
+                        return
+                      }
+
+                      if (!lessonForm.teacherId) {
+                        alert(
+                          'Saat seçmeden önce öğretmen seçiniz.'
+                        )
+                        return
+                      }
+
+                      if (
+                        lessonForm.participants.length <
+                        2
+                      ) {
+                        alert(
+                          'Seçilen grupta en az iki aktif öğrenci bulunmalıdır.'
+                        )
+                        return
+                      }
+                    } else {
+                      if (!lessonForm.studentId) {
+                        alert(
+                          'Saat seçmeden önce öğrenci seçiniz.'
+                        )
+                        return
+                      }
+
+                      if (!lessonForm.packageId) {
+                        alert(
+                          'Saat seçmeden önce paket seçiniz.'
+                        )
+                        return
+                      }
+
+                      if (!lessonForm.teacher) {
+                        alert(
+                          'Bu pakete atanmış öğretmen bulunamadı.'
+                        )
+                        return
+                      }
                     }
 
-                    if (!lessonForm.packageId) {
-                      alert('Saat seçmeden önce paket seçiniz.')
-                      return
+                    if (!blockedLesson) {
+                      selectTimeSlot(time)
                     }
-
-                    if (!lessonForm.teacher) {
-                      alert('Bu pakete atanmış öğretmen bulunamadı.')
-                      return
-                    }
-
-                    if (!blockedLesson) selectTimeSlot(time)
                   }}
                 >
                   <strong>{time}</strong>
@@ -955,7 +1824,7 @@ function Schedule({
                 value={studentSearch}
                 onChange={handleStudentSearchChange}
                 onFocus={() => setShowStudentSuggestions(true)}
-                placeholder="Ad, telefon veya TC ile ara"
+                placeholder="Ad veya TC ile ara"
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={showStudentSuggestions}
@@ -1005,9 +1874,9 @@ function Schedule({
                       <span className="schedule-student-result-content">
                         <strong>{getStudentNameFromRecord(student)}</strong>
                         <small>
-                          {student.phone ||
-                            student.tcNo ||
-                            'İletişim bilgisi yok'}
+                          {student.tcNo
+                            ? `TC: ${student.tcNo}`
+                            : 'TC bilgisi yok'}
                         </small>
                       </span>
                     </button>
@@ -1044,7 +1913,9 @@ function Schedule({
           </div>
 
           <button className="lesson-count" type="button">
-            {filteredLessonPlans.length} ders
+            {scheduleLoading
+              ? '— ders'
+              : `${filteredLessonPlans.length} ders`}
           </button>
         </div>
 
@@ -1060,33 +1931,43 @@ function Schedule({
             </thead>
 
             <tbody>
-              {timeSlots.map((time) => (
-                <tr key={time}>
-                  <td className="weekly-time-cell schedule-hour">{time}</td>
+              {scheduleLoading ? (
+                <tr>
+                  <td
+                    colSpan={days.length + 1}
+                    className="empty-table"
+                  >
+                    Ders programı yükleniyor...
+                  </td>
+                </tr>
+              ) : (
+                timeSlots.map((time) => (
+                  <tr key={time}>
+                    <td className="weekly-time-cell schedule-hour">{time}</td>
 
-                  {days.map((day) => {
-                    const cellKey = `${day}-${time}`
-                    const cellLessons = getLessonsForCell(day, time)
-                    const isExpanded = Boolean(expandedCells[cellKey])
-                    const visibleLessons = isExpanded
-                      ? cellLessons
-                      : cellLessons.slice(0, 2)
-                    const hiddenLessonCount = Math.max(
-                      0,
-                      cellLessons.length - 2
-                    )
+                    {days.map((day) => {
+                      const cellKey = `${day}-${time}`
+                      const cellLessons = getLessonsForCell(day, time)
+                      const isExpanded = Boolean(expandedCells[cellKey])
+                      const visibleLessons = isExpanded
+                        ? cellLessons
+                        : cellLessons.slice(0, 2)
+                      const hiddenLessonCount = Math.max(
+                        0,
+                        cellLessons.length - 2
+                      )
 
-                    return (
-                      <td
-                        key={cellKey}
-                        className={
-                          cellLessons.length > 0
-                            ? 'schedule-cell-has-lessons'
-                            : ''
-                        }
-                      >
-                        {cellLessons.length > 0 ? (
-                          <div className="schedule-cell-stack">
+                      return (
+                        <td
+                          key={cellKey}
+                          className={
+                            cellLessons.length > 0
+                              ? 'schedule-cell-has-lessons'
+                              : ''
+                          }
+                        >
+                          {cellLessons.length > 0 ? (
+                            <div className="schedule-cell-stack">
                             {visibleLessons.map((lesson) => {
                               const compactStatus = getCompactLessonStatusLabel(
                                 lesson.status
@@ -1113,11 +1994,11 @@ function Schedule({
                                       </div>
 
                                       <span
-                                        title={`${getLessonStudentName(
+                                        title={`${getLessonDisplayStudent(
                                           lesson
                                         )} • ${getLessonInstrument(lesson)}`}
                                       >
-                                        {getLessonStudentName(lesson)}
+                                        {getLessonDisplayStudent(lesson)}
                                         <b>•</b>
                                         {getLessonInstrument(lesson)}
                                       </span>
@@ -1190,9 +2071,10 @@ function Schedule({
                         )}
                       </td>
                     )
-                  })}
-                </tr>
-              ))}
+                    })}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -1206,7 +2088,9 @@ function Schedule({
           </div>
 
           <button className="lesson-count" type="button">
-            {filteredLessonPlans.length} ders
+            {scheduleLoading
+              ? '— ders'
+              : `${filteredLessonPlans.length} ders`}
           </button>
         </div>
 
@@ -1225,7 +2109,16 @@ function Schedule({
             </thead>
 
             <tbody>
-              {filteredLessonPlans.length > 0 ? (
+              {scheduleLoading ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="empty-table"
+                  >
+                    Ders programı yükleniyor...
+                  </td>
+                </tr>
+              ) : filteredLessonPlans.length > 0 ? (
                 filteredLessonPlans.map((lesson) => (
                   <tr key={lesson.id}>
                     <td>
@@ -1241,7 +2134,7 @@ function Schedule({
                     </td>
                     <td>
                       <span className="schedule-person-text">
-                        {getLessonStudentName(lesson)}
+                        {getLessonDisplayStudent(lesson)}
                       </span>
                     </td>
                     <td>

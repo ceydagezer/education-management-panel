@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import '../styles/dashboard.css'
 
 import {
   getDashboardSummary,
-  getDashboardReceivables
+  getDashboardReceivables,
+  getDashboardLessonHealth
 } from '../services/dashboardService'
+
+import {
+  getStudentPackageLessonUsage
+} from '../services/studentService'
 
 import {
   addYearsToDate,
@@ -16,125 +21,267 @@ import {
 
 import {
   getLessonStatusClass,
-  isActiveLesson,
-  isCompletedLesson,
   normalizeLessonStatus
 } from '../utils/lessonHelpers'
 
-import { normalizeStatusText as normalizeText } from '../utils/textHelpers'
+import {
+  getDashboardLessonPlanSnapshot
+} from '../services/lessonService'
+
+import {
+  prefetchFinanceOverview
+} from '../services/financeService'
+
+import {
+  normalizeStatusText as normalizeText
+} from '../utils/textHelpers'
 
 const UPCOMING_DAYS = 7
 const GRACE_DAYS = 3
 
+const EMPTY_DASHBOARD_SUMMARY = {
+  activeStudentCount: 0,
+  activeTeacherCount: 0,
+  monthlyStudentIncome: 0,
+  monthlyOtherIncome: 0,
+  monthlyIncome: 0,
+  totalIncome: 0,
+  totalInstitutionExpense: 0,
+  totalTeacherPaid: 0,
+  totalExpense: 0,
+  netCash: 0,
+  totalOutstanding: 0,
+  overdueCount: 0,
+  upcomingCount: 0,
+  teacherRemaining: 0,
+  todayLessonCount: 0,
+  completedLessonCount: 0
+}
+
+let dashboardViewCache = null
+
+function getCurrentDashboardCacheKey() {
+  const now = new Date()
+  const dayName = now.toLocaleDateString(
+    'tr-TR',
+    { weekday: 'long' }
+  )
+
+  return `${getTodayKey()}::${dayName}`
+}
+
+function getDashboardViewCache(cacheKey) {
+  if (
+    !dashboardViewCache ||
+    dashboardViewCache.key !== cacheKey
+  ) {
+    return null
+  }
+
+  return dashboardViewCache.data
+}
+
+function setDashboardViewCache(cacheKey, data) {
+  dashboardViewCache = {
+    key: cacheKey,
+    data,
+    updatedAt: Date.now()
+  }
+
+  return data
+}
+
 function Dashboard({
   students = [],
   teachers = [],
-  packages = [],
-  lessonPlans = [],
-  otherIncomes = [],
-  teacherPayments = [],
   onNavigate = () => {}
 }) {
+  const initialDashboardCache =
+    getDashboardViewCache(
+      getCurrentDashboardCacheKey()
+    )
+
   const [dashboardSummary, setDashboardSummary] =
-    useState({
-      activeStudentCount: 0,
-      activeTeacherCount: 0,
-      monthlyStudentIncome: 0,
-      monthlyOtherIncome: 0,
-      monthlyIncome: 0,
-      totalIncome: 0,
-      totalInstitutionExpense: 0,
-      totalTeacherPaid: 0,
-      totalExpense: 0,
-      netCash: 0,
-      totalOutstanding: 0,
-      overdueCount: 0,
-      upcomingCount: 0,
-      teacherRemaining: 0,
-      todayLessonCount: 0
-    })
+    useState(
+      () =>
+        initialDashboardCache?.summary ||
+        EMPTY_DASHBOARD_SUMMARY
+    )
 
-  const [receivableRecords, setReceivableRecords] =
-    useState([])
+  const [
+    receivableRecords,
+    setReceivableRecords
+  ] = useState(
+    () => initialDashboardCache?.receivables || []
+  )
 
-  const [dashboardLoading, setDashboardLoading] =
-    useState(true)
+  const [
+    packageLessonUsage,
+    setPackageLessonUsage
+  ] = useState(
+    () =>
+      initialDashboardCache?.packageLessonUsage || []
+  )
 
-  const [dashboardError, setDashboardError] =
-    useState('')
+
+  const [
+    dashboardLessonSnapshot,
+    setDashboardLessonSnapshot
+  ] = useState(
+    () =>
+      initialDashboardCache?.lessonSnapshot || {
+        todayLessons: [],
+        waitingMakeupCount: 0,
+        conflictCount: 0
+      }
+  )
+
+  const [
+    dashboardLoading,
+    setDashboardLoading
+  ] = useState(
+    () => !initialDashboardCache
+  )
+
+  const [
+    dashboardError,
+    setDashboardError
+  ] = useState('')
 
   const now = new Date()
   const todayKey = getTodayKey()
 
-  const currentMonthKey = todayKey.slice(0, 7)
-  const currentDayName = now.toLocaleDateString('tr-TR', {
-    weekday: 'long'
-  })
-  const formattedToday = now.toLocaleDateString('tr-TR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  })
+  const currentDayName =
+    now.toLocaleDateString('tr-TR', {
+      weekday: 'long'
+    })
+
+  const dashboardCacheKey =
+    `${todayKey}::${currentDayName}`
+
+  const formattedToday =
+    now.toLocaleDateString('tr-TR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    })
 
   useEffect(() => {
     let isMounted = true
 
-    const loadDashboardData = async () => {
-      setDashboardLoading(true)
-      setDashboardError('')
-
-      try {
-        const [
-          summaryResult,
-          receivableResult
-        ] = await Promise.all([
-          getDashboardSummary({
-            todayKey,
-            currentDayName,
-            upcomingDays:
-              UPCOMING_DAYS,
-            graceDays:
-              GRACE_DAYS
-          }),
-          getDashboardReceivables({
-            todayKey,
-            upcomingDays:
-              UPCOMING_DAYS,
-            graceDays:
-              GRACE_DAYS,
-            limit: 30
-          })
-        ])
-
-        if (!isMounted) {
-          return
-        }
-
-        setDashboardSummary(
-          summaryResult
-        )
-        setReceivableRecords(
-          receivableResult
-        )
-      } catch (error) {
-        console.error(
-          'Dashboard özetleri alınamadı:',
-          error
-        )
-
-        if (isMounted) {
-          setDashboardError(
-            error instanceof Error
-              ? error.message
-              : 'Dashboard özetleri alınamadı.'
+    const loadDashboardData =
+      async () => {
+        const cachedData =
+          getDashboardViewCache(
+            dashboardCacheKey
           )
-        }
-      } finally {
-        if (isMounted) {
+
+        if (cachedData) {
+          setDashboardSummary(cachedData.summary)
+          setReceivableRecords(cachedData.receivables)
+          setPackageLessonUsage(
+            cachedData.packageLessonUsage
+          )
+          setDashboardLessonSnapshot(
+            cachedData.lessonSnapshot
+          )
           setDashboardLoading(false)
+        } else {
+          setDashboardLoading(true)
+        }
+
+        setDashboardError('')
+
+        try {
+          const [
+            summaryResult,
+            receivableResult,
+            packageLessonUsageResult,
+            lessonSnapshotResult,
+            lessonHealthResult
+          ] = await Promise.all([
+            getDashboardSummary({
+              todayKey,
+              currentDayName,
+              upcomingDays:
+                UPCOMING_DAYS,
+              graceDays:
+                GRACE_DAYS
+            }),
+            getDashboardReceivables({
+              todayKey,
+              upcomingDays:
+                UPCOMING_DAYS,
+              graceDays:
+                GRACE_DAYS,
+              limit: 30
+            }),
+            getStudentPackageLessonUsage(),
+            getDashboardLessonPlanSnapshot({
+              currentDayName
+            }),
+            getDashboardLessonHealth()
+          ])
+
+          if (!isMounted) {
+            return
+          }
+
+          const nextDashboardData =
+            setDashboardViewCache(
+              dashboardCacheKey,
+              {
+                summary: summaryResult,
+                receivables: receivableResult,
+                packageLessonUsage:
+                  packageLessonUsageResult,
+                lessonSnapshot: {
+                  todayLessons:
+                    lessonSnapshotResult.todayLessons || [],
+                  waitingMakeupCount:
+                    lessonHealthResult.waitingMakeupCount || 0,
+                  conflictCount:
+                    lessonHealthResult.conflictCount || 0
+                }
+              }
+            )
+
+          setDashboardSummary(
+            nextDashboardData.summary
+          )
+          setReceivableRecords(
+            nextDashboardData.receivables
+          )
+          setPackageLessonUsage(
+            nextDashboardData.packageLessonUsage
+          )
+          setDashboardLessonSnapshot(
+            nextDashboardData.lessonSnapshot
+          )
+        } catch (error) {
+          console.error(
+            'Dashboard özetleri alınamadı:',
+            error
+          )
+
+          if (isMounted) {
+            const isOffline =
+              typeof navigator !==
+                'undefined' &&
+              !navigator.onLine
+
+            setDashboardError(
+              isOffline
+                ? 'İnternet bağlantısı bulunamadı. Dashboard verileri yüklenemedi.'
+                : 'Dashboard verileri şu anda yüklenemedi.'
+            )
+          }
+        } finally {
+          if (isMounted) {
+            setDashboardLoading(false)
+          }
         }
       }
-    }
 
     loadDashboardData()
 
@@ -143,61 +290,75 @@ function Dashboard({
     }
   }, [
     todayKey,
-    currentDayName
+    currentDayName,
+    dashboardCacheKey
   ])
 
+  /*
+   * Dashboard görünürken Finans özetlerini tarayıcı boşta kaldığında
+   * önceden al. Finans sayfasına geçildiğinde rakamlar RAM cache'den
+   * anında gösterilir; bu prefetch Dashboard'un kendi yüklenmesini bloklamaz.
+   */
+  useEffect(() => {
+    let cancelled = false
+    let idleId = null
+    let timeoutId = null
+
+    const runPrefetch = () => {
+      if (cancelled) {
+        return
+      }
+
+      prefetchFinanceOverview().catch(() => {
+        // Prefetch yardımcı bir optimizasyondur.
+        // Finans sayfası açıldığında normal yükleme tekrar denenir.
+      })
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.requestIdleCallback ===
+        'function'
+    ) {
+      idleId = window.requestIdleCallback(
+        runPrefetch,
+        {
+          timeout: 1500
+        }
+      )
+    } else if (typeof window !== 'undefined') {
+      timeoutId = window.setTimeout(
+        runPrefetch,
+        700
+      )
+    }
+
+    return () => {
+      cancelled = true
+
+      if (
+        idleId !== null &&
+        typeof window.cancelIdleCallback ===
+          'function'
+      ) {
+        window.cancelIdleCallback(idleId)
+      }
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [])
+
   const getTeacherName = (teacher) =>
-    teacher?.fullName ?? teacher?.name ?? ''
-
-  const getTeacherCommissionRate = (teacher) =>
-    Number(
-      teacher?.commissionRate ??
-        teacher?.commissionPercentage ??
-        teacher?.commission ??
-        teacher?.hakEdisYuzdesi ??
-        teacher?.hakedisYuzdesi ??
-        0
-    )
-
-  const findTeacherByIdOrName = (teacherId, teacherName) => {
-    const normalizedTeacherName = normalizeText(teacherName)
-
-    return teachers.find((teacher) => {
-      const idMatches =
-        teacherId !== '' &&
-        teacherId !== null &&
-        teacherId !== undefined &&
-        String(teacher.id) === String(teacherId)
-
-      const nameMatches =
-        normalizedTeacherName !== '' &&
-        normalizeText(getTeacherName(teacher)) ===
-          normalizedTeacherName
-
-      return idMatches || nameMatches
-    })
-  }
+    teacher?.fullName ??
+    teacher?.name ??
+    ''
 
   const getStudentName = (student) =>
-    student?.fullName ?? student?.name ?? ''
-
-  const getPackageFromCatalog = (packageId, packageName) => {
-    const normalizedPackageName = normalizeText(packageName)
-
-    return packages.find((packageItem) => {
-      const idMatches =
-        packageId !== '' &&
-        packageId !== null &&
-        packageId !== undefined &&
-        String(packageItem.id) === String(packageId)
-
-      const nameMatches =
-        normalizedPackageName !== '' &&
-        normalizeText(packageItem.name) === normalizedPackageName
-
-      return idMatches || nameMatches
-    })
-  }
+    student?.fullName ??
+    student?.name ??
+    ''
 
   const packageFinancialRecords =
     receivableRecords
@@ -208,29 +369,14 @@ function Dashboard({
   const activeTeacherCount =
     dashboardSummary.activeTeacherCount
 
-  const monthlyStudentIncome =
-    dashboardSummary.monthlyStudentIncome
-
-  const monthlyOtherIncome =
-    dashboardSummary.monthlyOtherIncome
-
   const monthlyIncome =
     dashboardSummary.monthlyIncome
 
   const totalOutstanding =
     dashboardSummary.totalOutstanding
 
-  const todayLessons = lessonPlans
-    .filter(
-      (lesson) =>
-        normalizeText(lesson.day) ===
-        normalizeText(currentDayName)
-    )
-    .sort((firstLesson, secondLesson) =>
-      String(firstLesson.time || '').localeCompare(
-        String(secondLesson.time || '')
-      )
-    )
+  const todayLessons =
+    dashboardLessonSnapshot.todayLessons
 
   const upcomingReceivables =
     packageFinancialRecords
@@ -255,306 +401,191 @@ function Dashboard({
         'Tarih Eksik'
     )
 
-  const waitingMakeupLessons = lessonPlans.filter(
-    (lesson) =>
-      normalizeLessonStatus(lesson.status) ===
-      'Telafi yapılacak'
-  )
+  const waitingMakeupLessonCount =
+    Number(
+      dashboardLessonSnapshot.waitingMakeupCount || 0
+    )
 
-  const conflictKeys = new Set()
-  const activeLessonsForConflict =
-    lessonPlans.filter(isActiveLesson)
-
-  activeLessonsForConflict.forEach((lesson, lessonIndex) => {
-    activeLessonsForConflict
-      .slice(lessonIndex + 1)
-      .forEach((otherLesson) => {
-        const sameSlot =
-          normalizeText(lesson.day) ===
-            normalizeText(otherLesson.day) &&
-          String(lesson.time || '') ===
-            String(otherLesson.time || '')
-
-        if (!sameSlot) return
-
-        const sameTeacher =
-          lesson.teacherId &&
-          otherLesson.teacherId &&
-          String(lesson.teacherId) ===
-            String(otherLesson.teacherId)
-
-        const sameStudent =
-          lesson.studentId &&
-          otherLesson.studentId &&
-          String(lesson.studentId) ===
-            String(otherLesson.studentId)
-
-        if (sameTeacher) {
-          conflictKeys.add(
-            `teacher-${lesson.teacherId}-${lesson.day}-${lesson.time}`
-          )
-        }
-
-        if (sameStudent) {
-          conflictKeys.add(
-            `student-${lesson.studentId}-${lesson.day}-${lesson.time}`
-          )
-        }
-      })
-  })
+  const lessonConflictCount =
+    Number(
+      dashboardLessonSnapshot.conflictCount || 0
+    )
 
   const missingTeacherAssignments =
     packageFinancialRecords.filter(
       (record) =>
-        !record.teacherId && !record.teacherName
+        !record.teacherId &&
+        !record.teacherName
     )
 
   const invalidPriceAssignments =
     packageFinancialRecords.filter(
-      (record) => Number(record.monthlyFee || 0) <= 0
+      (record) =>
+        Number(
+          record.monthlyFee || 0
+        ) <= 0
     )
 
-  const missingContactStudents = students.filter((student) => {
-    const hasAnyPhone = [
-      student.phone,
-      student.motherPhone,
-      student.fatherPhone,
-      student.parentPhone
-    ].some(
-      (phone) => String(phone || '').trim() !== ''
-    )
+  const missingContactStudents =
+    students.filter(
+      (student) => {
+        const isActive =
+          student.isActive !== false &&
+          normalizeText(
+            student.status
+          ) !== 'pasif'
 
-    return !hasAnyPhone
-  })
+        const isArchived =
+          student.isArchived === true ||
+          normalizeText(
+            student.status
+          ) === 'arşiv'
 
-  /*
-   * Dashboard öğretmen hakedişini Finans sayfasıyla aynı mantıkla
-   * hesaplar. Paket öğrenciye tanımlandığında hakediş oluşmaz.
-   * Yalnızca "Yapıldı" veya "Telafi yapıldı" durumundaki dersler
-   * hakedişe dahil edilir.
-   */
-  const completedLessonEarningRecords = useMemo(() => {
-    return lessonPlans
-      .filter(isCompletedLesson)
-      .map((lesson, index) => {
-        const teacher = findTeacherByIdOrName(
-          lesson.teacherId,
-          lesson.teacherName ?? lesson.teacher
-        )
+        const isAnonymized =
+          student.isAnonymized === true ||
+          normalizeText(
+            student.retentionStatus
+          ) === 'anonimleştirildi'
 
-        if (!teacher) {
-          return null
-        }
+        const hasPhone =
+          String(
+            student.phone || ''
+          ).trim() !== ''
 
-        const lessonStudentId = String(
-          lesson.studentId ?? ''
-        )
-        const lessonPackageId = String(
-          lesson.packageId ?? ''
-        )
-        const lessonStudentPackageId = String(
-          lesson.studentPackageId ??
-            lesson.enrollmentId ??
-            lesson.assignmentId ??
-            ''
-        )
-
-        const studentPackage =
-          packageFinancialRecords.find(
-            (record) =>
-              lessonStudentPackageId !== '' &&
-              String(record.studentId) ===
-                lessonStudentId &&
-              String(record.studentPackageId) ===
-                lessonStudentPackageId
-          ) ??
-          packageFinancialRecords.find(
-            (record) =>
-              lessonPackageId !== '' &&
-              String(record.studentId) ===
-                lessonStudentId &&
-              String(record.packageId) ===
-                lessonPackageId
-          ) ??
-          packageFinancialRecords.find(
-            (record) =>
-              String(record.studentId) ===
-                lessonStudentId &&
-              normalizeText(record.packageName) ===
-                normalizeText(lesson.packageName)
-          )
-
-        const catalogPackage =
-          getPackageFromCatalog(
-            lesson.packageId,
-            lesson.packageName
-          )
-
-        const agreedPrice = Number(
-          studentPackage?.agreedPrice ??
-            catalogPackage?.totalPrice ??
-            lesson.packagePrice ??
-            lesson.totalPrice ??
-            0
-        )
-
-        const lessonCount =
-          Number(
-            studentPackage?.lessonCount ??
-              catalogPackage?.lessonCount ??
-              lesson.lessonCount ??
-              1
-          ) || 1
-
-        const unitPrice = Number(
-          studentPackage?.unitPrice ??
-            (lessonCount > 0
-              ? agreedPrice / lessonCount
-              : catalogPackage?.unitPrice ??
-                agreedPrice)
-        )
-
-        const commissionRate =
-          getTeacherCommissionRate(teacher)
-
-        return {
-          earningRecordId: String(
-            lesson.id ??
-              `completed-lesson-${index}`
-          ),
-          lessonId: lesson.id,
-          teacherId: String(teacher.id),
-          teacherName: getTeacherName(teacher),
-          studentId: lessonStudentId,
-          studentName:
-            lesson.studentName ??
-            students.find(
-              (student) =>
-                String(student.id) ===
-                lessonStudentId
-            )?.fullName ??
-            'Öğrenci',
-          packageName:
-            studentPackage?.packageName ??
-            lesson.packageName ??
-            catalogPackage?.name ??
-            'Tanımsız Paket',
-          instrument:
-            lesson.instrument ??
-            studentPackage?.instrument ??
-            catalogPackage?.instrument ??
-            '',
-          unitPrice,
-          commissionRate,
-          teacherEarning:
-            unitPrice * (commissionRate / 100)
-        }
-      })
-      .filter(Boolean)
-  }, [
-    lessonPlans,
-    packageFinancialRecords,
-    teachers,
-    students,
-    packages
-  ])
-
-  const teacherEarningSummaries = useMemo(() => {
-    return teachers.map((teacher) => {
-      const completedLessons =
-        completedLessonEarningRecords.filter(
-          (record) =>
-            String(record.teacherId) ===
-              String(teacher.id) ||
-            normalizeText(record.teacherName) ===
-              normalizeText(
-                getTeacherName(teacher)
-              )
-        )
-
-      const totalEarning = completedLessons.reduce(
-        (total, record) =>
-          total +
-          Number(record.teacherEarning || 0),
-        0
-      )
-
-      const totalPaid = teacherPayments
-        .filter(
-          (payment) =>
-            normalizeText(payment.status) !== 'iptal' &&
-            String(payment.teacherId) ===
-              String(teacher.id)
-        )
-        .reduce(
-          (total, payment) =>
-            total + Number(payment.amount || 0),
-          0
-        )
-
-      return {
-        teacher,
-        completedLessonCount:
-          completedLessons.length,
-        totalEarning,
-        totalPaid,
-        remainingPayment: Math.max(
-          0,
-          totalEarning - totalPaid
+        return (
+          isActive &&
+          !isArchived &&
+          !isAnonymized &&
+          !hasPhone
         )
       }
-    })
-  }, [
-    teachers,
-    completedLessonEarningRecords,
-    teacherPayments
-  ])
+    )
 
   const totalTeacherRemaining =
     dashboardSummary.teacherRemaining
 
   const totalCompletedEarningLessonCount =
-    dashboardSummary.completedLessonCount || 0
+    dashboardSummary.completedLessonCount ||
+    0
 
+  const retentionReviewStudents =
+    students.filter(
+      (student) => {
+        const isArchived =
+          student.isArchived ===
+            true ||
+          normalizeText(
+            student.status
+          ) ===
+            'arşiv'
 
-  const retentionReviewStudents = students.filter(
-    (student) => {
-      const isArchived =
-        student.isArchived === true ||
-        normalizeText(student.status) === 'arşiv'
+        const isAnonymized =
+          student.isAnonymized ===
+            true ||
+          normalizeText(
+            student.retentionStatus
+          ) ===
+            'anonimleştirildi'
 
-      const isAnonymized =
-        student.isAnonymized === true ||
-        normalizeText(student.retentionStatus) ===
-          'anonimleştirildi'
+        if (
+          !isArchived ||
+          isAnonymized
+        ) {
+          return false
+        }
 
-      if (!isArchived || isAnonymized) {
-        return false
-      }
+        let reviewDate =
+          getDateKey(
+            student.retentionReviewDate
+          )
 
-      let reviewDate = getDateKey(
-        student.retentionReviewDate
-      )
+        if (
+          !reviewDate &&
+          student.archivedAt
+        ) {
+          reviewDate =
+            addYearsToDate(
+              student.archivedAt,
+              2
+            )
+        }
 
-      if (!reviewDate && student.archivedAt) {
-        reviewDate = addYearsToDate(
-          student.archivedAt,
-          2
+        return (
+          reviewDate &&
+          reviewDate <= todayKey
         )
       }
+    )
 
-      return reviewDate && reviewDate <= todayKey
-    }
-  )
+  const packagesWithOneLessonLeft =
+    packageLessonUsage.filter(
+      (item) =>
+        item.remainingLessonCount === 1
+    )
+
+  const packagesWithNoLessonLeft =
+    packageLessonUsage.filter(
+      (item) =>
+        item.remainingLessonCount === 0
+    )
 
   const alerts = []
 
-  if (criticalOverdueRecords.length > 0) {
-    const overdueTotal = criticalOverdueRecords.reduce(
-      (total, record) =>
-        total + record.remainingDebt,
-      0
-    )
+  packagesWithNoLessonLeft.forEach(
+    (item) => {
+      alerts.push({
+        id:
+          `package-finished-${item.studentPackageId}`,
+        type: 'danger',
+        title:
+          `${item.studentName} · Ders hakkı bitti`,
+        description:
+          `${item.packageName} paketinde ${item.usedLessonCount}/${item.totalLessonCount} ders tamamlandı. Paketi uzatın, güncelleyin veya sonlandırın.`,
+        page: 'students',
+        studentId:
+          item.studentId,
+        studentPackageId:
+          item.studentPackageId
+      })
+    }
+  )
+
+  packagesWithOneLessonLeft.forEach(
+    (item) => {
+      alerts.push({
+        id:
+          `package-nearly-finished-${item.studentPackageId}`,
+        type: 'warning',
+        title:
+          `${item.studentName} · 1 ders kaldı`,
+        description:
+          `${item.packageName} paketinde ${item.usedLessonCount}/${item.totalLessonCount} ders tamamlandı.`,
+        page: 'students',
+        studentId:
+          item.studentId,
+        studentPackageId:
+          item.studentPackageId
+      })
+    }
+  )
+
+  if (
+    criticalOverdueRecords.length >
+    0
+  ) {
+    const overdueTotal =
+      criticalOverdueRecords.reduce(
+        (
+          total,
+          record
+        ) =>
+          total +
+          Number(
+            record.remainingDebt ||
+              0
+          ),
+        0
+      )
 
     alerts.push({
       id: 'overdue-payments',
@@ -567,7 +598,10 @@ function Dashboard({
     })
   }
 
-  if (missingPaymentDates.length > 0) {
+  if (
+    missingPaymentDates.length >
+    0
+  ) {
     alerts.push({
       id: 'missing-payment-date',
       type: 'warning',
@@ -578,7 +612,10 @@ function Dashboard({
     })
   }
 
-  if (retentionReviewStudents.length > 0) {
+  if (
+    retentionReviewStudents.length >
+    0
+  ) {
     alerts.push({
       id: 'student-retention-review',
       type: 'warning',
@@ -589,29 +626,35 @@ function Dashboard({
     })
   }
 
-  if (waitingMakeupLessons.length > 0) {
+  if (
+    waitingMakeupLessonCount >
+    0
+  ) {
     alerts.push({
       id: 'makeup-lessons',
       type: 'warning',
-      title: `${waitingMakeupLessons.length} bekleyen telafi dersi`,
+      title: `${waitingMakeupLessonCount} bekleyen telafi dersi`,
       description:
         'Planlanmış ancak henüz tamamlanmamış telafi dersleri var.',
       page: 'lesson-status'
     })
   }
 
-  if (conflictKeys.size > 0) {
+  if (lessonConflictCount > 0) {
     alerts.push({
       id: 'lesson-conflicts',
       type: 'danger',
-      title: `${conflictKeys.size} ders çakışması`,
+      title: `${lessonConflictCount} ders çakışması`,
       description:
         'Aynı öğrenci veya öğretmen aynı gün ve saate atanmış.',
       page: 'schedule'
     })
   }
 
-  if (missingTeacherAssignments.length > 0) {
+  if (
+    missingTeacherAssignments.length >
+    0
+  ) {
     alerts.push({
       id: 'missing-teacher',
       type: 'warning',
@@ -622,7 +665,10 @@ function Dashboard({
     })
   }
 
-  if (invalidPriceAssignments.length > 0) {
+  if (
+    invalidPriceAssignments.length >
+    0
+  ) {
     alerts.push({
       id: 'invalid-price',
       type: 'warning',
@@ -633,11 +679,15 @@ function Dashboard({
     })
   }
 
-  if (totalTeacherRemaining > 0) {
+  if (
+    totalTeacherRemaining >
+    0
+  ) {
     alerts.push({
       id: 'teacher-payment',
       type: 'info',
-      title: 'Bekleyen öğretmen hakedişi',
+      title:
+        'Bekleyen öğretmen hakedişi',
       description: `${totalCompletedEarningLessonCount} tamamlanan dersten oluşan, ödenmesi beklenen toplam tutar ₺${formatPrice(
         totalTeacherRemaining
       )}.`,
@@ -645,66 +695,158 @@ function Dashboard({
     })
   }
 
-  if (missingContactStudents.length > 0) {
+  if (
+    missingContactStudents.length >
+    0
+  ) {
     alerts.push({
       id: 'missing-contact',
       type: 'info',
       title: `${missingContactStudents.length} öğrencide iletişim bilgisi eksik`,
       description:
-        'Öğrenci veya veli telefon bilgileri tamamlanmalı.',
+        'Öğrencinin telefon bilgisi tamamlanmalı.',
       page: 'students'
     })
   }
 
-  const visibleAlerts = alerts.slice(0, 5)
+  const visibleAlerts =
+    alerts.slice(0, 5)
 
-  const findTeacherNameForLesson = (lesson) => {
-    if (lesson.teacherName) return lesson.teacherName
-    if (typeof lesson.teacher === 'string') return lesson.teacher
+  const findTeacherNameForLesson =
+    (lesson) => {
+      if (lesson.teacherName) {
+        return lesson.teacherName
+      }
 
-    const teacher = teachers.find(
-      (item) =>
-        String(item.id) === String(lesson.teacherId)
-    )
+      if (
+        typeof lesson.teacher ===
+        'string'
+      ) {
+        return lesson.teacher
+      }
 
-    return getTeacherName(teacher) || '-'
-  }
+      const teacher =
+        teachers.find(
+          (item) =>
+            String(item.id) ===
+            String(
+              lesson.teacherId
+            )
+        )
 
-  const findStudentNameForLesson = (lesson) => {
-    if (lesson.studentName) return lesson.studentName
-
-    const student = students.find(
-      (item) =>
-        String(item.id) === String(lesson.studentId)
-    )
-
-    return getStudentName(student) || '-'
-  }
-
-  const getReceivableStatusText = (record) => {
-    if (record.daysUntilDue === null) {
-      return 'Tarih tanımlı değil'
+      return (
+        getTeacherName(
+          teacher
+        ) || '-'
+      )
     }
 
-    if (record.daysUntilDue > 0) {
-      return `${record.daysUntilDue} gün kaldı · ${formatDate(
-        record.dueDate
+  const findStudentNameForLesson =
+    (lesson) => {
+      if (lesson.studentName) {
+        return lesson.studentName
+      }
+
+      const student =
+        students.find(
+          (item) =>
+            String(item.id) ===
+            String(
+              lesson.studentId
+            )
+        )
+
+      return (
+        getStudentName(
+          student
+        ) || '-'
+      )
+    }
+
+  const getReceivableStatusText =
+    (record) => {
+      if (
+        record.daysUntilDue ===
+        null
+      ) {
+        return 'Tarih tanımlı değil'
+      }
+
+      if (
+        record.daysUntilDue >
+        0
+      ) {
+        return `${record.daysUntilDue} gün kaldı · ${formatDate(
+          record.dueDate
+        )}`
+      }
+
+      if (
+        record.daysUntilDue ===
+        0
+      ) {
+        return `Bugün ödenecek · ${formatDate(
+          record.dueDate
+        )}`
+      }
+
+      return `Tolerans süresinde · ${record.daysLate} gün gecikti`
+    }
+
+  const getReceivableStatusClass =
+    (record) => {
+      if (
+        record.daysUntilDue ===
+        0
+      ) {
+        return 'due-today'
+      }
+
+      if (
+        record.daysLate > 0
+      ) {
+        return 'grace'
+      }
+
+      return 'upcoming'
+    }
+
+  const renderValueSkeleton = (
+    width = '4rem'
+  ) => (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-block',
+        width,
+        height: '0.9em',
+        borderRadius: '999px',
+        background:
+          'rgba(148, 163, 184, 0.28)',
+        verticalAlign: 'middle'
+      }}
+    />
+  )
+
+  const renderMetricValue = (
+    value,
+    {
+      currency = false
+    } = {}
+  ) => {
+    if (dashboardLoading) {
+      return renderValueSkeleton(
+        currency ? '5.8rem' : '2.8rem'
+      )
+    }
+
+    if (currency) {
+      return `₺${formatPrice(
+        value
       )}`
     }
 
-    if (record.daysUntilDue === 0) {
-      return `Bugün ödenecek · ${formatDate(
-        record.dueDate
-      )}`
-    }
-
-    return `Tolerans süresinde · ${record.daysLate} gün gecikti`
-  }
-
-  const getReceivableStatusClass = (record) => {
-    if (record.daysUntilDue === 0) return 'due-today'
-    if (record.daysLate > 0) return 'grace'
-    return 'upcoming'
+    return value
   }
 
   return (
@@ -714,7 +856,9 @@ function Dashboard({
           <span className="dashboard-home-badge">
             Kontrol Paneli
           </span>
+
           <h1>Yönetici Paneli</h1>
+
           <p>
             Öğrenci, öğretmen, ders programı ve
             finans süreçlerinin güncel özeti.
@@ -722,78 +866,177 @@ function Dashboard({
         </div>
 
         <div className="dashboard-home-date">
-          <strong>{currentDayName}</strong>
-          <span>{formattedToday}</span>
+          <strong>
+            {currentDayName}
+          </strong>
+
+          <span>
+            {formattedToday}
+          </span>
         </div>
       </section>
+
+      {dashboardError && (
+        <div
+          className="dashboard-home-error"
+          role="alert"
+        >
+          {dashboardError}
+        </div>
+      )}
 
       <section className="dashboard-home-metrics">
         <button
           type="button"
           className="dashboard-home-metric green"
-          onClick={() => onNavigate('students')}
+          onClick={() =>
+            onNavigate(
+              'students'
+            )
+          }
         >
           <div>
-            <span>Aktif Öğrenci</span>
-            <strong>{activeStudentCount}</strong>
-            <small>Öğrenciler sayfasından</small>
+            <span>
+              Aktif Öğrenci
+            </span>
+
+            <strong>
+              {renderMetricValue(
+                activeStudentCount
+              )}
+            </strong>
+
+            <small>
+              Öğrenciler sayfasından
+            </small>
           </div>
-          <div className="dashboard-home-metric-icon">✓</div>
+
+          <div className="dashboard-home-metric-icon">
+            ✓
+          </div>
         </button>
 
         <button
           type="button"
           className="dashboard-home-metric blue"
-          onClick={() => onNavigate('teachers')}
+          onClick={() =>
+            onNavigate(
+              'teachers'
+            )
+          }
         >
           <div>
-            <span>Aktif Öğretmen</span>
-            <strong>{activeTeacherCount}</strong>
-            <small>Öğretmenler sayfasından</small>
+            <span>
+              Aktif Öğretmen
+            </span>
+
+            <strong>
+              {renderMetricValue(
+                activeTeacherCount
+              )}
+            </strong>
+
+            <small>
+              Öğretmenler sayfasından
+            </small>
           </div>
-          <div className="dashboard-home-metric-icon">♪</div>
+
+          <div className="dashboard-home-metric-icon">
+            ♪
+          </div>
         </button>
 
         <button
           type="button"
           className="dashboard-home-metric cyan"
-          onClick={() => onNavigate('finance')}
+          onClick={() =>
+            onNavigate(
+              'finance'
+            )
+          }
         >
           <div>
-            <span>Bu Ay Gelir</span>
-            <strong>₺{formatPrice(monthlyIncome)}</strong>
-            <small>Tahsilatlar ve ek gelirler</small>
+            <span>
+              Bu Ay Gelir
+            </span>
+
+            <strong>
+              {renderMetricValue(
+                monthlyIncome,
+                {
+                  currency: true
+                }
+              )}
+            </strong>
+
+            <small>
+              Tahsilatlar ve ek gelirler
+            </small>
           </div>
-          <div className="dashboard-home-metric-icon">₺</div>
+
+          <div className="dashboard-home-metric-icon">
+            ₺
+          </div>
         </button>
 
         <button
           type="button"
           className="dashboard-home-metric red"
-          onClick={() => onNavigate('payments')}
+          onClick={() =>
+            onNavigate(
+              'payments'
+            )
+          }
         >
           <div>
-            <span>Bekleyen Tahsilat</span>
-            <strong>₺{formatPrice(totalOutstanding)}</strong>
-            <small>Açık aylık ödeme dönemleri</small>
+            <span>
+              Bekleyen Tahsilat
+            </span>
+
+            <strong>
+              {renderMetricValue(
+                totalOutstanding,
+                {
+                  currency: true
+                }
+              )}
+            </strong>
+
+            <small>
+              Açık aylık ödeme dönemleri
+            </small>
           </div>
-          <div className="dashboard-home-metric-icon">!</div>
+
+          <div className="dashboard-home-metric-icon">
+            !
+          </div>
         </button>
       </section>
 
       <section className="dashboard-home-card dashboard-home-lessons">
         <div className="dashboard-home-section-heading">
           <div>
-            <h2>Bugünkü Ders Programı</h2>
-            <p>Gün içinde planlanan derslerin kısa özeti</p>
+            <h2>
+              Bugünkü Ders Programı
+            </h2>
+
+            <p>
+              Gün içinde planlanan derslerin kısa özeti
+            </p>
           </div>
 
           <button
             type="button"
             className="dashboard-home-count-button"
-            onClick={() => onNavigate('schedule')}
+            onClick={() =>
+              onNavigate(
+                'schedule'
+              )
+            }
           >
-            {todayLessons.length} ders
+            {dashboardLoading
+              ? renderValueSkeleton('4.5rem')
+              : `${todayLessons.length} ders`}
           </button>
         </div>
 
@@ -805,61 +1048,92 @@ function Dashboard({
                 <th>Ders</th>
                 <th>Öğretmen</th>
                 <th>Öğrenci</th>
-                <th>Sınıf / Lokasyon</th>
+                <th>
+                  Sınıf / Lokasyon
+                </th>
                 <th>Süre</th>
                 <th>Durum</th>
               </tr>
             </thead>
 
             <tbody>
-              {todayLessons.length > 0 ? (
-                todayLessons.map((lesson) => (
-                  <tr key={lesson.id}>
-                    <td className="dashboard-home-time-cell">
-                      {lesson.time || '-'}
-                    </td>
-                    <td>
-                      <strong className="dashboard-home-table-title">
-                        {lesson.packageName ||
-                          lesson.instrument ||
-                          lesson.lessonName ||
-                          'Ders'}
-                      </strong>
-                    </td>
-                    <td>
-                      {findTeacherNameForLesson(lesson)}
-                    </td>
-                    <td>
-                      {findStudentNameForLesson(lesson)}
-                    </td>
-                    <td>
-                      {lesson.location ||
-                        lesson.classroom ||
-                        '-'}
-                    </td>
-                    <td>{lesson.duration || '-'}</td>
-                    <td>
-                      <span
-                        className={getLessonStatusClass(
-                          lesson.status,
-                          'dashboard-home-status'
+              {dashboardLoading ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="dashboard-home-empty-table"
+                  >
+                    Dashboard verileri yükleniyor...
+                  </td>
+                </tr>
+              ) : todayLessons.length >
+                0 ? (
+                todayLessons.map(
+                  (lesson) => (
+                    <tr
+                      key={
+                        lesson.id
+                      }
+                    >
+                      <td className="dashboard-home-time-cell">
+                        {lesson.time ||
+                          '-'}
+                      </td>
+
+                      <td>
+                        <strong className="dashboard-home-table-title">
+                          {lesson.packageName ||
+                            lesson.instrument ||
+                            lesson.lessonName ||
+                            'Ders'}
+                        </strong>
+                      </td>
+
+                      <td>
+                        {findTeacherNameForLesson(
+                          lesson
                         )}
-                      >
-                        {normalizeLessonStatus(
-                          lesson.status
+                      </td>
+
+                      <td>
+                        {findStudentNameForLesson(
+                          lesson
                         )}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+
+                      <td>
+                        {lesson.location ||
+                          lesson.classroom ||
+                          '-'}
+                      </td>
+
+                      <td>
+                        {lesson.duration ||
+                          '-'}
+                      </td>
+
+                      <td>
+                        <span
+                          className={getLessonStatusClass(
+                            lesson.status,
+                            'dashboard-home-status'
+                          )}
+                        >
+                          {normalizeLessonStatus(
+                            lesson.status
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                )
               ) : (
                 <tr>
                   <td
                     colSpan="7"
                     className="dashboard-home-empty-table"
                   >
-                    Bugün için kayıtlı ders
-                    bulunmamaktadır.
+                    Bugün için kayıtlı ders bulunmamaktadır.
                   </td>
                 </tr>
               )}
@@ -872,52 +1146,83 @@ function Dashboard({
         <div className="dashboard-home-card dashboard-home-small-panel">
           <div className="dashboard-home-section-heading compact">
             <div>
-              <h2>Yaklaşan Tahsilatlar</h2>
+              <h2>
+                Yaklaşan Tahsilatlar
+              </h2>
+
               <p>
-                7 gün içindeki ve tolerans
-                süresindeki ödemeler
+                7 gün içindeki ve tolerans süresindeki ödemeler
               </p>
             </div>
 
             <button
               type="button"
               className="dashboard-home-panel-count"
-              onClick={() => onNavigate('payments')}
+              onClick={() =>
+                onNavigate(
+                  'payments'
+                )
+              }
             >
-              {upcomingReceivables.length}
+              {dashboardLoading
+                ? renderValueSkeleton('2.2rem')
+                : upcomingReceivables.length}
             </button>
           </div>
 
           <div className="dashboard-home-panel-content">
-            {upcomingReceivables.length > 0 ? (
-              upcomingReceivables.map((record) => (
-                <button
-                  type="button"
-                  className="dashboard-home-receivable-item"
-                  key={record.studentPackageId}
-                  onClick={() => onNavigate('payments')}
-                >
-                  <div>
-                    <strong>{record.studentName}</strong>
-                    <span>{record.packageName}</span>
-                    <small
-                      className={getReceivableStatusClass(
-                        record
-                      )}
-                    >
-                      {getReceivableStatusText(record)}
-                    </small>
-                  </div>
+            {dashboardLoading ? (
+              <div className="dashboard-home-empty-panel">
+                Tahsilat verileri yükleniyor...
+              </div>
+            ) : upcomingReceivables.length >
+              0 ? (
+              upcomingReceivables.map(
+                (record) => (
+                  <button
+                    type="button"
+                    className="dashboard-home-receivable-item"
+                    key={
+                      record.studentPackageId
+                    }
+                    onClick={() =>
+                      onNavigate(
+                        'payments'
+                      )
+                    }
+                  >
+                    <div>
+                      <strong>
+                        {record.studentName}
+                      </strong>
 
-                  <b>
-                    ₺{formatPrice(record.remainingDebt)}
-                  </b>
-                </button>
-              ))
+                      <span>
+                        {record.packageName}
+                      </span>
+
+                      <small
+                        className={getReceivableStatusClass(
+                          record
+                        )}
+                      >
+                        {getReceivableStatusText(
+                          record
+                        )}
+                      </small>
+                    </div>
+
+                    <b>
+                      ₺
+                      {formatPrice(
+                        record.remainingDebt
+                      )}
+                    </b>
+                  </button>
+                )
+              )
             ) : (
               <div className="dashboard-home-empty-panel">
-                Önümüzdeki 7 gün içinde yaklaşan
-                tahsilat bulunmamaktadır.
+                Önümüzdeki 7 gün içinde yaklaşan tahsilat bulunmamaktadır.
               </div>
             )}
           </div>
@@ -926,46 +1231,72 @@ function Dashboard({
         <div className="dashboard-home-card dashboard-home-small-panel">
           <div className="dashboard-home-section-heading compact">
             <div>
-              <h2>Önemli Uyarılar</h2>
-              <p>Takip edilmesi gereken kritik kayıtlar</p>
+              <h2>
+                Önemli Uyarılar
+              </h2>
+
+              <p>
+                Takip edilmesi gereken kritik kayıtlar
+              </p>
             </div>
 
             <span className="dashboard-home-panel-count static">
-              {alerts.length}
+              {dashboardLoading
+                ? renderValueSkeleton('2.2rem')
+                : alerts.length}
             </span>
           </div>
 
           <div className="dashboard-home-panel-content">
-            {visibleAlerts.length > 0 ? (
-              visibleAlerts.map((alertItem) => (
-                <button
-                  type="button"
-                  className="dashboard-home-alert-item"
-                  key={alertItem.id}
-                  onClick={() =>
-                    onNavigate(alertItem.page)
-                  }
-                >
-                  <span
-                    className={`dashboard-home-alert-dot ${alertItem.type}`}
-                  />
+            {dashboardLoading ? (
+              <div className="dashboard-home-empty-panel">
+                Uyarılar kontrol ediliyor...
+              </div>
+            ) : visibleAlerts.length >
+              0 ? (
+              visibleAlerts.map(
+                (alertItem) => (
+                  <button
+                    type="button"
+                    className="dashboard-home-alert-item"
+                    key={
+                      alertItem.id
+                    }
+                    onClick={() =>
+                      onNavigate(
+                        alertItem.page
+                      )
+                    }
+                  >
+                    <span
+                      className={`dashboard-home-alert-dot ${alertItem.type}`}
+                    />
 
-                  <div>
-                    <strong>{alertItem.title}</strong>
-                    <span>{alertItem.description}</span>
-                  </div>
+                    <div>
+                      <strong>
+                        {alertItem.title}
+                      </strong>
 
-                  <b>›</b>
-                </button>
-              ))
+                      <span>
+                        {alertItem.description}
+                      </span>
+                    </div>
+
+                    <b>›</b>
+                  </button>
+                )
+              )
             ) : (
               <div className="dashboard-home-success-panel">
                 <span>✓</span>
+
                 <div>
-                  <strong>Kritik uyarı bulunmuyor</strong>
+                  <strong>
+                    Kritik uyarı bulunmuyor
+                  </strong>
+
                   <p>
-                    Tüm temel kayıtlar şu anda düzenli
-                    görünüyor.
+                    Tüm temel kayıtlar şu anda düzenli görünüyor.
                   </p>
                 </div>
               </div>

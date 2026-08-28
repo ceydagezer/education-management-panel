@@ -30,6 +30,23 @@ const studentSelect = `
   created_at,
   updated_at,
 
+  student_guardians (
+    id,
+    student_id,
+    full_name,
+    relationship,
+    phone,
+    email,
+    address,
+    same_address_as_student,
+    is_primary,
+    notes,
+    sort_order,
+    is_active,
+    created_at,
+    updated_at
+  ),
+
   student_packages (
     id,
     student_id,
@@ -40,6 +57,7 @@ const studentSelect = `
     payment_day,
     first_payment_date,
     next_payment_date,
+    total_lesson_count,
     status,
     is_active,
     ended_at,
@@ -109,6 +127,12 @@ function mapStudentPackageFromDb(row) {
     packageRecord?.lesson_count || 0
   )
 
+  const totalLessonCount = Number(
+    row.total_lesson_count ??
+    packageRecord?.lesson_count ??
+    0
+  )
+
   const agreedPrice = Number(
     row.agreed_price || 0
   )
@@ -142,6 +166,15 @@ function mapStudentPackageFromDb(row) {
     lessonDuration,
     duration: lessonDuration,
     lessonCount,
+
+    totalLessonCount,
+    usedLessonCount: 0,
+    remainingLessonCount:
+      Math.max(totalLessonCount, 0),
+    lessonRightsStatus:
+      totalLessonCount > 0
+        ? 'Devam Ediyor'
+        : 'Ders Hakkı Bitti',
 
     totalPrice: Number(
       packageRecord?.total_price || 0
@@ -331,6 +364,121 @@ function mapStudentSummaryFromDb(row) {
   }
 }
 
+
+function mapStudentGuardianFromDb(row) {
+  return {
+    id: row.id || '',
+    studentId: row.student_id || '',
+    fullName: row.full_name || '',
+    relationship: row.relationship || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    address: row.address || '',
+    sameAddressAsStudent:
+      row.same_address_as_student === true,
+    isPrimary:
+      row.is_primary === true,
+    notes: row.notes || '',
+    sortOrder: Number(row.sort_order || 1),
+    isActive: row.is_active !== false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function getGuardianFormFields(row, index) {
+  const prefix = `guardian${index + 1}`
+
+  return {
+    [`${prefix}Id`]: row?.id || '',
+    [`${prefix}Name`]: row?.fullName || '',
+    [`${prefix}Relationship`]:
+      row?.relationship || '',
+    [`${prefix}Phone`]: row?.phone || '',
+    [`${prefix}Email`]: row?.email || '',
+    [`${prefix}Address`]: row?.address || '',
+    [`${prefix}SameAddress`]:
+      row?.sameAddressAsStudent === true,
+    [`${prefix}IsPrimary`]:
+      row?.isPrimary === true,
+    [`${prefix}Notes`]: row?.notes || ''
+  }
+}
+
+function normalizeGuardiansFromForm(form) {
+  const rows = [1, 2]
+    .map((number) => {
+      const prefix = `guardian${number}`
+      const fullName = String(
+        form[`${prefix}Name`] || ''
+      ).trim()
+
+      if (!fullName) {
+        return null
+      }
+
+      const relationship = String(
+        form[`${prefix}Relationship`] || ''
+      ).trim()
+
+      if (!relationship) {
+        throw new Error(
+          `${number}. veli için yakınlık derecesi seçilmelidir.`
+        )
+      }
+
+      return {
+        id: String(
+          form[`${prefix}Id`] || ''
+        ).trim(),
+        full_name: fullName,
+        relationship,
+        phone:
+          String(
+            form[`${prefix}Phone`] || ''
+          ).trim() || null,
+        email:
+          String(
+            form[`${prefix}Email`] || ''
+          ).trim() || null,
+        address:
+          form[`${prefix}SameAddress`] === true
+            ? null
+            : String(
+                form[`${prefix}Address`] || ''
+              ).trim() || null,
+        same_address_as_student:
+          form[`${prefix}SameAddress`] === true,
+        is_primary:
+          form[`${prefix}IsPrimary`] === true,
+        notes:
+          String(
+            form[`${prefix}Notes`] || ''
+          ).trim() || null,
+        sort_order: number,
+        is_active: true
+      }
+    })
+    .filter(Boolean)
+
+  if (
+    rows.length > 0 &&
+    !rows.some((row) => row.is_primary)
+  ) {
+    rows[0].is_primary = true
+  }
+
+  if (
+    rows.filter((row) => row.is_primary).length > 1
+  ) {
+    throw new Error(
+      'Yalnızca bir veli birincil iletişim kişisi olabilir.'
+    )
+  }
+
+  return rows
+}
+
 function mapStudentFromDb(row) {
   const enrolledPackages = (
     row.student_packages || []
@@ -349,6 +497,54 @@ function mapStudentFromDb(row) {
         String(first.createdAt || '')
       )
     })
+
+  const guardians = (
+    row.student_guardians || []
+  )
+    .filter(
+      (guardian) =>
+        guardian.is_active !== false
+    )
+    .map(mapStudentGuardianFromDb)
+    .sort(
+      (first, second) =>
+        Number(first.sortOrder || 0) -
+        Number(second.sortOrder || 0)
+    )
+
+  const legacyGuardians =
+    guardians.length > 0
+      ? guardians
+      : [
+          row.mother_name
+            ? {
+                fullName: row.mother_name,
+                relationship: 'Anne',
+                phone: row.mother_phone || '',
+                email: '',
+                address: '',
+                sameAddressAsStudent: false,
+                isPrimary: true,
+                notes: '',
+                sortOrder: 1,
+                isActive: true
+              }
+            : null,
+          row.father_name
+            ? {
+                fullName: row.father_name,
+                relationship: 'Baba',
+                phone: row.father_phone || '',
+                email: '',
+                address: '',
+                sameAddressAsStudent: false,
+                isPrimary: !row.mother_name,
+                notes: '',
+                sortOrder: 2,
+                isActive: true
+              }
+            : null
+        ].filter(Boolean)
 
   const student = {
     id: row.id,
@@ -391,6 +587,19 @@ function mapStudentFromDb(row) {
 
     notes:
       row.notes || '',
+
+    guardians:
+      legacyGuardians,
+
+    ...getGuardianFormFields(
+      legacyGuardians[0],
+      0
+    ),
+
+    ...getGuardianFormFields(
+      legacyGuardians[1],
+      1
+    ),
 
     status:
       row.status || 'Aktif',
@@ -441,6 +650,253 @@ function mapStudentFromDb(row) {
     student,
     enrolledPackages
   )
+}
+
+
+function getLessonUsageKey(
+  studentId,
+  packageId
+) {
+  return `${String(studentId)}::${String(packageId)}`
+}
+
+async function addLessonUsageToStudents(
+  students
+) {
+  const studentList =
+    Array.isArray(students)
+      ? students
+      : []
+
+  if (studentList.length === 0) {
+    return studentList
+  }
+
+  const studentIds = [
+    ...new Set(
+      studentList
+        .map((student) => student.id)
+        .filter(Boolean)
+    )
+  ]
+
+  const { data, error } = await supabase
+    .from('lesson_occurrences')
+    .select('student_id, package_id')
+    .in('student_id', studentIds)
+    .eq('is_active', true)
+    .in('status', ['Yapıldı', 'Telafi yapıldı'])
+
+  if (error) {
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Öğrenci ders hakları şu anda hesaplanamadı.'
+      )
+    )
+  }
+
+  const usageByStudentPackage = new Map()
+
+  for (const occurrence of data || []) {
+    const key = getLessonUsageKey(
+      occurrence.student_id,
+      occurrence.package_id
+    )
+
+    usageByStudentPackage.set(
+      key,
+      (usageByStudentPackage.get(key) || 0) + 1
+    )
+  }
+
+  return studentList.map((student) => {
+    const enrolledPackages = (student.enrolledPackages || []).map((studentPackage) => {
+      const key = getLessonUsageKey(
+        student.id,
+        studentPackage.packageId
+      )
+
+      const usedLessonCount =
+        usageByStudentPackage.get(key) || 0
+
+      const totalLessonCount = Number(
+        studentPackage.totalLessonCount || 0
+      )
+
+      const remainingLessonCount = Math.max(
+        totalLessonCount - usedLessonCount,
+        0
+      )
+
+      let lessonRightsStatus = 'Devam Ediyor'
+
+      if (remainingLessonCount === 0) {
+        lessonRightsStatus = 'Ders Hakkı Bitti'
+      } else if (remainingLessonCount === 1) {
+        lessonRightsStatus = 'Bitmek Üzere'
+      }
+
+      return {
+        ...studentPackage,
+        usedLessonCount,
+        remainingLessonCount,
+        lessonRightsStatus
+      }
+    })
+
+    return syncLegacyPackageFields(
+      student,
+      enrolledPackages
+    )
+  })
+}
+
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getStudentErrorMessage(
+  error,
+  fallbackMessage,
+  duplicateMessage = ''
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (
+    duplicateMessage &&
+    (
+      error?.code === '23505' ||
+      String(
+        error?.message ?? ''
+      )
+        .toLocaleLowerCase('tr-TR')
+        .includes('duplicate')
+    )
+  ) {
+    return duplicateMessage
+  }
+
+  return fallbackMessage
+}
+
+function getSafePagination(
+  page,
+  pageSize
+) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  return {
+    safePage,
+    safePageSize,
+    from,
+    to:
+      from +
+      safePageSize -
+      1
+  }
+}
+
+function cleanSearchValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[(),]/g, ' ')
+}
+
+function normalizeDateKey(
+  value,
+  label,
+  {
+    required = false
+  } = {}
+) {
+  const dateKey = String(
+    value || ''
+  ).trim()
+
+  if (!dateKey) {
+    if (required) {
+      throw new Error(
+        `${label} zorunludur.`
+      )
+    }
+
+    return ''
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      dateKey
+    )
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  const date = new Date(
+    `${dateKey}T12:00:00`
+  )
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date
+      .toISOString()
+      .slice(0, 10) !== dateKey
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  return dateKey
 }
 
 function normalizeStudentPackages(form) {
@@ -499,9 +955,14 @@ function normalizeStudentForm(form) {
     form.phone ?? ''
   ).trim()
 
-  const registerDate = String(
-    form.registerDate ?? ''
-  ).trim()
+  const registerDate =
+    normalizeDateKey(
+      form.registerDate,
+      'Kayıt tarihi',
+      {
+        required: true
+      }
+    )
 
   if (!/^[0-9]{11}$/.test(tcNo)) {
     throw new Error(
@@ -541,6 +1002,9 @@ function normalizeStudentForm(form) {
     )
   }
 
+  const guardianRows =
+    normalizeGuardiansFromForm(form)
+
   const packageRows =
     activePackages.map((item) => {
       const packageId =
@@ -556,11 +1020,23 @@ function normalizeStudentForm(form) {
       )
 
       const firstPaymentDate =
-        item.firstPaymentDate || ''
+        normalizeDateKey(
+          item.firstPaymentDate,
+          'İlk ödeme tarihi',
+          {
+            required: true
+          }
+        )
 
       const nextPaymentDate =
-        item.nextPaymentDate ||
-        firstPaymentDate
+        normalizeDateKey(
+          item.nextPaymentDate ||
+            firstPaymentDate,
+          'Sonraki ödeme tarihi',
+          {
+            required: true
+          }
+        )
 
       const paymentDay = Number(
         item.paymentDay ||
@@ -594,9 +1070,12 @@ function normalizeStudentForm(form) {
         )
       }
 
-      if (!nextPaymentDate) {
+      if (
+        nextPaymentDate <
+          firstPaymentDate
+      ) {
         throw new Error(
-          'Her paket için sonraki ödeme tarihi seçilmelidir.'
+          'Sonraki ödeme tarihi ilk ödeme tarihinden önce olamaz.'
         )
       }
 
@@ -632,6 +1111,13 @@ function normalizeStudentForm(form) {
         next_payment_date:
           nextPaymentDate,
 
+        total_lesson_count:
+          Number(
+            item.totalLessonCount ??
+            item.lessonCount ??
+            0
+          ) || null,
+
         status: 'Aktif',
 
         is_active: true,
@@ -655,7 +1141,10 @@ function normalizeStudentForm(form) {
         null,
 
       birth_date:
-        form.birthDate || null,
+        normalizeDateKey(
+          form.birthDate,
+          'Doğum tarihi'
+        ) || null,
 
       register_date:
         registerDate,
@@ -727,7 +1216,8 @@ function normalizeStudentForm(form) {
         null
     },
 
-    packageRows
+    packageRows,
+    guardianRows
   }
 }
 
@@ -741,35 +1231,15 @@ export async function getStudentsPage({
   teacherId = '',
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(
-    1,
-    Number(page) || 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
   )
-
-  const allowedPageSizes = [
-    10,
-    25,
-    50
-  ]
-
-  const requestedPageSize =
-    Number(pageSize)
-
-  const safePageSize =
-    allowedPageSizes.includes(
-      requestedPageSize
-    )
-      ? requestedPageSize
-      : 10
-
-  const from =
-    (safePage - 1) *
-    safePageSize
-
-  const to =
-    from +
-    safePageSize -
-    1
 
   let query = supabase
     .from('student_list_view')
@@ -787,11 +1257,8 @@ export async function getStudentsPage({
     )
   }
 
-  const cleanSearchText = String(
-    searchText || ''
-  )
-    .trim()
-    .replace(/[(),]/g, ' ')
+  const cleanSearchText =
+    cleanSearchValue(searchText)
 
   if (cleanSearchText) {
     const searchPattern =
@@ -810,17 +1277,25 @@ export async function getStudentsPage({
     )
   }
 
-  if (packageId) {
+  const cleanPackageId = String(
+    packageId || ''
+  ).trim()
+
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (cleanPackageId) {
     query = query.contains(
       'package_ids',
-      [packageId]
+      [cleanPackageId]
     )
   }
 
-  if (teacherId) {
+  if (cleanTeacherId) {
     query = query.contains(
       'teacher_ids',
-      [teacherId]
+      [cleanTeacherId]
     )
   }
 
@@ -880,7 +1355,10 @@ export async function getStudentsPage({
 
   if (error) {
     throw new Error(
-      `Öğrenci listesi alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci listesi şu anda alınamadı.'
+      )
     )
   }
 
@@ -921,7 +1399,12 @@ export async function getStudentListCounts() {
             )
 
           if (error) {
-            throw error
+            throw new Error(
+              getStudentErrorMessage(
+                error,
+                'Öğrenci durum sayıları şu anda alınamadı.'
+              )
+            )
           }
 
           return [
@@ -948,6 +1431,171 @@ export async function getStudentListCounts() {
   }
 }
 
+
+export async function getStudentPackageLessonUsage() {
+  const { data, error } = await supabase.rpc(
+    'get_dashboard_student_package_lesson_usage'
+  )
+
+  if (error) {
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Öğrenci ders hakları şu anda hesaplanamadı.'
+      )
+    )
+  }
+
+  return (data || []).map((row) => ({
+    studentPackageId: row.student_package_id,
+    studentId: row.student_id,
+    studentName: row.student_name || '',
+    packageId: row.package_id,
+    packageName: row.package_name || '',
+    totalLessonCount: Number(
+      row.total_lesson_count || 0
+    ),
+    usedLessonCount: Number(
+      row.used_lesson_count || 0
+    ),
+    remainingLessonCount: Number(
+      row.remaining_lesson_count || 0
+    ),
+    lessonRightsStatus:
+      row.lesson_rights_status || 'Devam Ediyor'
+  }))
+}
+
+export async function getDashboardStudents() {
+  const { data, error } = await supabase
+    .from('students')
+    .select(`
+      id,
+      full_name,
+      gender,
+      phone,
+      status,
+      is_active,
+      is_archived,
+      is_anonymized,
+      retention_status,
+      retention_review_date
+    `)
+    .order('full_name', {
+      ascending: true
+    })
+
+  if (error) {
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Dashboard öğrenci özeti şu anda alınamadı.'
+      )
+    )
+  }
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    fullName: row.full_name || '',
+    name: row.full_name || '',
+    gender: row.gender || '',
+    phone: row.phone || '',
+    status: row.status || 'Aktif',
+    isActive: row.is_active !== false,
+    isArchived: row.is_archived === true,
+    isAnonymized: row.is_anonymized === true,
+    retentionStatus:
+      row.retention_status || 'Aktif Kayıt',
+    retentionReviewDate:
+      row.retention_review_date || ''
+  }))
+}
+
+export async function getScheduleStudents() {
+  const { data, error } = await supabase
+    .from('students')
+    .select(`
+      id,
+      tc_no,
+      full_name,
+      status,
+      is_active,
+      is_archived,
+
+      student_packages (
+        id,
+        student_id,
+        package_id,
+        default_teacher_id,
+        agreed_price,
+        total_lesson_count,
+        status,
+        is_active,
+        created_at,
+
+        package:packages (
+          id,
+          name,
+          duration_minutes,
+          lesson_count,
+          total_price,
+
+          specialty:specialties (
+            id,
+            name
+          )
+        ),
+
+        default_teacher:teachers (
+          id,
+          full_name,
+          status,
+          is_active
+        )
+      )
+    `)
+    .order('full_name', {
+      ascending: true
+    })
+
+  if (error) {
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Ders programı öğrenci listesi şu anda alınamadı.'
+      )
+    )
+  }
+
+  return (data || []).map((row) => {
+    const enrolledPackages = (
+      row.student_packages || []
+    )
+      .map(mapStudentPackageFromDb)
+      .filter(isActiveStudentPackage)
+      .sort((first, second) =>
+        String(
+          second.createdAt || ''
+        ).localeCompare(
+          String(first.createdAt || '')
+        )
+      )
+
+    return syncLegacyPackageFields(
+      {
+        id: row.id,
+        tcNo: row.tc_no || '',
+        fullName: row.full_name || '',
+        name: row.full_name || '',
+        status: row.status || 'Aktif',
+        isActive: row.is_active !== false,
+        isArchived: row.is_archived === true
+      },
+      enrolledPackages
+    )
+  })
+}
+
 export async function getStudents() {
   const { data, error } = await supabase
     .from('students')
@@ -958,19 +1606,30 @@ export async function getStudents() {
 
   if (error) {
     throw new Error(
-      `Öğrenciler alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenciler şu anda alınamadı.'
+      )
     )
   }
 
-  return (data || []).map(
+  const students = (data || []).map(
     mapStudentFromDb
+  )
+
+  return addLessonUsageToStudents(
+    students
   )
 }
 
 export async function getStudentById(
   studentId
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
@@ -979,22 +1638,33 @@ export async function getStudentById(
   const { data, error } = await supabase
     .from('students')
     .select(studentSelect)
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .single()
 
   if (error) {
     throw new Error(
-      `Öğrenci alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci bilgileri şu anda alınamadı.'
+      )
     )
   }
 
-  return mapStudentFromDb(data)
+  const student = mapStudentFromDb(data)
+
+  const enrichedStudents =
+    await addLessonUsageToStudents(
+      [student]
+    )
+
+  return enrichedStudents[0]
 }
 
 export async function createStudent(form) {
   const {
     studentRow,
-    packageRows
+    packageRows,
+    guardianRows
   } = normalizeStudentForm(form)
 
   const { data, error } = await supabase
@@ -1004,14 +1674,12 @@ export async function createStudent(form) {
     .single()
 
   if (error) {
-    if (error.code === '23505') {
-      throw new Error(
+    throw new Error(
+      getStudentErrorMessage(
+        error,
+        'Öğrenci eklenemedi.',
         'Bu TC Kimlik No ile kayıtlı başka bir öğrenci bulunmaktadır.'
       )
-    }
-
-    throw new Error(
-      `Öğrenci eklenemedi: ${error.message}`
     )
   }
 
@@ -1051,8 +1719,55 @@ export async function createStudent(form) {
     }
 
     throw new Error(
-      `Öğrenci paketleri kaydedilemedi: ${packageError.message}`
+      getStudentErrorMessage(
+        packageError,
+        'Öğrenci paketleri kaydedilemedi.',
+        'Aynı paket öğrenciye birden fazla aktif kayıt olarak eklenemez.'
+      )
     )
+  }
+
+  if (guardianRows.length > 0) {
+    const {
+      error: guardianError
+    } = await supabase
+      .from('student_guardians')
+      .insert(
+        guardianRows.map((row) => {
+          const {
+            id,
+            ...guardianRow
+          } = row
+
+          return {
+            ...guardianRow,
+            student_id: studentId
+          }
+        })
+      )
+
+    if (guardianError) {
+      const {
+        error: rollbackError
+      } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId)
+
+      if (rollbackError) {
+        console.error(
+          'Başarısız veli kaydı geri alınamadı:',
+          rollbackError
+        )
+      }
+
+      throw new Error(
+        getStudentErrorMessage(
+          guardianError,
+          'Veli bilgileri kaydedilemedi.'
+        )
+      )
+    }
   }
 
   return getStudentById(studentId)
@@ -1083,11 +1798,14 @@ export async function setStudentPassive(
     )
   }
 
-  if (!passiveDate) {
-    throw new Error(
-      'Pasife alma tarihi zorunludur.'
+  const cleanPassiveDate =
+    normalizeDateKey(
+      passiveDate,
+      'Pasife alma tarihi',
+      {
+        required: true
+      }
     )
-  }
 
   const {
     data,
@@ -1100,13 +1818,16 @@ export async function setStudentPassive(
       p_passive_reason:
         cleanReason,
       p_passive_date:
-        passiveDate
+        cleanPassiveDate
     }
   )
 
   if (error) {
     throw new Error(
-      `Öğrenci pasife alınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci pasife alınamadı.'
+      )
     )
   }
 
@@ -1126,7 +1847,11 @@ export async function reactivateStudent(
   studentId,
   reactivatedAt
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
@@ -1150,7 +1875,10 @@ export async function reactivateStudent(
 
   if (error) {
     throw new Error(
-      `Öğrenci aktifleştirilemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci aktifleştirilemedi.'
+      )
     )
   }
 
@@ -1163,9 +1891,14 @@ function normalizeStudentUpdate(form) {
   const tcNo = String(form.tcNo ?? '').trim()
   const fullName = String(form.fullName ?? '').trim()
   const phone = String(form.phone ?? '').trim()
-  const registerDate = String(
-    form.registerDate ?? ''
-  ).trim()
+  const registerDate =
+    normalizeDateKey(
+      form.registerDate,
+      'Kayıt tarihi',
+      {
+        required: true
+      }
+    )
 
   if (!/^[0-9]{11}$/.test(tcNo)) {
     throw new Error(
@@ -1191,7 +1924,11 @@ function normalizeStudentUpdate(form) {
       full_name: fullName,
       gender:
         String(form.gender ?? '').trim() || null,
-      birth_date: form.birthDate || null,
+      birth_date:
+        normalizeDateKey(
+          form.birthDate,
+          'Doğum tarihi'
+        ) || null,
       register_date: registerDate,
       phone,
       email:
@@ -1210,7 +1947,9 @@ function normalizeStudentUpdate(form) {
         String(form.notes ?? '').trim() || null
     },
     enrolledPackages:
-      normalizeStudentPackages(form)
+      normalizeStudentPackages(form),
+    guardianRows:
+      normalizeGuardiansFromForm(form)
   }
 }
 
@@ -1222,9 +1961,22 @@ function normalizePackageUpdateRow(item) {
     item.agreedPrice ?? item.monthlyFee
   )
   const firstPaymentDate =
-    item.firstPaymentDate || ''
+    normalizeDateKey(
+      item.firstPaymentDate,
+      'İlk ödeme tarihi',
+      {
+        required: true
+      }
+    )
   const nextPaymentDate =
-    item.nextPaymentDate || firstPaymentDate
+    normalizeDateKey(
+      item.nextPaymentDate ||
+        firstPaymentDate,
+      'Sonraki ödeme tarihi',
+      {
+        required: true
+      }
+    )
   const paymentDay = Number(
     item.paymentDay ||
       String(firstPaymentDate).slice(8, 10)
@@ -1245,9 +1997,12 @@ function normalizePackageUpdateRow(item) {
     )
   }
 
-  if (!firstPaymentDate || !nextPaymentDate) {
+  if (
+    nextPaymentDate <
+      firstPaymentDate
+  ) {
     throw new Error(
-      'Paket ödeme tarihleri zorunludur.'
+      'Sonraki ödeme tarihi ilk ödeme tarihinden önce olamaz.'
     )
   }
 
@@ -1270,6 +2025,12 @@ function normalizePackageUpdateRow(item) {
     payment_day: paymentDay,
     first_payment_date: firstPaymentDate,
     next_payment_date: nextPaymentDate,
+    total_lesson_count:
+      Number(
+        item.totalLessonCount ??
+        item.lessonCount ??
+        0
+      ) || null,
     status: active ? 'Aktif' : 'Sonlandırıldı',
     is_active: active,
     ended_at:
@@ -1303,7 +2064,10 @@ async function syncStudentPackages(
 
   if (readError) {
     throw new Error(
-      `Öğrenci paketleri alınamadı: ${readError.message}`
+      getStudentErrorMessage(
+        readError,
+        'Öğrenci paketleri şu anda alınamadı.'
+      )
     )
   }
 
@@ -1333,7 +2097,10 @@ async function syncStudentPackages(
 
       if (error) {
         throw new Error(
-          `Öğrenci paketi güncellenemedi: ${error.message}`
+          getStudentErrorMessage(
+          error,
+          'Öğrenci paketi güncellenemedi.'
+        )
         )
       }
 
@@ -1355,9 +2122,177 @@ async function syncStudentPackages(
       }
 
       throw new Error(
-        `Öğrenci paketi eklenemedi: ${error.message}`
+        getStudentErrorMessage(
+        error,
+        'Öğrenci paketi eklenemedi.',
+        'Aynı paket öğrenciye birden fazla aktif kayıt olarak eklenemez.'
+      )
       )
     }
+  }
+}
+
+
+export async function extendStudentPackage(
+  studentPackageId,
+  lessonCountToAdd
+) {
+  const cleanStudentPackageId =
+    String(
+      studentPackageId || ''
+    ).trim()
+
+  const cleanLessonCountToAdd =
+    Number(lessonCountToAdd)
+
+  if (!cleanStudentPackageId) {
+    throw new Error(
+      'Öğrenci paket kaydı bulunamadı.'
+    )
+  }
+
+  if (
+    !Number.isInteger(
+      cleanLessonCountToAdd
+    ) ||
+    cleanLessonCountToAdd <= 0
+  ) {
+    throw new Error(
+      'Eklenecek ders sayısı pozitif bir tam sayı olmalıdır.'
+    )
+  }
+
+  const {
+    data: currentPackage,
+    error: readError
+  } = await supabase
+    .from('student_packages')
+    .select(`
+      id,
+      student_id,
+      total_lesson_count,
+      status,
+      is_active
+    `)
+    .eq(
+      'id',
+      cleanStudentPackageId
+    )
+    .single()
+
+  if (readError || !currentPackage) {
+    throw new Error(
+      getStudentErrorMessage(
+        readError,
+        'Öğrenci paket bilgisi alınamadı.'
+      )
+    )
+  }
+
+  if (
+    currentPackage.is_active === false ||
+    normalizeStatus(
+      currentPackage.status
+    ) === 'sonlandırıldı'
+  ) {
+    throw new Error(
+      'Sonlandırılmış paket uzatılamaz.'
+    )
+  }
+
+  const currentTotal =
+    Number(
+      currentPackage.total_lesson_count ||
+      0
+    )
+
+  const newTotal =
+    currentTotal +
+    cleanLessonCountToAdd
+
+  const {
+    error: updateError
+  } = await supabase
+    .from('student_packages')
+    .update({
+      total_lesson_count:
+        newTotal,
+      updated_at:
+        new Date().toISOString()
+    })
+    .eq(
+      'id',
+      cleanStudentPackageId
+    )
+
+  if (updateError) {
+    throw new Error(
+      getStudentErrorMessage(
+        updateError,
+        'Paket ders hakkı uzatılamadı.'
+      )
+    )
+  }
+
+  return getStudentById(
+    currentPackage.student_id
+  )
+}
+
+
+async function syncStudentGuardians(
+  studentId,
+  guardianRows
+) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  const {
+    error: deleteError
+  } = await supabase
+    .from('student_guardians')
+    .delete()
+    .eq('student_id', cleanStudentId)
+
+  if (deleteError) {
+    throw new Error(
+      getStudentErrorMessage(
+        deleteError,
+        'Veli bilgileri güncellenemedi.'
+      )
+    )
+  }
+
+  if (!guardianRows.length) {
+    return
+  }
+
+  const {
+    error: insertError
+  } = await supabase
+    .from('student_guardians')
+    .insert(
+      guardianRows.map((row) => {
+        const {
+          id,
+          ...guardianRow
+        } = row
+
+        return {
+          ...guardianRow,
+          student_id: cleanStudentId
+        }
+      })
+    )
+
+  if (insertError) {
+    throw new Error(
+      getStudentErrorMessage(
+        insertError,
+        'Veli bilgileri kaydedilemedi.'
+      )
+    )
   }
 }
 
@@ -1365,19 +2300,26 @@ export async function updateStudent(
   studentId,
   form
 ) {
-  if (!studentId) {
-    throw new Error('Öğrenci kimliği bulunamadı.')
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
+    throw new Error(
+      'Öğrenci kimliği bulunamadı.'
+    )
   }
 
   const {
     studentRow,
-    enrolledPackages
+    enrolledPackages,
+    guardianRows
   } = normalizeStudentUpdate(form)
 
   const { error } = await supabase
     .from('students')
     .update(studentRow)
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
 
   if (error) {
     if (error.code === '23505') {
@@ -1387,16 +2329,27 @@ export async function updateStudent(
     }
 
     throw new Error(
-      `Öğrenci güncellenemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci güncellenemedi.',
+        'Bu TC Kimlik No ile kayıtlı başka bir öğrenci bulunmaktadır.'
+      )
     )
   }
 
   await syncStudentPackages(
-    studentId,
+    cleanStudentId,
     enrolledPackages
   )
 
-  return getStudentById(studentId)
+  await syncStudentGuardians(
+    cleanStudentId,
+    guardianRows
+  )
+
+  return getStudentById(
+    cleanStudentId
+  )
 }
 
 export async function archiveStudent(
@@ -1407,18 +2360,40 @@ export async function archiveStudent(
     retentionReviewDate
   }
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
   }
 
+  const cleanArchivedAt =
+    normalizeDateKey(
+      archivedAt,
+      'Arşiv tarihi',
+      {
+        required: true
+      }
+    )
+
+  const cleanRetentionReviewDate =
+    normalizeDateKey(
+      retentionReviewDate,
+      'İnceleme tarihi',
+      {
+        required: true
+      }
+    )
+
   if (
-    !archivedAt ||
-    !retentionReviewDate
+    cleanRetentionReviewDate <
+      cleanArchivedAt
   ) {
     throw new Error(
-      'Arşiv ve inceleme tarihleri zorunludur.'
+      'İnceleme tarihi arşiv tarihinden önce olamaz.'
     )
   }
 
@@ -1428,86 +2403,102 @@ export async function archiveStudent(
       is_active: false,
       status: 'Arşiv',
       is_archived: true,
-      archived_at: archivedAt,
+      archived_at: cleanArchivedAt,
       archive_reason:
         String(
           archiveReason ||
           'Pasif öğrenci arşive taşındı'
         ).trim(),
       retention_review_date:
-        retentionReviewDate,
+        cleanRetentionReviewDate,
       retention_status:
         'Saklama Süresi Devam Ediyor'
     })
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .eq('is_active', false)
     .eq('is_anonymized', false)
 
   if (error) {
     throw new Error(
-      `Öğrenci arşive taşınamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci arşive taşınamadı.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 export async function extendStudentRetention(
   studentId,
   retentionReviewDate
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
   }
 
-  if (!retentionReviewDate) {
-    throw new Error(
-      'Yeni inceleme tarihi zorunludur.'
+  const cleanRetentionReviewDate =
+    normalizeDateKey(
+      retentionReviewDate,
+      'Yeni inceleme tarihi',
+      {
+        required: true
+      }
     )
-  }
 
   const { error } = await supabase
     .from('students')
     .update({
       retention_review_date:
-        retentionReviewDate,
+        cleanRetentionReviewDate,
       retention_status:
         'Saklamaya Devam'
     })
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .eq('is_archived', true)
     .eq('is_anonymized', false)
 
   if (error) {
     throw new Error(
-      `Saklama süresi uzatılamadı: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Saklama süresi uzatılamadı.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 export async function anonymizeStudent(
   studentId,
   anonymizedAt
 ) {
-  if (!studentId) {
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
     throw new Error(
       'Öğrenci kimliği bulunamadı.'
     )
   }
 
   const anonymousName =
-    `Anonim Öğrenci #${String(
-      studentId
-    ).slice(0, 8)}`
+    `Anonim Öğrenci #${cleanStudentId.slice(
+      0,
+      8
+    )}`
 
   const anonymousTcNo =
-    String(
-      studentId
-    )
+    cleanStudentId
       .replace(/[^0-9]/g, '')
       .padEnd(11, '0')
       .slice(0, 11)
@@ -1536,7 +2527,7 @@ export async function anonymizeStudent(
       retention_status:
         'Anonimleştirildi'
     })
-    .eq('id', studentId)
+    .eq('id', cleanStudentId)
     .eq('is_archived', true)
     .eq('is_anonymized', false)
 
@@ -1548,11 +2539,15 @@ export async function anonymizeStudent(
     }
 
     throw new Error(
-      `Öğrenci anonimleştirilemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci anonimleştirilemedi.',
+        'Anonim öğrenci kimliği oluşturulurken benzersizlik hatası oluştu.'
+      )
     )
   }
 
-  return getStudentById(studentId)
+  return getStudentById(cleanStudentId)
 }
 
 
@@ -1582,7 +2577,10 @@ export async function deleteStudentPermanently(
 
   if (error) {
     throw new Error(
-      `Öğrenci kalıcı olarak silinemedi: ${error.message}`
+      getStudentErrorMessage(
+        error,
+        'Öğrenci kalıcı olarak silinemedi.'
+      )
     )
   }
 
@@ -1614,6 +2612,14 @@ export async function deleteStudentPermanently(
       result.lesson_occurrence_count || 0
     )
 
+    const lessonPlanStudentCount = Number(
+      result.lesson_plan_student_count || 0
+    )
+
+    const lessonGroupStudentCount = Number(
+      result.lesson_group_student_count || 0
+    )
+
     if (packageCount > 0) {
       blockers.push(
         `${packageCount} paket kaydı`
@@ -1635,6 +2641,18 @@ export async function deleteStudentPermanently(
     if (occurrenceCount > 0) {
       blockers.push(
         `${occurrenceCount} ders geçmişi kaydı`
+      )
+    }
+
+    if (lessonPlanStudentCount > 0) {
+      blockers.push(
+        `${lessonPlanStudentCount} ders katılımcı bağlantısı`
+      )
+    }
+
+    if (lessonGroupStudentCount > 0) {
+      blockers.push(
+        `${lessonGroupStudentCount} ders grubu üyeliği`
       )
     }
 

@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  useQuery,
+  useQueryClient
+} from '@tanstack/react-query'
 
 import {
   createLessonOccurrence,
   deleteLessonOccurrence,
   getLessonHistoryPage,
+  getLessonPlanStudents,
   updateLessonOccurrenceStatus
 } from '../services/lessonService'
 import '../styles/status.css'
@@ -13,7 +18,6 @@ import {
   getLessonStatusBadgeClass,
   getLessonStatusClass,
   getLessonStatusLabel,
-  isActiveLesson,
   isMakeupLesson,
   normalizeLessonStatus
 } from '../utils/lessonHelpers'
@@ -24,6 +28,145 @@ import {
   normalizeStatusText
 } from '../utils/textHelpers'
 
+const formatLocalDateKey = (date) => {
+  const year = date.getFullYear()
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0')
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const getMondayDateKey = (
+  value = new Date()
+) => {
+  const date =
+    value instanceof Date
+      ? new Date(value)
+      : new Date(
+          `${String(value).slice(
+            0,
+            10
+          )}T12:00:00`
+        )
+
+  if (Number.isNaN(date.getTime())) {
+    return formatLocalDateKey(
+      new Date()
+    )
+  }
+
+  const dayOfWeek =
+    date.getDay() || 7
+
+  date.setDate(
+    date.getDate() -
+      dayOfWeek +
+      1
+  )
+
+  return formatLocalDateKey(date)
+}
+
+const addDaysToDateKey = (
+  dateKey,
+  dayCount
+) => {
+  const date = new Date(
+    `${dateKey}T12:00:00`
+  )
+
+  date.setDate(
+    date.getDate() +
+      dayCount
+  )
+
+  return formatLocalDateKey(date)
+}
+
+const formatShortDate = (
+  dateKey
+) =>
+  new Date(
+    `${dateKey}T12:00:00`
+  ).toLocaleDateString(
+    'tr-TR',
+    {
+      day: '2-digit',
+      month: '2-digit'
+    }
+  )
+
+const LESSON_PLAN_STUDENTS_QUERY_KEY = [
+  'lesson-plan-students',
+  'active'
+]
+
+const LESSON_HISTORY_QUERY_ROOT = [
+  'lesson-status',
+  'history'
+]
+
+const getLessonHistoryQueryKey = ({
+  page,
+  pageSize,
+  teacherId,
+  studentId,
+  status,
+  startDate,
+  endDate,
+  sortOption
+}) => [
+  ...LESSON_HISTORY_QUERY_ROOT,
+  {
+    page,
+    pageSize,
+    teacherId,
+    studentId,
+    status,
+    startDate,
+    endDate,
+    sortOption
+  }
+]
+
+const getLessonHistoryErrorMessage = (
+  error
+) => {
+  const isOffline =
+    typeof navigator !== 'undefined' &&
+    !navigator.onLine
+
+  if (isOffline) {
+    return 'İnternet bağlantısı bulunamadı. Ders geçmişi yüklenemedi.'
+  }
+
+  const errorMessage =
+    String(
+      error?.message || ''
+    ).toLocaleLowerCase(
+      'tr-TR'
+    )
+
+  const isNetworkError =
+    errorMessage.includes(
+      'failed to fetch'
+    ) ||
+    errorMessage.includes(
+      'network'
+    ) ||
+    errorMessage.includes(
+      'fetch'
+    )
+
+  return isNetworkError
+    ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    : 'Ders geçmişi şu anda yüklenemedi.'
+}
+
 function LessonStatusTracking({
   lessons = [],
   lessonPlans = [],
@@ -33,6 +176,8 @@ function LessonStatusTracking({
   packages = [],
   unsavedChanges
 }) {
+  const queryClient = useQueryClient()
+
   const days = [
     'Pazartesi',
     'Salı',
@@ -77,6 +222,28 @@ function LessonStatusTracking({
     Cumartesi: 6,
     Pazar: 7
   }
+
+  const todayDateKey =
+    formatLocalDateKey(
+      new Date()
+    )
+
+  const currentWeekStart =
+    getMondayDateKey(
+      todayDateKey
+    )
+
+  const formattedToday =
+    new Date(
+      `${todayDateKey}T12:00:00`
+    ).toLocaleDateString(
+      'tr-TR',
+      {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+      }
+    )
 
   const emptyMakeupForm = {
     teacherId: '',
@@ -128,16 +295,6 @@ function LessonStatusTracking({
     useState(false)
 
   const [
-    historyRows,
-    setHistoryRows
-  ] = useState([])
-
-  const [
-    historyTotal,
-    setHistoryTotal
-  ] = useState(0)
-
-  const [
     historyPage,
     setHistoryPage
   ] = useState(1)
@@ -161,21 +318,6 @@ function LessonStatusTracking({
     historySort,
     setHistorySort
   ] = useState('newest')
-
-  const [
-    historyLoading,
-    setHistoryLoading
-  ] = useState(false)
-
-  const [
-    historyError,
-    setHistoryError
-  ] = useState('')
-
-  const [
-    historyReloadKey,
-    setHistoryReloadKey
-  ] = useState(0)
 
   const studentSearchRef = useRef(null)
 
@@ -213,11 +355,7 @@ function LessonStatusTracking({
     normalizeSearchText(
       [
         getStudentFullName(student),
-        student?.phone,
-        student?.motherPhone,
-        student?.fatherPhone,
-        student?.tcNo,
-        student?.email
+        student?.tcNo
       ]
         .filter(Boolean)
         .join(' ')
@@ -288,6 +426,21 @@ function LessonStatusTracking({
     }
   }, [])
 
+  /*
+   * Ders Programı ekranıyla aynı query key kullanılır. Kullanıcı sayfalar
+   * arasında dolaşırken grup dersi katılımcıları yeniden boş state'ten
+   * yüklenmez; cache varsa anında kullanılır, stale ise arka planda yenilenir.
+   */
+  const lessonPlanStudentsQuery = useQuery({
+    queryKey:
+      LESSON_PLAN_STUDENTS_QUERY_KEY,
+    queryFn:
+      getLessonPlanStudents
+  })
+
+  const lessonPlanStudents =
+    lessonPlanStudentsQuery.data ?? []
+
   const getTeacherName = (lesson) => {
     if (lesson.teacherName) {
       return lesson.teacherName
@@ -349,6 +502,140 @@ function LessonStatusTracking({
     )
   }
 
+  const getLessonPlanRecord = (lesson) => {
+    const planId =
+      lesson.lessonPlanId ||
+      lesson.id
+
+    return lessonPlans.find(
+      (lessonPlan) =>
+        areIdsEqual(
+          lessonPlan.id,
+          planId
+        )
+    ) || null
+  }
+
+  const isGroupLessonRecord = (lesson) => {
+    if (
+      lesson.isGroupLesson === true ||
+      lesson.lessonType === 'group'
+    ) {
+      return true
+    }
+
+    const lessonPlan =
+      getLessonPlanRecord(lesson)
+
+    return (
+      lessonPlan?.isGroupLesson === true ||
+      lessonPlan?.lessonType === 'group'
+    )
+  }
+
+  const getLessonPlanId = (lesson) =>
+    lesson.lessonPlanId ||
+    (
+      isGroupLessonRecord(lesson)
+        ? lesson.id
+        : ''
+    )
+
+  const getGroupParticipantIds = (lesson) => {
+    const lessonPlanId =
+      getLessonPlanId(lesson)
+
+    if (!lessonPlanId) {
+      return []
+    }
+
+    return lessonPlanStudents
+      .filter(
+        (link) =>
+          link.isActive !== false &&
+          areIdsEqual(
+            link.lessonPlanId,
+            lessonPlanId
+          )
+      )
+      .map(
+        (link) => link.studentId
+      )
+  }
+
+  const getGroupStudentCount = (lesson) => {
+    const participantIds =
+      getGroupParticipantIds(lesson)
+
+    if (participantIds.length > 0) {
+      return participantIds.length
+    }
+
+    const lessonPlan =
+      getLessonPlanRecord(lesson)
+
+    return Number(
+      lesson.studentCount ||
+      lessonPlan?.studentCount ||
+      0
+    )
+  }
+
+  const getGroupName = (lesson) => {
+    const lessonPlan =
+      getLessonPlanRecord(lesson)
+
+    return (
+      lesson.groupName ||
+      lessonPlan?.groupName ||
+      'Grup Dersi'
+    )
+  }
+
+  const getLessonStudentIds = (lesson) => {
+    if (isGroupLessonRecord(lesson)) {
+      const participantIds =
+        getGroupParticipantIds(lesson)
+
+      if (participantIds.length > 0) {
+        return participantIds
+      }
+    }
+
+    return lesson.studentId
+      ? [lesson.studentId]
+      : []
+  }
+
+  const getLessonDisplayStudent = (lesson) => {
+    if (!isGroupLessonRecord(lesson)) {
+      return getStudentName(lesson)
+    }
+
+    return getGroupName(lesson)
+  }
+
+  const getLessonDisplaySummary = (lesson) => {
+    if (!isGroupLessonRecord(lesson)) {
+      return `${getStudentName(
+        lesson
+      )} • ${getLessonInstrument(
+        lesson
+      )}`
+    }
+
+    const studentCount =
+      getGroupStudentCount(lesson)
+
+    return `${getGroupName(
+      lesson
+    )} • ${
+      studentCount > 0
+        ? `${studentCount} öğrenci`
+        : 'Grup'
+    }`
+  }
+
   const getLessonTitle = (lesson) => {
     return (
       lesson.packageName ||
@@ -380,9 +667,9 @@ function LessonStatusTracking({
     return students.find(
       (student) =>
         areIdsEqual(
-        student.id,
-        makeupForm.studentId
-      )
+          student.id,
+          makeupForm.studentId
+        )
     )
   }
 
@@ -477,23 +764,36 @@ function LessonStatusTracking({
         selectedTeacher
       )
 
-    const lessonStudent = students.find(
-      (student) =>
-        areIdsEqual(
-          student.id,
-          lesson.studentId
+    const lessonStudentIds =
+      getLessonStudentIds(lesson)
+
+    const lessonStudents =
+      lessonStudentIds
+        .map(
+          (studentId) =>
+            students.find(
+              (student) =>
+                areIdsEqual(
+                  student.id,
+                  studentId
+                )
+            )
         )
-    )
+        .filter(Boolean)
 
     const lessonStudentSearchValue =
       normalizeSearchText(
         [
-          getStudentName(lesson),
-          lessonStudent?.phone,
-          lessonStudent?.motherPhone,
-          lessonStudent?.fatherPhone,
-          lessonStudent?.tcNo,
-          lessonStudent?.email
+          getLessonDisplayStudent(
+            lesson
+          ),
+          ...lessonStudents.flatMap(
+            (student) => [
+              student?.fullName,
+              student?.name,
+              student?.tcNo
+            ]
+          )
         ]
           .filter(Boolean)
           .join(' ')
@@ -501,9 +801,12 @@ function LessonStatusTracking({
 
     const studentMatch =
       selectedStudent !== 'all'
-        ? areIdsEqual(
-            lesson.studentId,
-            selectedStudent
+        ? lessonStudentIds.some(
+            (studentId) =>
+              areIdsEqual(
+                studentId,
+                selectedStudent
+              )
           )
         : !normalizedStudentSearch ||
           lessonStudentSearchValue.includes(
@@ -521,26 +824,46 @@ function LessonStatusTracking({
     )
   }
 
+  const getLessonDateForDay = (
+    day
+  ) => {
+    const dayIndex =
+      (dayOrder[day] || 1) - 1
+
+    return addDaysToDateKey(
+      currentWeekStart,
+      dayIndex
+    )
+  }
+
+  const selectedWeekEnd =
+    addDaysToDateKey(
+      currentWeekStart,
+      6
+    )
+
   /*
-   * Üst haftalık tablo güncel lesson_plans kayıtlarını gösterir.
-   * Occurrence kaydı varsa yalnızca dersin güncel durumunu ekler.
-   * Programdan silinen plan bu tablodan hemen çıkar.
+   * Aynı haftalık ders planı her hafta tekrar eder.
+   * Bu nedenle occurrence kaydı plan kimliği ve gerçek ders tarihiyle
+   * birlikte bulunur.
    */
-  const occurrenceByPlanId = new Map(
-    lessons
-      .filter(
-        (lesson) =>
-          lesson.lessonPlanId
-      )
-      .map(
-        (lesson) => [
-          String(
-            lesson.lessonPlanId
-          ),
-          lesson
-        ]
-      )
-  )
+  const occurrenceByPlanAndDate =
+    new Map(
+      lessons
+        .filter(
+          (lesson) =>
+            lesson.lessonPlanId &&
+            lesson.lessonDate
+        )
+        .map(
+          (lesson) => [
+            `${String(
+              lesson.lessonPlanId
+            )}-${lesson.lessonDate}`,
+            lesson
+          ]
+        )
+    )
 
   const currentScheduleLessons =
     lessonPlans
@@ -549,9 +872,16 @@ function LessonStatusTracking({
           lesson.isActive !== false
       )
       .map((lesson) => {
+        const lessonDate =
+          getLessonDateForDay(
+            lesson.day
+          )
+
         const occurrence =
-          occurrenceByPlanId.get(
-            String(lesson.id)
+          occurrenceByPlanAndDate.get(
+            `${String(
+              lesson.id
+            )}-${lessonDate}`
           )
 
         return {
@@ -560,6 +890,7 @@ function LessonStatusTracking({
             occurrence?.id || '',
           lessonPlanId:
             lesson.id,
+          lessonDate,
           status:
             occurrence?.status ||
             'Planlandı',
@@ -568,28 +899,34 @@ function LessonStatusTracking({
             lesson.note ||
             '',
           isMakeup:
-            occurrence?.isMakeup === true
+            false
         }
       })
 
   /*
-   * Plan tablosunda yer almayan ve henüz sonuçlanmamış telafi
-   * dersleri de güncel haftalık takip tablosunda gösterilir.
+   * Telafi dersleri yalnızca seçilen haftanın içindeyse gösterilir.
+   * Tarihsiz eski test kayıtları geçiş sürecinde görünmeye devam eder.
    */
   const pendingMakeupLessons =
     lessons.filter((lesson) => {
-      const status =
-        normalizeLessonStatus(
-          lesson.status
+      const belongsToSelectedWeek =
+        !lesson.lessonDate ||
+        (
+          lesson.lessonDate >=
+            currentWeekStart &&
+          lesson.lessonDate <=
+            selectedWeekEnd
         )
 
+      /*
+       * Telafi dersi sonuçlandıktan sonra haftalık tablodan
+       * kaldırılmaz. Böylece aynı öğrenci/öğretmen için aynı
+       * tarih ve saate ikinci bir telafi eklenmesi engellenir.
+       * Durum kartın rengi ve etiketiyle gösterilir.
+       */
       return (
-        isMakeupLesson(lesson) &&
-        (
-          status ===
-            'Telafi yapılacak' ||
-          status === 'Planlandı'
-        )
+        belongsToSelectedWeek &&
+        isMakeupLesson(lesson)
       )
     })
 
@@ -598,108 +935,94 @@ function LessonStatusTracking({
     ...pendingMakeupLessons
   ].filter(matchesCurrentFilters)
 
+  const historyFilters = {
+    page: historyPage,
+    pageSize:
+      historyPageSize,
+    teacherId:
+      selectedTeacher ===
+      'all'
+        ? ''
+        : selectedTeacher,
+    studentId:
+      selectedStudent ===
+      'all'
+        ? ''
+        : selectedStudent,
+    status:
+      selectedStatus,
+    startDate:
+      historyStartDate,
+    endDate:
+      historyEndDate,
+    sortOption:
+      historySort
+  }
+
+  /*
+   * Geçmiş tablosunu filtre + sayfa bazında cache'le. Aynı filtreye geri
+   * dönüldüğünde son gerçek tablo anında görünür. 30 saniye sonrası refetch
+   * olursa eski tablo ekranda kalır; yalnız ilk kez açılan sorguda loading
+   * gösterilir.
+   */
+  const historyQuery = useQuery({
+    queryKey:
+      getLessonHistoryQueryKey(
+        historyFilters
+      ),
+    queryFn: () =>
+      getLessonHistoryPage(
+        historyFilters
+      )
+  })
+
+  const historyRows =
+    historyQuery.data?.data ?? []
+
+  const historyTotal =
+    Number(
+      historyQuery.data?.total ?? 0
+    )
+
+  const historyLoading =
+    historyQuery.isPending &&
+    historyQuery.data === undefined
+
+  const historyError =
+    historyQuery.isError &&
+    historyQuery.data === undefined
+      ? getLessonHistoryErrorMessage(
+          historyQuery.error
+        )
+      : ''
+
   useEffect(() => {
-    let isMounted = true
+    if (!historyQuery.data) {
+      return
+    }
 
-    const timeoutId =
-      window.setTimeout(
-        async () => {
-          setHistoryLoading(true)
-          setHistoryError('')
-
-          try {
-            const result =
-              await getLessonHistoryPage({
-                page: historyPage,
-                pageSize:
-                  historyPageSize,
-                teacherId:
-                  selectedTeacher ===
-                  'all'
-                    ? ''
-                    : selectedTeacher,
-                studentId:
-                  selectedStudent ===
-                  'all'
-                    ? ''
-                    : selectedStudent,
-                status:
-                  selectedStatus,
-                startDate:
-                  historyStartDate,
-                endDate:
-                  historyEndDate,
-                sortOption:
-                  historySort
-              })
-
-            if (!isMounted) {
-              return
-            }
-
-            const totalPages =
-              Math.max(
-                1,
-                Math.ceil(
-                  result.total /
-                    historyPageSize
-                )
-              )
-
-            if (
-              historyPage >
-              totalPages
-            ) {
-              setHistoryPage(
-                totalPages
-              )
-              return
-            }
-
-            setHistoryRows(
-              result.data
-            )
-            setHistoryTotal(
-              result.total
-            )
-          } catch (error) {
-            console.error(
-              'Ders geçmişi alınamadı:',
-              error
-            )
-
-            if (isMounted) {
-              setHistoryError(
-                error instanceof Error
-                  ? error.message
-                  : 'Ders geçmişi alınamadı.'
-              )
-            }
-          } finally {
-            if (isMounted) {
-              setHistoryLoading(false)
-            }
-          }
-        },
-        150
+    const totalPages =
+      Math.max(
+        1,
+        Math.ceil(
+          historyTotal /
+            historyPageSize
+        )
       )
 
-    return () => {
-      isMounted = false
-      window.clearTimeout(
-        timeoutId
+    if (
+      historyPage >
+      totalPages
+    ) {
+      setHistoryPage(
+        totalPages
       )
     }
   }, [
     historyPage,
     historyPageSize,
-    selectedTeacher,
-    selectedStudent,
-    selectedStatus,
-    historyStartDate,
-    historyEndDate,
-    historySort,
-    historyReloadKey
+    historyQuery.data,
+    historyTotal
   ])
 
   const historyTotalPages =
@@ -802,69 +1125,117 @@ function LessonStatusTracking({
   }
 
   const updateLessonStatus = async (
-    lessonId,
+    currentLesson,
     newStatus
   ) => {
-    if (updatingLessonId) {
+    if (
+      !currentLesson ||
+      updatingLessonId
+    ) {
       return
     }
 
-    const currentLesson =
-      lessons.find(
-        (lesson) =>
-          areIdsEqual(
-            lesson.id,
-            lessonId
-          )
-      ) ||
-      weeklyLessons.find(
-        (lesson) =>
-          areIdsEqual(
-            lesson.occurrenceId,
-            lessonId
-          ) ||
-          areIdsEqual(
-            lesson.id,
-            lessonId
-          )
+    const makeupLesson =
+      isMakeupLesson(currentLesson)
+
+    /*
+     * Düzenli derslerde gerçek occurrence kimliği
+     * occurrenceId alanında bulunur.
+     *
+     * Telafi dersleri doğrudan lesson_occurrences
+     * tablosundan geldiği için gerçek kayıt kimliği
+     * id alanındadır.
+     */
+    const existingOccurrenceId =
+      currentLesson.occurrenceId ||
+      (
+        makeupLesson
+          ? currentLesson.id
+          : ''
       )
 
-    if (!currentLesson) {
-      return
-    }
+    const actionId =
+      existingOccurrenceId ||
+      currentLesson.id
 
     const statusToSave =
       newStatus === 'Geri al'
         ? (
-            isMakeupLesson(currentLesson)
+            makeupLesson
               ? 'Telafi yapılacak'
               : 'Planlandı'
           )
         : newStatus
 
-    setUpdatingLessonId(lessonId)
+    const lessonDate =
+      currentLesson.lessonDate ||
+      getLessonDateForDay(
+        currentLesson.day
+      )
+
+    setUpdatingLessonId(actionId)
 
     try {
-      const updatedLesson =
-        await updateLessonOccurrenceStatus(
-          lessonId,
-          statusToSave
-        )
+      let savedLesson
 
-      setLessons((currentLessons) =>
-        currentLessons.map((lesson) =>
-          areIdsEqual(
-            lesson.id,
-            lessonId
+      if (existingOccurrenceId) {
+        savedLesson =
+          await updateLessonOccurrenceStatus(
+            existingOccurrenceId,
+            statusToSave
           )
-            ? updatedLesson
-            : lesson
-        )
-      )
 
-      setHistoryReloadKey(
-        (current) => current + 1
-      )
+        setLessons((currentLessons) =>
+          currentLessons.map(
+            (lesson) =>
+              areIdsEqual(
+                lesson.id,
+                existingOccurrenceId
+              )
+                ? savedLesson
+                : lesson
+          )
+        )
+      } else {
+        savedLesson =
+          await createLessonOccurrence({
+            lessonPlanId:
+              currentLesson.lessonPlanId ||
+              currentLesson.id,
+            teacherId:
+              currentLesson.teacherId,
+            studentId:
+              currentLesson.studentId,
+            packageId:
+              currentLesson.packageId,
+            lessonDate,
+            day:
+              currentLesson.day,
+            time:
+              currentLesson.time,
+            duration:
+              currentLesson.duration ||
+              '60 dk',
+            status:
+              statusToSave,
+            note:
+              currentLesson.note || '',
+            isMakeup:
+              false,
+            relatedLessonId:
+              null
+          })
+
+        setLessons((currentLessons) => [
+          ...currentLessons,
+          savedLesson
+        ])
+      }
+
+      queryClient.invalidateQueries({
+        queryKey:
+          LESSON_HISTORY_QUERY_ROOT
+      })
 
       setOpenMenuId(null)
     } catch (error) {
@@ -914,9 +1285,10 @@ function LessonStatusTracking({
         )
       )
 
-      setHistoryReloadKey(
-        (current) => current + 1
-      )
+      queryClient.invalidateQueries({
+        queryKey:
+          LESSON_HISTORY_QUERY_ROOT
+      })
 
       setOpenMenuId(null)
     } catch (error) {
@@ -961,6 +1333,7 @@ function LessonStatusTracking({
     setShowStudentSuggestions(false)
     setSelectedStatus('all')
     setOpenMenuId(null)
+    resetHistoryPage()
   }
 
   const performOpenMakeupForm = () => {
@@ -1033,32 +1406,101 @@ function LessonStatusTracking({
   }
 
   const hasConflict = () => {
-    return lessons.some((lesson) => {
-      const sameDay =
-        lesson.day === makeupForm.day
-
-      const sameTime =
-        lesson.time === makeupForm.time
-
-      const sameTeacher = areIdsEqual(
-        getTeacherId(lesson),
-        makeupForm.teacherId
+    const selectedLessonDate =
+      getLessonDateForDay(
+        makeupForm.day
       )
 
-      const sameStudent = areIdsEqual(
-        lesson.studentId,
-        makeupForm.studentId
-      )
+    const occurrenceConflict =
+      lessons.some((lesson) => {
+        const lessonStatus =
+          normalizeLessonStatus(
+            lesson.status
+          )
 
-      const isSameSlot =
-        sameDay && sameTime
+        const sameDate =
+          lesson.lessonDate
+            ? lesson.lessonDate ===
+              selectedLessonDate
+            : lesson.day ===
+              makeupForm.day
 
-      return (
-        isSameSlot &&
-        isActiveLesson(lesson) &&
-        (sameTeacher || sameStudent)
-      )
-    })
+        const sameTime =
+          lesson.time ===
+          makeupForm.time
+
+        const sameTeacher =
+          areIdsEqual(
+            getTeacherId(lesson),
+            makeupForm.teacherId
+          )
+
+        const sameStudent =
+          areIdsEqual(
+            lesson.studentId,
+            makeupForm.studentId
+          )
+
+        /*
+         * Yapılmış bir telafi de o tarih ve saatte gerçekleşmiş
+         * gerçek bir derstir. Bu yüzden yalnızca iptal edilmiş
+         * kayıtlar yeni ders eklenmesine engel olmaz.
+         */
+        const blocksSlot =
+          lessonStatus !==
+            'İptal edildi'
+
+        return (
+          lesson.isActive !== false &&
+          blocksSlot &&
+          sameDate &&
+          sameTime &&
+          (
+            sameTeacher ||
+            sameStudent
+          )
+        )
+      })
+
+    if (occurrenceConflict) {
+      return true
+    }
+
+    return lessonPlans.some(
+      (lessonPlan) => {
+        const sameDay =
+          lessonPlan.day ===
+          makeupForm.day
+
+        const sameTime =
+          lessonPlan.time ===
+          makeupForm.time
+
+        const sameTeacher =
+          areIdsEqual(
+            getTeacherId(
+              lessonPlan
+            ),
+            makeupForm.teacherId
+          )
+
+        const sameStudent =
+          areIdsEqual(
+            lessonPlan.studentId,
+            makeupForm.studentId
+          )
+
+        return (
+          lessonPlan.isActive !== false &&
+          sameDay &&
+          sameTime &&
+          (
+            sameTeacher ||
+            sameStudent
+          )
+        )
+      }
+    )
   }
 
   const saveMakeupLesson = async (event) => {
@@ -1113,6 +1555,10 @@ function LessonStatusTracking({
             makeupForm.studentId,
           packageId:
             makeupForm.packageId,
+          lessonDate:
+            getLessonDateForDay(
+              makeupForm.day
+            ),
           day:
             makeupForm.day,
           time:
@@ -1134,6 +1580,11 @@ function LessonStatusTracking({
         ...currentLessons,
         savedLesson
       ])
+
+      queryClient.invalidateQueries({
+        queryKey:
+          LESSON_HISTORY_QUERY_ROOT
+      })
 
       unsavedChanges?.markClean?.()
       performCloseMakeupForm()
@@ -1170,6 +1621,11 @@ function LessonStatusTracking({
             Haftalık ders programını görüntüleyin,
             iptal ve telafi süreçlerini takip edin.
           </p>
+        </div>
+
+        <div className="status-today-date">
+          <span>Bugün</span>
+          <strong>{formattedToday}</strong>
         </div>
       </section>
 
@@ -1231,7 +1687,7 @@ function LessonStatusTracking({
                 onFocus={() =>
                   setShowStudentSuggestions(true)
                 }
-                placeholder="Ad, telefon veya TC ile ara"
+                placeholder="Ad veya TC ile ara"
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={showStudentSuggestions}
@@ -1288,6 +1744,11 @@ function LessonStatusTracking({
                           <strong>
                             {getStudentFullName(student)}
                           </strong>
+                          {student.tcNo && (
+                            <small>
+                              TC: {student.tcNo}
+                            </small>
+                          )}
                         </span>
                       </button>
                     ))
@@ -1601,7 +2062,14 @@ function LessonStatusTracking({
 
                 {days.map((day) => (
                   <th key={day}>
-                    {day}
+                    <span>{day}</span>
+                    <small>
+                      {formatShortDate(
+                        getLessonDateForDay(
+                          day
+                        )
+                      )}
+                    </small>
                   </th>
                 ))}
               </tr>
@@ -1730,18 +2198,33 @@ function LessonStatusTracking({
                                         </div>
 
                                         <span
-                                          title={`${getStudentName(
-                                            lesson
-                                          )} • ${getLessonInstrument(
-                                            lesson
-                                          )}`}
-                                        >
-                                          {getStudentName(
+                                          title={getLessonDisplaySummary(
                                             lesson
                                           )}
-                                          <b>•</b>
-                                          {getLessonInstrument(
+                                        >
+                                          {isGroupLessonRecord(
                                             lesson
+                                          ) ? (
+                                            <>
+                                              {getGroupName(
+                                                lesson
+                                              )}
+                                              <b>•</b>
+                                              {getGroupStudentCount(
+                                                lesson
+                                              )}{' '}
+                                              öğrenci
+                                            </>
+                                          ) : (
+                                            <>
+                                              {getStudentName(
+                                                lesson
+                                              )}
+                                              <b>•</b>
+                                              {getLessonInstrument(
+                                                lesson
+                                              )}
+                                            </>
                                           )}
                                         </span>
 
@@ -1789,8 +2272,7 @@ function LessonStatusTracking({
                                                   type="button"
                                                   onClick={() =>
                                                     updateLessonStatus(
-                                                      lesson.occurrenceId ||
-                                                        lesson.id,
+                                                      lesson,
                                                       action
                                                     )
                                                   }
@@ -1865,7 +2347,9 @@ function LessonStatusTracking({
           </div>
 
           <span className="lesson-count">
-            {historyTotal} kayıt
+            {historyLoading
+              ? '— kayıt'
+              : `${historyTotal} kayıt`}
           </span>
         </div>
 
@@ -1958,10 +2442,7 @@ function LessonStatusTracking({
             <button
               type="button"
               onClick={() =>
-                setHistoryReloadKey(
-                  (current) =>
-                    current + 1
-                )
+                historyQuery.refetch()
               }
             >
               Tekrar Dene
@@ -2037,11 +2518,11 @@ function LessonStatusTracking({
                         <td className="status-history-student-cell">
                           <span
                             className="status-person-text"
-                            title={getStudentName(
+                            title={getLessonDisplaySummary(
                               lesson
                             )}
                           >
-                            {getStudentName(
+                            {getLessonDisplayStudent(
                               lesson
                             )}
                           </span>
@@ -2060,9 +2541,15 @@ function LessonStatusTracking({
                               )}
                             </strong>
                             <small>
-                              {getLessonTitle(
+                              {isGroupLessonRecord(
                                 lesson
-                              )}
+                              )
+                                ? `${getGroupStudentCount(
+                                    lesson
+                                  )} öğrenci`
+                                : getLessonTitle(
+                                    lesson
+                                  )}
                             </small>
                           </div>
                         </td>
@@ -2112,9 +2599,11 @@ function LessonStatusTracking({
 
         <div className="status-history-pagination">
           <span>
-            {historyFirstRecord}–{historyLastRecord}
-            {' / '}
-            {historyTotal} kayıt
+            {historyLoading
+              ? 'Ders geçmişi yükleniyor...'
+              : historyTotal === 0
+                ? 'Gösterilecek kayıt yok'
+                : `${historyFirstRecord}–${historyLastRecord} / ${historyTotal} kayıt`}
           </span>
 
           <div>

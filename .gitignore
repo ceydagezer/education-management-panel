@@ -52,3 +52,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+supabase/.temp/
+
+# Local AI agent files
+.agents/
+skills-lock.json

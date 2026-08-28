@@ -118,6 +118,16 @@
   background: #dff6fa;
 }
 
+
+.finance-tabs button:focus-visible,
+.finance-primary-button:focus-visible,
+.finance-history-page-button:focus-visible,
+.finance-income-page-button:focus-visible,
+.teacher-payment-summary-footer button.teacher-package-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
 /* OVERVIEW */
 
 .finance-overview-layout {
@@ -259,6 +269,13 @@
 .finance-primary-button:hover {
   box-shadow: 0 7px 18px rgba(9, 166, 211, 0.2);
   transform: translateY(-1px);
+}
+
+.finance-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ENTRY FORMS */
@@ -466,12 +483,6 @@
 
 .finance-teacher-metric-card.lessons strong {
   color: #0284c7;
-}
-
-.finance-payment-history {
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid #e7edf5;
 }
 
 /* RESPONSIVE */
@@ -812,259 +823,6 @@
 }
 
 /* =========================================================
-   FİNANS TABLOLARI: DENGELİ HİZALAMA
-   ========================================================= */
-
-.finance-table-wrapper {
-  width: 100%;
-  overflow-x: hidden;
-}
-
-.finance-table {
-  width: 100%;
-  min-width: 0 !important;
-  table-layout: fixed;
-}
-
-.finance-table th,
-.finance-table td {
-  vertical-align: middle;
-}
-
-/* GELİR TABLOSU */
-
-.finance-income-table {
-  width: 100%;
-  min-width: 0 !important;
-}
-
-.finance-income-table th:nth-child(1),
-.finance-income-table td:nth-child(1) {
-  width: 10%;
-}
-
-.finance-income-table th:nth-child(2),
-.finance-income-table td:nth-child(2) {
-  width: 13%;
-}
-
-.finance-income-table th:nth-child(3),
-.finance-income-table td:nth-child(3) {
-  width: 14%;
-  text-align: center;
-}
-
-.finance-income-table th:nth-child(4),
-.finance-income-table td:nth-child(4) {
-  width: 14%;
-  text-align: center;
-}
-
-.finance-income-table th:nth-child(5),
-.finance-income-table td:nth-child(5) {
-  width: 16%;
-  text-align: center;
-}
-
-.finance-income-table th:nth-child(6),
-.finance-income-table td:nth-child(6) {
-  width: 13%;
-  text-align: center;
-}
-
-.finance-income-table th:nth-child(7),
-.finance-income-table td:nth-child(7) {
-  width: 9%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.finance-income-table th:nth-child(8),
-.finance-income-table td:nth-child(8) {
-  width: 11%;
-  text-align: center;
-}
-
-.finance-income-table td:nth-child(8) {
-  padding-right: 12px;
-  padding-left: 12px;
-}
-
-.finance-income-table .finance-readonly-label {
-  display: inline-block;
-  max-width: 100%;
-  white-space: normal;
-  text-align: center;
-  line-height: 1.35;
-}
-
-/* GİDER TABLOSU */
-
-.finance-expense-table {
-  width: 100%;
-  min-width: 0 !important;
-}
-
-.finance-expense-table th:nth-child(1),
-.finance-expense-table td:nth-child(1) {
-  width: 10%;
-}
-
-.finance-expense-table th:nth-child(2),
-.finance-expense-table td:nth-child(2) {
-  width: 16%;
-}
-
-.finance-expense-table th:nth-child(3),
-.finance-expense-table td:nth-child(3) {
-  width: 14%;
-}
-
-.finance-expense-table th:nth-child(4),
-.finance-expense-table td:nth-child(4) {
-  width: 16%;
-}
-
-.finance-expense-table th:nth-child(5),
-.finance-expense-table td:nth-child(5) {
-  width: 15%;
-}
-
-.finance-expense-table th:nth-child(6),
-.finance-expense-table td:nth-child(6) {
-  width: 13%;
-}
-
-.finance-expense-table th:nth-child(7),
-.finance-expense-table td:nth-child(7) {
-  width: 8%;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.finance-expense-table th:nth-child(8),
-.finance-expense-table td:nth-child(8) {
-  width: 8%;
-  text-align: center;
-}
-
-/* ÖĞRETMEN HAKEDİŞ TABLOSU */
-
-.finance-teacher-earnings-table {
-  width: 100%;
-  min-width: 0 !important;
-}
-
-.finance-teacher-earnings-table th:nth-child(1),
-.finance-teacher-earnings-table td:nth-child(1) {
-  width: 12%;
-}
-
-.finance-teacher-earnings-table th:nth-child(2),
-.finance-teacher-earnings-table td:nth-child(2) {
-  width: 9%;
-}
-
-.finance-teacher-earnings-table th:nth-child(3),
-.finance-teacher-earnings-table td:nth-child(3) {
-  width: 10%;
-  text-align: center;
-}
-
-.finance-teacher-earnings-table th:nth-child(4),
-.finance-teacher-earnings-table td:nth-child(4) {
-  width: 9%;
-  text-align: center;
-}
-
-.finance-teacher-earnings-table th:nth-child(5),
-.finance-teacher-earnings-table td:nth-child(5) {
-  width: 13%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.finance-teacher-earnings-table th:nth-child(6),
-.finance-teacher-earnings-table td:nth-child(6) {
-  width: 14%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.finance-teacher-earnings-table th:nth-child(7),
-.finance-teacher-earnings-table td:nth-child(7) {
-  width: 11%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.finance-teacher-earnings-table th:nth-child(8),
-.finance-teacher-earnings-table td:nth-child(8) {
-  width: 11%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.finance-teacher-earnings-table th:nth-child(9),
-.finance-teacher-earnings-table td:nth-child(9) {
-  width: 11%;
-  text-align: center;
-}
-
-/* ÖĞRETMEN ÖDEME GEÇMİŞİ */
-
-.finance-teacher-history-table {
-  width: 100%;
-  min-width: 0 !important;
-}
-
-.finance-teacher-history-table th:nth-child(1),
-.finance-teacher-history-table td:nth-child(1) {
-  width: 18%;
-}
-
-.finance-teacher-history-table th:nth-child(2),
-.finance-teacher-history-table td:nth-child(2) {
-  width: 22%;
-}
-
-.finance-teacher-history-table th:nth-child(3),
-.finance-teacher-history-table td:nth-child(3) {
-  width: 22%;
-}
-
-.finance-teacher-history-table th:nth-child(4),
-.finance-teacher-history-table td:nth-child(4) {
-  width: 18%;
-  text-align: center;
-}
-
-.finance-teacher-history-table th:nth-child(5),
-.finance-teacher-history-table td:nth-child(5) {
-  width: 20%;
-  text-align: center;
-  white-space: nowrap;
-}
-
-/* Küçük ekranlarda yatay kaydırmaya izin ver. */
-
-@media (max-width: 1050px) {
-  .finance-table-wrapper {
-    overflow-x: auto;
-  }
-
-  .finance-income-table,
-  .finance-expense-table,
-  .finance-teacher-earnings-table {
-    min-width: 1000px !important;
-  }
-
-  .finance-teacher-history-table {
-    min-width: 760px !important;
-  }
-}
-
-/* =========================================================
    FİNANS TABLOLARI - KESİN ORTALAMA
    Gelir, gider, öğretmen hakedişi ve ödeme geçmişi
    tablolarındaki başlıklarla verileri aynı eksene alır.
@@ -1370,6 +1128,8 @@
 .finance-table-wrapper {
   width: 100%;
   overflow-x: hidden;
+  border: 1px solid #e7edf5;
+  border-radius: 15px;
 }
 
 @media (max-width: 900px) {
@@ -1722,7 +1482,11 @@
 
 .finance-income-page-button.active {
   color: #ffffff;
-  background: linear-gradient(135deg, #09a6d3, #12b8ad);
+  background: linear-gradient(
+    135deg,
+    #09a6d3,
+    #12b8ad
+  );
   border-color: transparent;
 }
 
@@ -1766,5 +1530,148 @@
     justify-content: flex-start;
     overflow-x: auto;
     padding-bottom: 3px;
+  }
+}
+
+
+/* Personel ödemeleri */
+.finance-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 18px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.finance-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.finance-pagination-current {
+  min-width: 64px;
+  color: #334155;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .finance-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .finance-pagination > div {
+    justify-content: space-between;
+  }
+}
+
+
+/* Personel ödemeleri filtre görünümü */
+.finance-income-filter-panel {
+  padding: 18px;
+  margin-top: 20px;
+  background: #f8fafc;
+  border: 1px solid #dbe5ef;
+  border-radius: 16px;
+}
+
+.finance-income-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.4fr)
+    minmax(170px, 0.85fr)
+    minmax(170px, 0.85fr)
+    minmax(155px, 0.75fr)
+    minmax(155px, 0.75fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.finance-income-filter-grid .form-group {
+  margin: 0;
+}
+
+.staff-payment-filter-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.staff-payment-filter-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.staff-payment-sort-control,
+.staff-payment-page-size-control {
+  margin: 0;
+}
+
+.staff-payment-sort-control {
+  min-width: 210px;
+}
+
+.staff-payment-page-size-control {
+  min-width: 145px;
+}
+
+.staff-payment-filter-actions select {
+  width: 100%;
+  min-height: 44px;
+}
+
+.finance-table-card .payment-table-wrapper {
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.finance-table-card .finance-data-table {
+  width: 100%;
+  margin: 0;
+}
+
+.finance-table-card .finance-data-table th,
+.finance-table-card .finance-data-table td {
+  vertical-align: middle;
+}
+
+.finance-table-card .finance-data-table .empty-table {
+  height: 90px;
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .finance-income-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .finance-income-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-payment-filter-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-payment-filter-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-payment-sort-control,
+  .staff-payment-page-size-control {
+    min-width: 0;
   }
 }

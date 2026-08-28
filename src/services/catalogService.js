@@ -18,12 +18,17 @@ function mapPackageFromDb(row) {
     specialtyId: row.specialty_id,
     specialty_id: row.specialty_id,
 
-    instrument: row.specialty?.name ?? '',
+    instrument:
+      row.specialty?.name ?? '',
 
-    duration: `${row.duration_minutes} dk`,
-    durationMinutes: row.duration_minutes,
+    duration:
+      `${row.duration_minutes} dk`,
 
-    lessonCount: row.lesson_count,
+    durationMinutes:
+      row.duration_minutes,
+
+    lessonCount:
+      row.lesson_count,
 
     totalPrice: Number(
       row.total_price ?? 0
@@ -36,7 +41,9 @@ function mapPackageFromDb(row) {
     teacherShareRate:
       row.teacher_share_rate === null
         ? null
-        : Number(row.teacher_share_rate),
+        : Number(
+            row.teacher_share_rate
+          ),
 
     status: row.status,
     isActive: row.is_active,
@@ -45,6 +52,14 @@ function mapPackageFromDb(row) {
     updatedAt: row.updated_at
   }
 }
+
+const specialtySelect = `
+  id,
+  name,
+  is_active,
+  created_at,
+  updated_at
+`
 
 const packageSelect = `
   id,
@@ -65,23 +80,72 @@ const packageSelect = `
   )
 `
 
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getCatalogErrorMessage(
+  error,
+  fallbackMessage,
+  duplicateMessage = ''
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (
+    duplicateMessage &&
+    (
+      error?.code === '23505' ||
+      String(
+        error?.message ?? ''
+      )
+        .toLocaleLowerCase('tr-TR')
+        .includes('duplicate')
+    )
+  ) {
+    return duplicateMessage
+  }
+
+  return fallbackMessage
+}
+
 export async function getSpecialties() {
   const { data, error } = await supabase
     .from('specialties')
-    .select(`
-      id,
-      name,
-      is_active,
-      created_at,
-      updated_at
-    `)
+    .select(specialtySelect)
     .order('name', {
       ascending: true
     })
 
   if (error) {
     throw new Error(
-      `Branşlar alınamadı: ${error.message}`
+      getCatalogErrorMessage(
+        error,
+        'Branşlar şu anda alınamadı.'
+      )
     )
   }
 
@@ -100,7 +164,10 @@ export async function getPackages() {
 
   if (error) {
     throw new Error(
-      `Paketler alınamadı: ${error.message}`
+      getCatalogErrorMessage(
+        error,
+        'Paketler şu anda alınamadı.'
+      )
     )
   }
 
@@ -109,7 +176,9 @@ export async function getPackages() {
   )
 }
 
-export async function createSpecialty(name) {
+export async function createSpecialty(
+  name
+) {
   const cleanName = String(
     name ?? ''
   ).trim()
@@ -125,24 +194,16 @@ export async function createSpecialty(name) {
     .insert({
       name: cleanName
     })
-    .select(`
-      id,
-      name,
-      is_active,
-      created_at,
-      updated_at
-    `)
+    .select(specialtySelect)
     .single()
 
   if (error) {
-    if (error.code === '23505') {
-      throw new Error(
+    throw new Error(
+      getCatalogErrorMessage(
+        error,
+        'Branş eklenemedi.',
         'Bu branş daha önce eklenmiş.'
       )
-    }
-
-    throw new Error(
-      `Branş eklenemedi: ${error.message}`
     )
   }
 
@@ -171,6 +232,14 @@ function normalizeDurationMinutes(
 function validatePackageForm(
   packageForm
 ) {
+  const cleanName = String(
+    packageForm.name ?? ''
+  ).trim()
+
+  const specialtyId = String(
+    packageForm.specialtyId ?? ''
+  ).trim()
+
   const lessonCount = Number(
     packageForm.lessonCount
   )
@@ -184,13 +253,13 @@ function validatePackageForm(
       packageForm
     )
 
-  if (!packageForm.name?.trim()) {
+  if (!cleanName) {
     throw new Error(
       'Paket adı zorunludur.'
     )
   }
 
-  if (!packageForm.specialtyId) {
+  if (!specialtyId) {
     throw new Error(
       'Branş seçimi zorunludur.'
     )
@@ -215,15 +284,19 @@ function validatePackageForm(
   }
 
   if (
-    !Number.isFinite(durationMinutes) ||
+    !Number.isInteger(
+      durationMinutes
+    ) ||
     durationMinutes <= 0
   ) {
     throw new Error(
-      'Ders süresi geçerli olmalıdır.'
+      'Ders süresi pozitif bir tam sayı olmalıdır.'
     )
   }
 
   return {
+    cleanName,
+    specialtyId,
     lessonCount,
     totalPrice,
     durationMinutes,
@@ -243,10 +316,11 @@ export async function createPackage(
   const { data, error } = await supabase
     .from('packages')
     .insert({
-      name: packageForm.name.trim(),
+      name:
+        values.cleanName,
 
       specialty_id:
-        packageForm.specialtyId,
+        values.specialtyId,
 
       duration_minutes:
         values.durationMinutes,
@@ -268,7 +342,11 @@ export async function createPackage(
 
   if (error) {
     throw new Error(
-      `Paket eklenemedi: ${error.message}`
+      getCatalogErrorMessage(
+        error,
+        'Paket eklenemedi.',
+        'Bu paket adıyla daha önce bir kayıt oluşturulmuş.'
+      )
     )
   }
 
@@ -279,7 +357,11 @@ export async function updatePackage(
   packageId,
   packageForm
 ) {
-  if (!packageId) {
+  const cleanPackageId = String(
+    packageId ?? ''
+  ).trim()
+
+  if (!cleanPackageId) {
     throw new Error(
       'Paket kimliği bulunamadı.'
     )
@@ -293,10 +375,11 @@ export async function updatePackage(
   const { data, error } = await supabase
     .from('packages')
     .update({
-      name: packageForm.name.trim(),
+      name:
+        values.cleanName,
 
       specialty_id:
-        packageForm.specialtyId,
+        values.specialtyId,
 
       duration_minutes:
         values.durationMinutes,
@@ -310,13 +393,17 @@ export async function updatePackage(
       unit_price:
         values.unitPrice
     })
-    .eq('id', packageId)
+    .eq('id', cleanPackageId)
     .select(packageSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Paket güncellenemedi: ${error.message}`
+      getCatalogErrorMessage(
+        error,
+        'Paket güncellenemedi.',
+        'Bu paket adıyla başka bir kayıt bulunmaktadır.'
+      )
     )
   }
 
@@ -327,27 +414,40 @@ export async function setPackageActiveStatus(
   packageId,
   isActive
 ) {
-  if (!packageId) {
+  const cleanPackageId = String(
+    packageId ?? ''
+  ).trim()
+
+  if (!cleanPackageId) {
     throw new Error(
       'Paket kimliği bulunamadı.'
     )
   }
 
+  const nextIsActive =
+    isActive === true
+
   const { data, error } = await supabase
     .from('packages')
     .update({
-      is_active: isActive,
-      status: isActive
-        ? 'Aktif'
-        : 'Pasif'
+      is_active:
+        nextIsActive,
+
+      status:
+        nextIsActive
+          ? 'Aktif'
+          : 'Pasif'
     })
-    .eq('id', packageId)
+    .eq('id', cleanPackageId)
     .select(packageSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Paket durumu değiştirilemedi: ${error.message}`
+      getCatalogErrorMessage(
+        error,
+        'Paket durumu değiştirilemedi.'
+      )
     )
   }
 

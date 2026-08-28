@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 
@@ -27,6 +28,15 @@ import {
 
 const PACKAGE_DRAFT_KEY =
   'arti-akademi-package-draft'
+
+const EMPTY_PACKAGE_FORM = {
+  name: '',
+  specialtyId: '',
+  instrument: '',
+  duration: '60 dk',
+  lessonCount: 1,
+  totalPrice: ''
+}
 
 const getSpecialtyId = (specialty) =>
   typeof specialty === 'string'
@@ -56,16 +66,16 @@ function Packages({
   setPackages = () => {},
   specialties = [],
   setSpecialties = () => {},
+  packagesLoading = false,
   unsavedChanges
 }) {
-  const emptyForm = {
-    name: '',
-    specialtyId: '',
-    instrument: '',
-    duration: '60 dk',
-    lessonCount: 1,
-    totalPrice: ''
-  }
+  const unsavedChangesRef =
+    useRef(unsavedChanges)
+
+  useEffect(() => {
+    unsavedChangesRef.current =
+      unsavedChanges
+  }, [unsavedChanges])
 
   const [showForm, setShowForm] =
     useState(false)
@@ -76,7 +86,7 @@ function Packages({
   ] = useState(null)
 
   const [packageForm, setPackageForm] =
-    useState(emptyForm)
+    useState(EMPTY_PACKAGE_FORM)
 
   const [isSaving, setIsSaving] =
     useState(false)
@@ -183,7 +193,7 @@ function Packages({
       }
 
       const restoredForm = {
-        ...emptyForm,
+        ...EMPTY_PACKAGE_FORM,
         ...parsedDraft.packageForm
       }
 
@@ -198,7 +208,8 @@ function Packages({
       )
 
       setShowForm(true)
-      unsavedChanges?.markDirty?.()
+      unsavedChangesRef.current
+        ?.markDirty?.()
     } catch (error) {
       console.error(
         'Paket taslağı okunamadı:',
@@ -421,7 +432,7 @@ function Packages({
     unsavedChanges?.markClean?.()
     clearPackageDraft()
 
-    setPackageForm(emptyForm)
+    setPackageForm(EMPTY_PACKAGE_FORM)
     setSpecialtyInput('')
     setEditingPackageId(null)
     setActionError('')
@@ -506,7 +517,7 @@ function Packages({
     unsavedChanges?.markClean?.()
     clearPackageDraft()
 
-    setPackageForm(emptyForm)
+    setPackageForm(EMPTY_PACKAGE_FORM)
     setSpecialtyInput('')
     setEditingPackageId(null)
     setActionError('')
@@ -848,6 +859,7 @@ function Packages({
 
           <form
             className="package-form"
+            autoComplete="off"
             onSubmit={savePackage}
           >
             <div className="form-grid">
@@ -855,6 +867,7 @@ function Packages({
                 <label>Paket Adı</label>
 
                 <input
+                  autoComplete="off"
                   name="name"
                   value={packageForm.name}
                   onChange={handlePackageChange}
@@ -870,6 +883,7 @@ function Packages({
 
                 <div className="specialty-inline-row">
                   <input
+                    autoComplete="off"
                     list="package-specialty-options"
                     value={specialtyInput}
                     onChange={
@@ -984,6 +998,7 @@ function Packages({
                 </label>
 
                 <input
+                  autoComplete="off"
                   type="number"
                   name="lessonCount"
                   value={
@@ -1003,6 +1018,7 @@ function Packages({
                 <label>Paket Ücreti</label>
 
                 <input
+                  autoComplete="off"
                   type="number"
                   name="totalPrice"
                   value={
@@ -1152,7 +1168,9 @@ function Packages({
             className="lesson-count"
             type="button"
           >
-            {activePackages.length} paket
+            {packagesLoading
+              ? '— paket'
+              : `${activePackages.length} paket`}
           </button>
         </div>
 
@@ -1171,7 +1189,16 @@ function Packages({
           </thead>
 
           <tbody>
-            {activePackages.length > 0 ? (
+            {packagesLoading ? (
+              <tr>
+                <td
+                  colSpan="8"
+                  className="empty-table"
+                >
+                  Paketler yükleniyor...
+                </td>
+              </tr>
+            ) : activePackages.length > 0 ? (
               activePackages.map((item) => {
                 const isDeleting =
                   areIdsEqual(

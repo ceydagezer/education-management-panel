@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import RequiredStar from '../components/RequiredStar'
+import { queryClient } from '../lib/queryClient'
 
 import {
   createPayment,
@@ -11,7 +12,10 @@ import {
 } from '../services/paymentService'
 
 import {
-  createDueDate,
+  refreshFinanceIncomeSummaryCache
+} from '../services/financeService'
+
+import {
   formatDate,
   formatPeriod,
   formatPrice,
@@ -26,13 +30,102 @@ import {
   getPaymentAmount,
   getPaymentDate,
   getPaymentPeriod,
-  getPaymentStudentPackageId,
-  isActivePayment
+  getPaymentStudentPackageId
 } from '../utils/paymentSchedule'
 
-import {
-  matchesSearchQuery
-} from '../utils/textHelpers'
+const PAYMENT_QUERY_STALE_TIME = 30_000
+
+async function refreshFinanceAfterPaymentChange() {
+  try {
+    await refreshFinanceIncomeSummaryCache()
+  } catch (error) {
+    // Tahsilat işlemi başarılıysa finans özeti yenileme hatası
+    // işlemi geri almamalı. Cache stale kaldığı için Finans ekranı
+    // açıldığında tekrar sunucudan güncel özeti isteyecektir.
+    console.error(
+      'Tahsilat sonrası finans özeti yenilenemedi:',
+      error
+    )
+  }
+}
+
+const getPaymentPackageQueryKey = (
+  studentPackageId
+) => [
+  'payment-package-context',
+  String(studentPackageId || '')
+]
+
+function getCachedPackagePayments(
+  studentPackageId
+) {
+  const cleanId = String(
+    studentPackageId || ''
+  )
+
+  if (!cleanId) {
+    return null
+  }
+
+  const cached =
+    queryClient.getQueryData(
+      getPaymentPackageQueryKey(cleanId)
+    )
+
+  return Array.isArray(cached)
+    ? cached
+    : null
+}
+
+function setCachedPackagePayments(
+  studentPackageId,
+  payments
+) {
+  const cleanId = String(
+    studentPackageId || ''
+  )
+
+  if (!cleanId) {
+    return
+  }
+
+  queryClient.setQueryData(
+    getPaymentPackageQueryKey(cleanId),
+    Array.isArray(payments)
+      ? payments
+      : []
+  )
+}
+
+const getPaymentMovementsQueryKey = ({
+  page,
+  pageSize,
+  filters,
+  sortOption
+}) => [
+  'payment-movements',
+  {
+    page,
+    pageSize,
+    filters,
+    sortOption
+  }
+]
+
+const roundMoney = (value) => {
+  const numericValue = Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    return 0
+  }
+
+  return Math.round(
+    (numericValue + Number.EPSILON) * 100
+  ) / 100
+}
+
+const moneyToCents = (value) =>
+  Math.round(roundMoney(value) * 100)
 
 function Payments({
   students = [],
@@ -72,15 +165,19 @@ function Payments({
       [students]
     )
 
-  const emptyPaymentForm = {
-    studentId: '',
-    studentPackageId: '',
-    amount: '',
-    paymentDate: today,
-    paymentMethod: '',
-    referenceNumber: '',
-    note: ''
-  }
+  const emptyPaymentForm =
+    useMemo(
+      () => ({
+        studentId: '',
+        studentPackageId: '',
+        amount: '',
+        paymentDate: today,
+        paymentMethod: '',
+        referenceNumber: '',
+        note: ''
+      }),
+      [today]
+    )
 
   const emptyFilters = {
     searchText: '',
@@ -113,6 +210,11 @@ function Payments({
     setPaymentContextReloadKey
   ] = useState(0)
 
+  const [
+    paymentContextReadyPackageId,
+    setPaymentContextReadyPackageId
+  ] = useState('')
+
   const [movementPayments, setMovementPayments] =
     useState([])
   const [movementTotal, setMovementTotal] =
@@ -122,7 +224,7 @@ function Payments({
   const [movementPageSize, setMovementPageSize] =
     useState(10)
   const [movementLoading, setMovementLoading] =
-    useState(false)
+    useState(true)
   const [movementError, setMovementError] =
     useState('')
   const [movementReloadKey, setMovementReloadKey] =
@@ -247,24 +349,58 @@ function Payments({
     }
   }, [
     activeStudents,
+    emptyPaymentForm,
     paymentForm.studentId
   ])
 
   useEffect(() => {
     let isMounted = true
 
+    const queryKey =
+      getPaymentMovementsQueryKey({
+        page: movementPage,
+        pageSize: movementPageSize,
+        filters,
+        sortOption
+      })
+
+    const cachedResult =
+      queryClient.getQueryData(queryKey)
+    const hasCachedResult = Boolean(
+      cachedResult &&
+      Array.isArray(cachedResult.data)
+    )
+
+    if (hasCachedResult) {
+      setMovementPayments(
+        cachedResult.data
+      )
+      setMovementTotal(
+        Number(cachedResult.total || 0)
+      )
+      setMovementLoading(false)
+    } else {
+      setMovementLoading(true)
+    }
+
+    setMovementError('')
+
     const timeoutId = window.setTimeout(
       async () => {
-        setMovementLoading(true)
-        setMovementError('')
-
         try {
           const result =
-            await getPaymentMovementsPage({
-              page: movementPage,
-              pageSize: movementPageSize,
-              filters,
-              sortOption
+            await queryClient.fetchQuery({
+              queryKey,
+              queryFn: () =>
+                getPaymentMovementsPage({
+                  page: movementPage,
+                  pageSize:
+                    movementPageSize,
+                  filters,
+                  sortOption
+                }),
+              staleTime:
+                PAYMENT_QUERY_STALE_TIME
             })
 
           if (!isMounted) {
@@ -302,11 +438,39 @@ function Payments({
             error
           )
 
-          if (isMounted) {
+          if (
+            isMounted &&
+            !hasCachedResult
+          ) {
+            const isOffline =
+              typeof navigator !==
+                'undefined' &&
+              !navigator.onLine
+
+            const errorMessage =
+              String(
+                error?.message || ''
+              ).toLocaleLowerCase(
+                'tr-TR'
+              )
+
+            const isNetworkError =
+              errorMessage.includes(
+                'failed to fetch'
+              ) ||
+              errorMessage.includes(
+                'network'
+              ) ||
+              errorMessage.includes(
+                'fetch'
+              )
+
             setMovementError(
-              error instanceof Error
-                ? error.message
-                : 'Tahsilat hareketleri alınamadı.'
+              isOffline
+                ? 'İnternet bağlantısı bulunamadı. Tahsilat hareketleri yüklenemedi.'
+                : isNetworkError
+                  ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+                  : 'Tahsilat hareketleri şu anda yüklenemedi.'
             )
           }
         } finally {
@@ -569,6 +733,7 @@ function Payments({
 
     if (!studentPackageId) {
       setPayments([])
+      setPaymentContextReadyPackageId('')
       setPaymentContextError('')
       setPaymentContextLoading(false)
       return undefined
@@ -576,19 +741,50 @@ function Payments({
 
     let isMounted = true
 
+    const cachedPayments =
+      getCachedPackagePayments(
+        studentPackageId
+      )
+
+    if (cachedPayments) {
+      setPayments(cachedPayments)
+      setPaymentContextReadyPackageId(
+        String(studentPackageId)
+      )
+      setPaymentContextLoading(false)
+    } else {
+      setPaymentContextReadyPackageId('')
+      setPaymentContextLoading(true)
+    }
+
     const loadSelectedPackagePayments =
       async () => {
-        setPaymentContextLoading(true)
         setPaymentContextError('')
 
         try {
           const result =
-            await getPaymentsByStudentPackage(
-              studentPackageId
-            )
+            await queryClient.fetchQuery({
+              queryKey:
+                getPaymentPackageQueryKey(
+                  studentPackageId
+                ),
+              queryFn: () =>
+                getPaymentsByStudentPackage(
+                  studentPackageId
+                ),
+              staleTime:
+                PAYMENT_QUERY_STALE_TIME
+            })
 
           if (isMounted) {
+            setCachedPackagePayments(
+              studentPackageId,
+              result
+            )
             setPayments(result)
+            setPaymentContextReadyPackageId(
+              String(studentPackageId)
+            )
           }
         } catch (error) {
           console.error(
@@ -597,11 +793,40 @@ function Payments({
           )
 
           if (isMounted) {
-            setPayments([])
+            const isOffline =
+              typeof navigator !==
+                'undefined' &&
+              !navigator.onLine
+
+            const errorMessage =
+              String(
+                error?.message || ''
+              ).toLocaleLowerCase(
+                'tr-TR'
+              )
+
+            const isNetworkError =
+              errorMessage.includes(
+                'failed to fetch'
+              ) ||
+              errorMessage.includes(
+                'network'
+              ) ||
+              errorMessage.includes(
+                'fetch'
+              )
+
+            if (!cachedPayments) {
+              setPayments([])
+              setPaymentContextReadyPackageId('')
+            }
+
             setPaymentContextError(
-              error instanceof Error
-                ? error.message
-                : 'Seçilen paket tahsilatları alınamadı.'
+              isOffline
+                ? 'İnternet bağlantısı bulunamadı. Paket tahsilatları yüklenemedi.'
+                : isNetworkError
+                  ? 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+                  : 'Seçilen paketin tahsilatları şu anda yüklenemedi.'
             )
           }
         } finally {
@@ -628,19 +853,23 @@ function Payments({
         String(paymentForm.studentPackageId)
     )
 
-  const selectedPackagePrice = Number(
+  const selectedPackagePrice = roundMoney(
     selectedPackageRecord?.expectedAmount || 0
   )
-  const selectedCollectedAmount = Number(
+  const selectedCollectedAmount = roundMoney(
     selectedPackageRecord?.collectedAmount || 0
   )
-  const selectedRemainingDebt = Number(
+  const selectedRemainingDebt = roundMoney(
     selectedPackageRecord?.remainingAmount || 0
   )
-  const enteredAmount = Number(paymentForm.amount || 0)
-  const remainingAfterPayment = Math.max(
-    0,
-    selectedRemainingDebt - enteredAmount
+  const enteredAmount = roundMoney(
+    paymentForm.amount || 0
+  )
+  const remainingAfterPayment = roundMoney(
+    Math.max(
+      0,
+      selectedRemainingDebt - enteredAmount
+    )
   )
 
   const updateStoredNextPaymentDate = async (
@@ -826,7 +1055,10 @@ function Payments({
       return false
     }
 
-    if (enteredAmount > selectedRemainingDebt) {
+    if (
+      moneyToCents(enteredAmount) >
+      moneyToCents(selectedRemainingDebt)
+    ) {
       alert(
         `Bu dönem için en fazla ₺${formatPrice(
           selectedRemainingDebt
@@ -893,7 +1125,19 @@ function Payments({
         savedPayment
       ]
 
+      setCachedPackagePayments(
+        selectedStudentPackage.studentPackageId,
+        updatedPayments
+      )
       setPayments(updatedPayments)
+      setPaymentContextReadyPackageId(
+        String(
+          selectedStudentPackage.studentPackageId
+        )
+      )
+      queryClient.invalidateQueries({
+        queryKey: ['payment-movements']
+      })
       setMovementReloadKey(
         (current) => current + 1
       )
@@ -906,6 +1150,8 @@ function Payments({
         selectedStudentPackage.studentPackageId,
         updatedPayments
       )
+
+      await refreshFinanceAfterPaymentChange()
 
       setPaymentForm((current) => ({
         ...emptyPaymentForm,
@@ -1208,7 +1454,17 @@ function Payments({
             : item
       )
 
+      setCachedPackagePayments(
+        studentPackageId,
+        updatedPayments
+      )
       setPayments(updatedPayments)
+      setPaymentContextReadyPackageId(
+        String(studentPackageId)
+      )
+      queryClient.invalidateQueries({
+        queryKey: ['payment-movements']
+      })
       setMovementReloadKey(
         (current) => current + 1
       )
@@ -1221,6 +1477,8 @@ function Payments({
         studentPackageId,
         updatedPayments
       )
+
+      await refreshFinanceAfterPaymentChange()
 
       performCancelEditPayment()
     } catch (error) {
@@ -1268,7 +1526,19 @@ function Payments({
           String(payment.id)
       )
 
+      setCachedPackagePayments(
+        getPaymentStudentPackageId(payment),
+        updatedPayments
+      )
       setPayments(updatedPayments)
+      setPaymentContextReadyPackageId(
+        String(
+          getPaymentStudentPackageId(payment)
+        )
+      )
+      queryClient.invalidateQueries({
+        queryKey: ['payment-movements']
+      })
       setMovementReloadKey(
         (current) => current + 1
       )
@@ -1281,6 +1551,8 @@ function Payments({
         getPaymentStudentPackageId(payment),
         updatedPayments
       )
+
+      await refreshFinanceAfterPaymentChange()
     } catch (error) {
       console.error(
         'Tahsilat silme hatası:',
@@ -1294,83 +1566,6 @@ function Payments({
       )
     } finally {
       setDeletingPaymentId(null)
-    }
-  }
-
-  const getFinancialRecordForPayment = (payment) => {
-    const studentPackageId =
-      getPaymentStudentPackageId(payment)
-    const packageRecord = studentPackageRecords.find(
-      (item) =>
-        String(item.studentPackageId) ===
-        String(studentPackageId)
-    )
-
-    if (!packageRecord) {
-      return null
-    }
-
-    const period = getPaymentPeriod(payment)
-    const expectedAmount = Number(
-      packageRecord.monthlyFee ??
-        packageRecord.agreedPrice ??
-        payment.packagePrice ??
-        0
-    )
-    const collectedAmount =
-      getCollectedAmountForPeriod(
-        studentPackageId,
-        period,
-        payments
-      )
-    const dueDate =
-      getDateKey(payment.dueDate) ||
-      createDueDate(
-        Number(period.slice(0, 4)),
-        Number(period.slice(5, 7)) - 1,
-        packageRecord.paymentDay
-      )
-
-    return {
-      ...packageRecord,
-      period,
-      dueDate,
-      expectedAmount,
-      collectedAmount,
-      remainingAmount: Math.max(
-        0,
-        expectedAmount - collectedAmount
-      ),
-      dueStatus: getDueStatus({
-        dueDate,
-        expectedAmount,
-        collectedAmount,
-        todayKey: today
-      })
-    }
-  }
-
-  const getCollectionStatus = (record) => {
-    if (!record) {
-      return {
-        label: 'Kayıtlı',
-        className: 'pending',
-        filterValue: 'Kayıtlı'
-      }
-    }
-
-    if (Number(record.remainingAmount || 0) <= 0) {
-      return {
-        label: 'Tamamlandı',
-        className: 'paid',
-        filterValue: 'Tamamlandı'
-      }
-    }
-
-    return {
-      label: 'Kısmi Ödeme',
-      className: 'partial',
-      filterValue: 'Kısmi Ödeme'
     }
   }
 
@@ -1461,6 +1656,48 @@ function Payments({
         String(editingPaymentId)
     ) ?? null
 
+  const paymentMetricLoading =
+    Boolean(
+      paymentForm.studentPackageId
+    ) &&
+    String(
+      paymentContextReadyPackageId
+    ) !==
+      String(
+        paymentForm.studentPackageId
+      )
+
+  const renderValueSkeleton = (
+    width = '4rem'
+  ) => (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-block',
+        width,
+        height: '0.9em',
+        borderRadius: '999px',
+        background:
+          'rgba(148, 163, 184, 0.28)',
+        verticalAlign: 'middle'
+      }}
+    />
+  )
+
+  const renderPackageCurrency = (
+    value
+  ) =>
+    paymentMetricLoading
+      ? renderValueSkeleton('5.8rem')
+      : `₺${formatPrice(value)}`
+
+  const renderPackageCount = (
+    value
+  ) =>
+    paymentMetricLoading
+      ? renderValueSkeleton('2.8rem')
+      : value
+
   return (
     <div className="dashboard-shell">
       <section className="page-card">
@@ -1479,22 +1716,43 @@ function Payments({
       <section className="payment-metric-grid">
         <div className="payment-metric-card blue">
           <span>Bu Dönem Beklenen</span>
-          <h3>₺{formatPrice(selectedPackagePrice)}</h3>
+          <h3>
+            {renderPackageCurrency(
+              selectedPackagePrice
+            )}
+          </h3>
         </div>
 
         <div className="payment-metric-card green">
           <span>Bu Dönem Tahsil Edilen</span>
-          <h3>₺{formatPrice(selectedCollectedAmount)}</h3>
+          <h3>
+            {renderPackageCurrency(
+              selectedCollectedAmount
+            )}
+          </h3>
         </div>
 
         <div className="payment-metric-card red">
           <span>Bu Dönem Kalan</span>
-          <h3>₺{formatPrice(selectedRemainingDebt)}</h3>
+          <h3>
+            {renderPackageCurrency(
+              selectedRemainingDebt
+            )}
+          </h3>
         </div>
 
         <div className="payment-metric-card gray">
           <span>Kritik Gecikme</span>
-          <h3>{selectedPackageRecord?.dueStatus?.filterValue === 'Gecikti' ? 1 : 0}</h3>
+          <h3>
+            {renderPackageCount(
+              selectedPackageRecord
+                ?.dueStatus
+                ?.filterValue ===
+                'Gecikti'
+                ? 1
+                : 0
+            )}
+          </h3>
         </div>
       </section>
 
@@ -1568,7 +1826,27 @@ function Payments({
             </div>
           </div>
 
-          {selectedPackageRecord && (
+          {paymentContextLoading &&
+            paymentForm.studentPackageId && (
+              <div
+                className="finance-empty-warning"
+                role="status"
+              >
+                Seçilen paketin tahsilat bilgileri yükleniyor...
+              </div>
+            )}
+
+          {paymentContextError && (
+            <div
+              className="finance-empty-warning"
+              role="alert"
+            >
+              {paymentContextError}
+            </div>
+          )}
+
+          {!paymentContextLoading &&
+            selectedPackageRecord && (
             <div className="selected-payment-package">
               <div className="selected-package-heading">
                 <div>
@@ -1637,7 +1915,9 @@ function Payments({
                 placeholder="Örn: 2000"
                 min="0.01"
                 max={
-                  selectedRemainingDebt || undefined
+                  selectedRemainingDebt > 0
+                    ? selectedRemainingDebt.toFixed(2)
+                    : undefined
                 }
                 step="0.01"
                 disabled={!selectedPackageRecord}
@@ -1931,7 +2211,9 @@ function Payments({
               className="lesson-count"
               type="button"
             >
-              {movementTotal} kayıt
+              {movementLoading
+                ? renderValueSkeleton('4.5rem')
+                : `${movementTotal} kayıt`}
             </button>
           </div>
         </div>
@@ -2156,9 +2438,11 @@ function Payments({
 
         <div className="payment-pagination">
           <div className="payment-pagination-summary">
-            {movementTotal === 0
-              ? 'Gösterilecek kayıt yok'
-              : `${movementFirstRecord}–${movementLastRecord} / ${movementTotal} kayıt`}
+            {movementLoading
+              ? 'Tahsilat hareketleri yükleniyor...'
+              : movementTotal === 0
+                ? 'Gösterilecek kayıt yok'
+                : `${movementFirstRecord}–${movementLastRecord} / ${movementTotal} kayıt`}
           </div>
 
           <div className="payment-pagination-controls">

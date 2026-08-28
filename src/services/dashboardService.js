@@ -177,3 +177,27 @@ export async function getDashboardReceivables({
     mapReceivable
   )
 }
+
+export async function getDashboardLessonHealth() {
+  const {
+    data,
+    error
+  } = await supabase
+    .rpc('get_dashboard_lesson_plan_health')
+    .single()
+
+  if (error) {
+    throw new Error(
+      `Dashboard ders uyarıları alınamadı: ${error.message}`
+    )
+  }
+
+  return {
+    waitingMakeupCount: Number(
+      data?.waiting_makeup_count || 0
+    ),
+    conflictCount: Number(
+      data?.conflict_count || 0
+    )
+  }
+}

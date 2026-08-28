@@ -199,6 +199,123 @@ function mapPaymentMovementFromDb(row) {
   }
 }
 
+function isNetworkError(error) {
+  const message = String(
+    error?.message ?? ''
+  ).toLocaleLowerCase('tr-TR')
+
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch')
+  )
+}
+
+function getPaymentErrorMessage(
+  error,
+  fallbackMessage
+) {
+  if (
+    typeof navigator !==
+      'undefined' &&
+    !navigator.onLine
+  ) {
+    return (
+      'İnternet bağlantısı bulunamadı. ' +
+      'Bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  if (isNetworkError(error)) {
+    return (
+      'Sunucuya ulaşılamadı. ' +
+      'İnternet bağlantınızı kontrol edip tekrar deneyiniz.'
+    )
+  }
+
+  return fallbackMessage
+}
+
+function getSafePagination(
+  page,
+  pageSize
+) {
+  const safePage = Math.max(
+    1,
+    Number(page) || 1
+  )
+
+  const allowedPageSizes = [
+    10,
+    25,
+    50
+  ]
+
+  const requestedPageSize =
+    Number(pageSize)
+
+  const safePageSize =
+    allowedPageSizes.includes(
+      requestedPageSize
+    )
+      ? requestedPageSize
+      : 10
+
+  const from =
+    (safePage - 1) *
+    safePageSize
+
+  return {
+    safePage,
+    safePageSize,
+    from,
+    to:
+      from +
+      safePageSize -
+      1
+  }
+}
+
+function cleanSearchValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[(),]/g, ' ')
+}
+
+function normalizeDateKey(
+  value,
+  label,
+  {
+    required = false
+  } = {}
+) {
+  const dateKey = String(
+    value || ''
+  ).trim()
+
+  if (!dateKey) {
+    if (required) {
+      throw new Error(
+        `${label} bulunamadı.`
+      )
+    }
+
+    return ''
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      dateKey
+    )
+  ) {
+    throw new Error(
+      `${label} geçerli değildir.`
+    )
+  }
+
+  return dateKey
+}
+
 function validatePaymentInput(form) {
   const studentId = String(
     form.studentId || ''
@@ -216,9 +333,14 @@ function validatePaymentInput(form) {
     form.paymentPeriod || ''
   ).trim()
 
-  const paymentDate = String(
-    form.paymentDate || ''
-  ).trim()
+  const paymentDate =
+    normalizeDateKey(
+      form.paymentDate,
+      'Tahsilat tarihi',
+      {
+        required: true
+      }
+    )
 
   const paymentMethod = String(
     form.paymentMethod || ''
@@ -282,7 +404,10 @@ function validatePaymentInput(form) {
       paymentPeriod,
 
     due_date:
-      form.dueDate || null,
+      normalizeDateKey(
+        form.dueDate,
+        'Vade tarihi'
+      ) || null,
 
     payment_date:
       paymentDate,
@@ -304,6 +429,290 @@ function validatePaymentInput(form) {
   }
 }
 
+
+
+const paymentStudentSelect = `
+  id,
+  tc_no,
+  full_name,
+  status,
+  is_active,
+  is_archived,
+  is_anonymized,
+
+  student_packages (
+    id,
+    student_id,
+    package_id,
+    default_teacher_id,
+    agreed_price,
+    payment_period,
+    payment_day,
+    first_payment_date,
+    next_payment_date,
+    total_lesson_count,
+    status,
+    is_active,
+    created_at,
+
+    package:packages (
+      id,
+      name,
+      duration_minutes,
+      lesson_count,
+      total_price,
+
+      specialty:specialties (
+        id,
+        name
+      )
+    ),
+
+    default_teacher:teachers (
+      id,
+      full_name,
+      status,
+      is_active
+    )
+  )
+`
+
+function normalizePaymentStudentStatus(
+  value
+) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+}
+
+function mapPaymentStudentPackageFromDb(
+  row
+) {
+  const packageRecord =
+    row.package || null
+
+  const teacherRecord =
+    row.default_teacher || null
+
+  const packageStatus =
+    normalizePaymentStudentStatus(
+      row.status
+    )
+
+  const isActive =
+    row.is_active !== false &&
+    packageStatus !==
+      'sonlandırıldı' &&
+    packageStatus !==
+      'pasif'
+
+  const agreedPrice =
+    Number(
+      row.agreed_price || 0
+    )
+
+  const lessonDuration =
+    Number(
+      packageRecord
+        ?.duration_minutes || 0
+    )
+
+  const lessonCount =
+    Number(
+      packageRecord
+        ?.lesson_count || 0
+    )
+
+  return {
+    studentPackageId:
+      row.id || '',
+    enrollmentId:
+      row.id || '',
+    assignmentId:
+      row.id || '',
+
+    studentId:
+      row.student_id || '',
+
+    packageId:
+      row.package_id || '',
+    packageName:
+      packageRecord?.name ||
+      'Tanımsız Paket',
+
+    instrument:
+      packageRecord
+        ?.specialty
+        ?.name || '',
+    branch:
+      packageRecord
+        ?.specialty
+        ?.name || '',
+
+    lessonDuration:
+      lessonDuration
+        ? `${lessonDuration} dk`
+        : '',
+    duration:
+      lessonDuration
+        ? `${lessonDuration} dk`
+        : '',
+
+    lessonCount,
+    totalLessonCount:
+      Number(
+        row.total_lesson_count ??
+        lessonCount
+      ),
+
+    totalPrice:
+      Number(
+        packageRecord
+          ?.total_price || 0
+      ),
+    packagePrice:
+      Number(
+        packageRecord
+          ?.total_price || 0
+      ),
+
+    teacherId:
+      row.default_teacher_id || '',
+    defaultTeacherId:
+      row.default_teacher_id || '',
+    teacher:
+      teacherRecord
+        ?.full_name || '',
+    teacherName:
+      teacherRecord
+        ?.full_name || '',
+    defaultTeacherName:
+      teacherRecord
+        ?.full_name || '',
+
+    agreedPrice,
+    monthlyFee:
+      agreedPrice,
+
+    paymentPeriod:
+      row.payment_period ||
+      'Aylık',
+    paymentDay:
+      row.payment_day || '',
+    firstPaymentDate:
+      row.first_payment_date || '',
+    nextPaymentDate:
+      row.next_payment_date || '',
+
+    status:
+      isActive
+        ? 'Aktif'
+        : 'Sonlandırıldı',
+    isActive,
+
+    createdAt:
+      row.created_at || null
+  }
+}
+
+function mapPaymentStudentFromDb(
+  row
+) {
+  const enrolledPackages =
+    (row.student_packages || [])
+      .map(
+        mapPaymentStudentPackageFromDb
+      )
+      .filter(
+        (item) =>
+          item.isActive !== false
+      )
+      .sort(
+        (first, second) =>
+          String(
+            second.createdAt || ''
+          ).localeCompare(
+            String(
+              first.createdAt || ''
+            )
+          )
+      )
+
+  return {
+    id:
+      row.id,
+
+    tcNo:
+      row.tc_no || '',
+
+    fullName:
+      row.full_name || '',
+
+    status:
+      row.status || '',
+
+    isActive:
+      row.is_active !== false,
+
+    isArchived:
+      row.is_archived === true,
+
+    isAnonymized:
+      row.is_anonymized === true,
+
+    enrolledPackages
+  }
+}
+
+export async function getPaymentStudents() {
+  const {
+    data,
+    error
+  } = await supabase
+    .from('students')
+    .select(
+      paymentStudentSelect
+    )
+    .eq('is_active', true)
+    .order(
+      'full_name',
+      {
+        ascending: true
+      }
+    )
+
+  if (error) {
+    throw new Error(
+      getPaymentErrorMessage(
+        error,
+        'Tahsilat için öğrenci ve paket bilgileri şu anda alınamadı.'
+      )
+    )
+  }
+
+  return (data || [])
+    .filter(
+      (row) => {
+        const normalizedStatus =
+          normalizePaymentStudentStatus(
+            row.status
+          )
+
+        return (
+          row.is_active !== false &&
+          row.is_archived !== true &&
+          row.is_anonymized !== true &&
+          normalizedStatus !==
+            'pasif' &&
+          normalizedStatus !==
+            'arşiv'
+        )
+      }
+    )
+    .map(
+      mapPaymentStudentFromDb
+    )
+}
 
 export async function getDashboardPayments({
   monthsBack = 18
@@ -337,7 +746,10 @@ export async function getDashboardPayments({
 
   if (error) {
     throw new Error(
-      `Dashboard tahsilatları alınamadı: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Dashboard tahsilatları şu anda alınamadı.'
+      )
     )
   }
 
@@ -349,7 +761,13 @@ export async function getDashboardPayments({
 export async function getStudentPaymentCount(
   studentId
 ) {
-  if (!studentId) return 0
+  const cleanStudentId = String(
+    studentId || ''
+  ).trim()
+
+  if (!cleanStudentId) {
+    return 0
+  }
 
   const { count, error } = await supabase
     .from('payments')
@@ -357,11 +775,14 @@ export async function getStudentPaymentCount(
       count: 'exact',
       head: true
     })
-    .eq('student_id', studentId)
+    .eq('student_id', cleanStudentId)
 
   if (error) {
     throw new Error(
-      `Öğrenci tahsilat bağlantıları kontrol edilemedi: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Öğrenci tahsilat bağlantıları şu anda kontrol edilemedi.'
+      )
     )
   }
 
@@ -371,7 +792,13 @@ export async function getStudentPaymentCount(
 export async function getTeacherPaymentReferenceCount(
   teacherId
 ) {
-  if (!teacherId) return 0
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (!cleanTeacherId) {
+    return 0
+  }
 
   const { count, error } = await supabase
     .from('payments')
@@ -379,11 +806,14 @@ export async function getTeacherPaymentReferenceCount(
       count: 'exact',
       head: true
     })
-    .eq('teacher_id', teacherId)
+    .eq('teacher_id', cleanTeacherId)
 
   if (error) {
     throw new Error(
-      `Öğretmen tahsilat bağlantıları kontrol edilemedi: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Öğretmen tahsilat bağlantıları şu anda kontrol edilemedi.'
+      )
     )
   }
 
@@ -407,7 +837,10 @@ export async function getPayments() {
 
   if (error) {
     throw new Error(
-      `Tahsilatlar alınamadı: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Tahsilatlar şu anda alınamadı.'
+      )
     )
   }
 
@@ -448,7 +881,10 @@ export async function getPaymentsByStudentPackage(
 
   if (error) {
     throw new Error(
-      `Seçilen paketin tahsilat geçmişi alınamadı: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Seçilen paketin tahsilat geçmişi şu anda alınamadı.'
+      )
     )
   }
 
@@ -463,35 +899,38 @@ export async function getPaymentMovementsPage({
   filters = {},
   sortOption = 'newest'
 } = {}) {
-  const safePage = Math.max(
-    1,
-    Number(page) || 1
+  const {
+    safePage,
+    safePageSize,
+    from,
+    to
+  } = getSafePagination(
+    page,
+    pageSize
   )
 
-  const allowedPageSizes = [
-    10,
-    25,
-    50
-  ]
-
-  const requestedPageSize =
-    Number(pageSize)
-
-  const safePageSize =
-    allowedPageSizes.includes(
-      requestedPageSize
+  const cleanStartDate =
+    normalizeDateKey(
+      filters.startDate,
+      'Başlangıç tarihi'
     )
-      ? requestedPageSize
-      : 10
 
-  const from =
-    (safePage - 1) *
-    safePageSize
+  const cleanEndDate =
+    normalizeDateKey(
+      filters.endDate,
+      'Bitiş tarihi'
+    )
 
-  const to =
-    from +
-    safePageSize -
-    1
+  if (
+    cleanStartDate &&
+    cleanEndDate &&
+    cleanStartDate >
+      cleanEndDate
+  ) {
+    throw new Error(
+      'Başlangıç tarihi bitiş tarihinden sonra olamaz.'
+    )
+  }
 
   let query = supabase
     .from('payment_movements_view')
@@ -499,11 +938,10 @@ export async function getPaymentMovementsPage({
       count: 'exact'
     })
 
-  const searchText = String(
-    filters.searchText || ''
-  )
-    .trim()
-    .replace(/[(),]/g, ' ')
+  const searchText =
+    cleanSearchValue(
+      filters.searchText
+    )
 
   if (searchText) {
     const searchPattern =
@@ -534,17 +972,17 @@ export async function getPaymentMovementsPage({
     )
   }
 
-  if (filters.startDate) {
+  if (cleanStartDate) {
     query = query.gte(
       'payment_date',
-      filters.startDate
+      cleanStartDate
     )
   }
 
-  if (filters.endDate) {
+  if (cleanEndDate) {
     query = query.lte(
       'payment_date',
-      filters.endDate
+      cleanEndDate
     )
   }
 
@@ -604,7 +1042,10 @@ export async function getPaymentMovementsPage({
 
   if (error) {
     throw new Error(
-      `Tahsilat hareketleri alınamadı: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Tahsilat hareketleri şu anda alınamadı.'
+      )
     )
   }
 
@@ -635,7 +1076,10 @@ export async function createPayment(
 
   if (error) {
     throw new Error(
-      `Tahsilat kaydedilemedi: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Tahsilat kaydedilemedi.'
+      )
     )
   }
 
@@ -646,7 +1090,11 @@ export async function updatePayment(
   paymentId,
   changes
 ) {
-  if (!paymentId) {
+  const cleanPaymentId = String(
+    paymentId || ''
+  ).trim()
+
+  if (!cleanPaymentId) {
     throw new Error(
       'Tahsilat kimliği bulunamadı.'
     )
@@ -665,9 +1113,14 @@ export async function updatePayment(
     )
   }
 
-  const paymentDate = String(
-    changes.paymentDate || ''
-  ).trim()
+  const paymentDate =
+    normalizeDateKey(
+      changes.paymentDate,
+      'Tahsilat tarihi',
+      {
+        required: true
+      }
+    )
 
   const paymentMethod = String(
     changes.paymentMethod || ''
@@ -709,13 +1162,16 @@ export async function updatePayment(
           changes.note
         )
     })
-    .eq('id', paymentId)
+    .eq('id', cleanPaymentId)
     .select(paymentSelect)
     .single()
 
   if (error) {
     throw new Error(
-      `Tahsilat güncellenemedi: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Tahsilat güncellenemedi.'
+      )
     )
   }
 
@@ -725,7 +1181,11 @@ export async function updatePayment(
 export async function deletePayment(
   paymentId
 ) {
-  if (!paymentId) {
+  const cleanPaymentId = String(
+    paymentId || ''
+  ).trim()
+
+  if (!cleanPaymentId) {
     throw new Error(
       'Tahsilat kimliği bulunamadı.'
     )
@@ -734,11 +1194,14 @@ export async function deletePayment(
   const { error } = await supabase
     .from('payments')
     .delete()
-    .eq('id', paymentId)
+    .eq('id', cleanPaymentId)
 
   if (error) {
     throw new Error(
-      `Tahsilat silinemedi: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Tahsilat silinemedi.'
+      )
     )
   }
 }
@@ -747,23 +1210,36 @@ export async function updateStudentPackageNextPaymentDate(
   studentPackageId,
   nextPaymentDate
 ) {
-  if (!studentPackageId) {
+  const cleanStudentPackageId = String(
+    studentPackageId || ''
+  ).trim()
+
+  if (!cleanStudentPackageId) {
     throw new Error(
       'Öğrenci paketi kimliği bulunamadı.'
     )
   }
 
+  const cleanNextPaymentDate =
+    normalizeDateKey(
+      nextPaymentDate,
+      'Sonraki ödeme tarihi'
+    )
+
   const { error } = await supabase
     .from('student_packages')
     .update({
       next_payment_date:
-        nextPaymentDate || null
+        cleanNextPaymentDate || null
     })
-    .eq('id', studentPackageId)
+    .eq('id', cleanStudentPackageId)
 
   if (error) {
     throw new Error(
-      `Sonraki ödeme tarihi güncellenemedi: ${error.message}`
+      getPaymentErrorMessage(
+        error,
+        'Sonraki ödeme tarihi güncellenemedi.'
+      )
     )
   }
 }
