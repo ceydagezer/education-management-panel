@@ -1,3 +1,4 @@
+```
 # 🎓 Education Management Panel
 
 **Artı Akademi – Education Management Web Panel**
@@ -8,7 +9,6 @@ The platform brings together student and teacher management, lesson scheduling, 
 
 The project was initially developed during my software development internship and continues to be improved as a personal software engineering project.
 
----
 
 ## 🚀 Features
 
@@ -26,7 +26,6 @@ The project was initially developed during my software development internship an
 - Role-based data access
 - Responsive administrative interface
 
----
 
 ## 🛠️ Tech Stack
 
@@ -52,7 +51,6 @@ The project was initially developed during my software development internship an
 - Postman
 - VS Code
 
----
 
 ## 💻 Technical Highlights
 
@@ -69,7 +67,6 @@ The project was initially developed during my software development internship an
 - PDF and Excel export functionality
 - Testing and debugging with real-world workflows
 
----
 
 ## 📊 Main Modules
 
@@ -97,7 +94,6 @@ Manages income, expenses, teacher payments, and financial summaries.
 
 Provides administrative reports and PDF/Excel data export functionality.
 
----
 
 ## 🔐 Security
 
@@ -111,7 +107,6 @@ The application uses:
 
 Sensitive credentials and environment files are not included in this repository.
 
----
 
 ## 📸 Screenshots
 
@@ -123,7 +118,6 @@ Application screenshots will be added here.
 ![Finance](docs/screenshots/finance.png)
 -->
 
----
 
 ## 🗺️ Roadmap / Future Improvements
 
@@ -148,7 +142,6 @@ Planned improvements:
 
 The long-term goal is to transform the project into a more independent and scalable full-stack architecture while gaining deeper hands-on experience with backend development.
 
----
 
 ## ⚙️ Local Development
 
@@ -174,7 +167,6 @@ Create a production build:
 
     npm run build
 
----
 
 ## 📌 Project Status
 
@@ -182,9 +174,9 @@ The application is functional and has been tested using real-world administrativ
 
 Development is ongoing. The next major technical goal is migrating from Supabase-managed backend services to a custom Node.js/Express backend connected directly to PostgreSQL.
 
----
 
 ## 👩‍💻 Developer
 
 **Ceyda Gezer**  
 Fourth-Year Computer Engineering Student
+```
