@@ -54,3 +54,7 @@ dist-ssr
 *.sw?
 
 supabase/.temp/
+
+# Local AI agent files
+.agents/
+skills-lock.json
