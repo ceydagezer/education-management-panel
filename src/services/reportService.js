@@ -1,5 +1,164 @@
 import { supabase } from '../lib/supabase'
 
+const studentTrackingReportSelect = `
+  student_id,
+  student_name,
+  gender,
+  teacher_names,
+  package_names,
+  group_names,
+  register_date,
+  student_status,
+  student_is_active
+`
+
+const studentPaymentReportSelect = `
+  student_package_id,
+  student_id,
+  student_name,
+  student_is_active,
+  package_id,
+  package_name,
+  teacher_id,
+  teacher_name,
+  payment_period,
+  payment_day,
+  first_payment_date,
+  next_payment_date,
+  agreed_price,
+  paid_amount,
+  remaining_amount,
+  last_payment_date,
+  payment_status,
+  package_status,
+  package_is_active,
+  created_at
+`
+
+const teacherTrackingReportSelect = `
+  teacher_id,
+  teacher_name,
+  gender,
+  phone,
+  email,
+  teacher_status,
+  teacher_is_active,
+  teacher_created_at,
+  specialty_names,
+  total_student_count,
+  individual_student_count,
+  group_student_count,
+  group_count,
+  weekly_lesson_count,
+  package_names
+`
+
+const teacherTrackingDetailSelect = `
+  detail_id,
+  teacher_id,
+  record_type,
+  record_type_label,
+  student_id,
+  student_name,
+  student_register_date,
+  student_is_active,
+  group_id,
+  group_name,
+  package_id,
+  package_name,
+  student_package_id,
+  assignment_created_at,
+  assignment_is_active
+`
+
+const teacherEarningsReportSelect = `
+  teacher_id,
+  teacher_name,
+  branch,
+  commission_rate,
+  teacher_is_active,
+  teacher_status,
+  completed_lesson_count,
+  total_lesson_amount,
+  total_earning,
+  total_paid,
+  remaining_payment
+`
+
+const teacherEarningLessonReportSelect = `
+  lesson_id,
+  teacher_id,
+  teacher_name,
+  student_id,
+  student_name,
+  group_id,
+  group_name,
+  student_package_id,
+  package_id,
+  package_name,
+  instrument,
+  lesson_date,
+  day,
+  start_time,
+  status,
+  agreed_price,
+  lesson_count,
+  unit_price,
+  commission_rate,
+  teacher_earning,
+  created_at
+`
+
+const teacherPaymentReportSelect = `
+  id,
+  teacher_id,
+  teacher_name,
+  amount,
+  payment_date,
+  payment_method,
+  reference_number,
+  note,
+  status,
+  cancelled_at,
+  created_at,
+  updated_at
+`
+
+const staffPaymentReportSelect = `
+  id,
+  staff_name,
+  role_title,
+  payment_type,
+  payment_period,
+  amount,
+  payment_date,
+  payment_method,
+  reference_number,
+  note,
+  status,
+  cancelled_at,
+  created_at,
+  updated_at
+`
+
+const financeIncomeExpenseReportSelect = `
+  record_id,
+  direction,
+  source_type,
+  source_label,
+  title,
+  category,
+  description,
+  amount,
+  transaction_date,
+  payment_method,
+  related_party,
+  document_number,
+  note,
+  created_at
+`
+
+
 /*
  * =========================================================
  * ORTAK YARDIMCI FONKSİYONLAR
@@ -161,7 +320,7 @@ export async function getStudentTrackingReportPage({
       'student_tracking_report_view'
     )
     .select(
-      '*',
+      studentTrackingReportSelect,
       {
         count: 'exact'
       }
@@ -258,7 +417,7 @@ export async function getAllStudentTrackingReportRows(
     .from(
       'student_tracking_report_view'
     )
-    .select('*')
+    .select(studentTrackingReportSelect)
 
   query =
     applyStudentTrackingFilters(
@@ -475,7 +634,7 @@ export async function getStudentPaymentReportPage({
       'student_payment_report_view'
     )
     .select(
-      '*',
+      studentPaymentReportSelect,
       {
         count: 'exact'
       }
@@ -611,7 +770,7 @@ export async function getAllStudentPaymentReportRows(
     .from(
       'student_payment_report_view'
     )
-    .select('*')
+    .select(studentPaymentReportSelect)
 
   query =
     applyStudentPaymentFilters(
@@ -855,7 +1014,7 @@ export async function getTeacherTrackingReportPage({
       'teacher_tracking_report_view'
     )
     .select(
-      '*',
+      teacherTrackingReportSelect,
       {
         count: 'exact'
       }
@@ -1002,7 +1161,7 @@ export async function getTeacherTrackingDetails(
     .from(
       'teacher_tracking_detail_view'
     )
-    .select('*')
+    .select(teacherTrackingDetailSelect)
     .eq(
       'teacher_id',
       teacherId
@@ -1054,7 +1213,7 @@ export async function getAllTeacherTrackingReportRows(
     .from(
       'teacher_tracking_report_view'
     )
-    .select('*')
+    .select(teacherTrackingReportSelect)
 
   teacherQuery =
     applyTeacherTrackingFilters(
@@ -1107,7 +1266,7 @@ export async function getAllTeacherTrackingReportRows(
     .from(
       'teacher_tracking_detail_view'
     )
-    .select('*')
+    .select(teacherTrackingDetailSelect)
     .in(
       'teacher_id',
       teacherIds
@@ -1517,7 +1676,7 @@ export async function getTeacherEarningsReportPage({
       'teacher_earnings_summary_view'
     )
     .select(
-      '*',
+      teacherEarningsReportSelect,
       {
         count: 'exact'
       }
@@ -1680,7 +1839,7 @@ export async function getTeacherEarningReportDetails(
     .from(
       'teacher_earning_lessons_view'
     )
-    .select('*')
+    .select(teacherEarningLessonReportSelect)
     .eq(
       'teacher_id',
       cleanedTeacherId
@@ -1903,7 +2062,7 @@ export async function getTeacherPaymentsReportPage({
       'teacher_payment_history_view'
     )
     .select(
-      '*',
+      teacherPaymentReportSelect,
       {
         count: 'exact'
       }
@@ -2192,7 +2351,7 @@ export async function getStaffPaymentsReportPage({
       'staff_payments'
     )
     .select(
-      '*',
+      staffPaymentReportSelect,
       {
         count: 'exact'
       }
@@ -2312,7 +2471,7 @@ export async function getAllStaffPaymentsReportRows(
     .from(
       'staff_payments'
     )
-    .select('*')
+    .select(staffPaymentReportSelect)
     .eq(
       'status',
       'Aktif'
@@ -2520,7 +2679,7 @@ export async function getFinanceIncomeExpenseReportPage({
       'finance_income_expense_report_view'
     )
     .select(
-      '*',
+      financeIncomeExpenseReportSelect,
       {
         count: 'exact'
       }

@@ -154,6 +154,75 @@ const teacherPaymentSelect = `
   )
 `
 
+const financeIncomeSelect = `
+  id,
+  source_id,
+  source_type,
+  title,
+  category,
+  description,
+  amount,
+  date,
+  payment_method,
+  related_party,
+  document_number,
+  note,
+  status,
+  created_at,
+  updated_at
+`
+
+const teacherEarningSummarySelect = `
+  teacher_id,
+  teacher_name,
+  branch,
+  commission_rate,
+  teacher_is_active,
+  teacher_status,
+  completed_lesson_count,
+  total_lesson_amount,
+  total_earning,
+  total_paid,
+  remaining_payment
+`
+
+const teacherEarningLessonSelect = `
+  lesson_id,
+  teacher_id,
+  teacher_name,
+  student_id,
+  student_name,
+  student_package_id,
+  package_id,
+  package_name,
+  instrument,
+  lesson_date,
+  day,
+  start_time,
+  status,
+  agreed_price,
+  lesson_count,
+  unit_price,
+  commission_rate,
+  teacher_earning,
+  created_at
+`
+
+const teacherPaymentHistorySelect = `
+  id,
+  teacher_id,
+  teacher_name,
+  amount,
+  payment_date,
+  payment_method,
+  reference_number,
+  note,
+  status,
+  cancelled_at,
+  created_at,
+  updated_at
+`
+
 function cleanOptionalText(value) {
   const cleanValue = String(value || '').trim()
   return cleanValue || null
@@ -463,7 +532,7 @@ export async function getFinanceIncomePage({
 
   let query = supabase
     .from('finance_income_view')
-    .select('*', { count: 'exact' })
+    .select(financeIncomeSelect, { count: 'exact' })
     .eq('status', 'Aktif')
 
   const cleanSearchText =
@@ -1028,7 +1097,7 @@ export async function getTeacherEarningsSummary() {
     .from(
       'teacher_earnings_summary_view'
     )
-    .select('*')
+    .select(teacherEarningSummarySelect)
     .order(
       'teacher_name',
       {
@@ -1073,7 +1142,7 @@ export async function getTeacherEarningLessons(
     .from(
       'teacher_earning_lessons_view'
     )
-    .select('*')
+    .select(teacherEarningLessonSelect)
     .eq(
       'teacher_id',
       cleanTeacherId
@@ -1120,7 +1189,7 @@ export async function getTeacherPaymentsPage({
 
   let query = supabase
     .from('teacher_payment_history_view')
-    .select('*', {
+    .select(teacherPaymentHistorySelect, {
       count: 'exact'
     })
 

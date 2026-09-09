@@ -24,7 +24,7 @@ let teacherFormDraftCache = null
 
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024
 const MAX_CV_SIZE = 10 * 1024 * 1024
-const ALLOWED_CV_EXTENSIONS = ['pdf', 'doc', 'docx']
+const ALLOWED_CV_EXTENSIONS = ['pdf']
 
 const formatDateTime = (date = new Date()) =>date.toLocaleString('tr-TR', {day: '2-digit',month: 'long',year: 'numeric',hour: '2-digit',minute: '2-digit'})
 
@@ -575,7 +575,7 @@ if (
   !extension ||
   !ALLOWED_CV_EXTENSIONS.includes(extension)
 ) {
-  alert('CV dosyası PDF, DOC veya DOCX formatında olmalıdır.')
+  alert('CV dosyası PDF formatında olmalıdır.')
   return false
 }
 
@@ -1504,7 +1504,7 @@ try {
     !isTeacherCvPdf(teacher)
   ) {
     alert(
-      'Öğretmen bilgi formu indirildi. DOC/DOCX dosyaları tarayıcıda PDF sayfasına dönüştürülemediği için CV belgeye eklenmedi. Birleşik PDF için CV dosyasını PDF formatında yükleyiniz.'
+      'Öğretmen bilgi formu indirildi ancak mevcut CV dosyası PDF formatında olmadığı için belgeye eklenemedi. CV dosyasını PDF olarak yeniden yükleyiniz.'
     )
   }
 } catch (error) {
@@ -2000,8 +2000,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                     veya dosya seçmek için tıklayın
                   </p>
                   <small>
-                    PDF, DOC veya DOCX · En fazla
-                    10 MB
+                    PDF · En fazla 10 MB
                   </small>
                 </div>
               </div>
@@ -2011,7 +2010,7 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
               ref={cvInputRef}
               className="hidden-file-input"
               type="file"
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,application/pdf"
               onChange={handleCvChange}
               disabled={isSavingTeacher}
             />

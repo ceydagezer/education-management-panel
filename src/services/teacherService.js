@@ -6,6 +6,11 @@ const CV_BUCKET = 'teacher-cvs'
 const SIGNED_URL_SECONDS =
   60 * 60 * 24
 
+const SIGNED_URL_CACHE_MAX_AGE_MS =
+  23 * 60 * 60 * 1000
+
+const signedUrlCache = new Map()
+
 const MAX_PHOTO_SIZE =
   5 * 1024 * 1024
 
@@ -239,24 +244,65 @@ async function createSignedUrl(
     return ''
   }
 
+  const cleanBucket = String(
+    bucket || ''
+  ).trim()
+
+  const cleanPath = String(
+    path || ''
+  ).trim()
+
+  if (!cleanBucket || !cleanPath) {
+    return ''
+  }
+
+  const cacheKey =
+    `${cleanBucket}:${cleanPath}`
+
+  const cachedEntry =
+    signedUrlCache.get(cacheKey)
+
+  if (
+    cachedEntry?.url &&
+    Date.now() -
+      Number(cachedEntry.createdAt || 0) <=
+      SIGNED_URL_CACHE_MAX_AGE_MS
+  ) {
+    return cachedEntry.url
+  }
+
   const { data, error } = await supabase
     .storage
-    .from(bucket)
+    .from(cleanBucket)
     .createSignedUrl(
-      path,
+      cleanPath,
       SIGNED_URL_SECONDS
     )
 
   if (error) {
     console.error(
-      `${bucket} signed URL oluşturulamadı:`,
+      `${cleanBucket} signed URL oluşturulamadı:`,
       error
     )
 
+    signedUrlCache.delete(cacheKey)
     return ''
   }
 
-  return data?.signedUrl ?? ''
+  const signedUrl =
+    data?.signedUrl ?? ''
+
+  if (signedUrl) {
+    signedUrlCache.set(
+      cacheKey,
+      {
+        url: signedUrl,
+        createdAt: Date.now()
+      }
+    )
+  }
+
+  return signedUrl
 }
 
 async function attachPhotoUrl(
@@ -611,6 +657,12 @@ async function removeStorageFile(
     .from(bucket)
     .remove([cleanPath])
 
+  if (!error) {
+    signedUrlCache.delete(
+      `${String(bucket || '').trim()}:${cleanPath}`
+    )
+  }
+
   if (error) {
     console.error(
       `${bucket} dosyası silinemedi:`,
@@ -683,6 +735,57 @@ export async function getTeachers() {
         )
     )
   )
+}
+
+async function insertTeacherSpecialties(
+  teacherId,
+  specialtyIds
+) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  const cleanSpecialtyIds = [
+    ...new Set(
+      (specialtyIds || [])
+        .map((specialtyId) =>
+          String(
+            specialtyId || ''
+          ).trim()
+        )
+        .filter(Boolean)
+    )
+  ]
+
+  if (
+    !cleanTeacherId ||
+    cleanSpecialtyIds.length === 0
+  ) {
+    return
+  }
+
+  const relationRows =
+    cleanSpecialtyIds.map(
+      (specialtyId) => ({
+        teacher_id:
+          cleanTeacherId,
+        specialty_id:
+          specialtyId
+      })
+    )
+
+  const { error } = await supabase
+    .from('teacher_specialties')
+    .insert(relationRows)
+
+  if (error) {
+    throw new Error(
+      getTeacherErrorMessage(
+        error,
+        'Öğretmen uzmanlıkları kaydedilemedi.'
+      )
+    )
+  }
 }
 
 async function replaceTeacherSpecialties(
@@ -775,10 +878,8 @@ export async function createTeacher(
     .from('teachers')
     .insert({
       ...teacherRow,
-
       status:
         'Aktif',
-
       is_active:
         true
     })
@@ -801,70 +902,87 @@ export async function createTeacher(
   let uploadedCvPath = ''
 
   try {
-    if (form.photoFile) {
-      uploadedPhotoPath =
-        await uploadTeacherFile({
-          bucket:
-            PHOTO_BUCKET,
+    /*
+     * Fotoğraf ve CV birbirinden bağımsız Storage yüklemeleridir.
+     * İkisi de varsa aynı anda başlatılır; biri diğerini beklemez.
+     */
+    const [
+      photoPath,
+      cvPath
+    ] = await Promise.all([
+      form.photoFile
+        ? uploadTeacherFile({
+            bucket:
+              PHOTO_BUCKET,
+            teacherId,
+            prefix:
+              'profile',
+            file:
+              form.photoFile
+          })
+        : Promise.resolve(''),
 
-          teacherId,
+      form.cvFile
+        ? uploadTeacherFile({
+            bucket:
+              CV_BUCKET,
+            teacherId,
+            prefix:
+              'cv',
+            file:
+              form.cvFile
+          })
+        : Promise.resolve('')
+    ])
 
-          prefix:
-            'profile',
+    uploadedPhotoPath =
+      photoPath || ''
 
-          file:
-            form.photoFile
+    uploadedCvPath =
+      cvPath || ''
+
+    /*
+     * Dosya yoksa gereksiz teachers UPDATE sorgusu gönderme.
+     */
+    if (
+      uploadedPhotoPath ||
+      uploadedCvPath
+    ) {
+      const {
+        error: filePathError
+      } = await supabase
+        .from('teachers')
+        .update({
+          photo_path:
+            uploadedPhotoPath ||
+            null,
+          cv_file_path:
+            uploadedCvPath ||
+            null,
+          cv_file_name:
+            form.cvFile?.name ||
+            null
         })
-    }
-
-    if (form.cvFile) {
-      uploadedCvPath =
-        await uploadTeacherFile({
-          bucket:
-            CV_BUCKET,
-
-          teacherId,
-
-          prefix:
-            'cv',
-
-          file:
-            form.cvFile
-        })
-    }
-
-    const {
-      error: filePathError
-    } = await supabase
-      .from('teachers')
-      .update({
-        photo_path:
-          uploadedPhotoPath ||
-          null,
-
-        cv_file_path:
-          uploadedCvPath ||
-          null,
-
-        cv_file_name:
-          form.cvFile?.name ||
-          null
-      })
-      .eq(
-        'id',
-        teacherId
-      )
-
-    if (filePathError) {
-      throw new Error(
-        getTeacherErrorMessage(
-          filePathError,
-          'Dosya bilgileri kaydedilemedi.'
+        .eq(
+          'id',
+          teacherId
         )
-      )
+
+      if (filePathError) {
+        throw new Error(
+          getTeacherErrorMessage(
+            filePathError,
+            'Dosya bilgileri kaydedilemedi.'
+          )
+        )
+      }
     }
 
-    await replaceTeacherSpecialties(
+    /*
+     * Yeni öğretmende henüz specialty ilişkisi olmadığı için
+     * önce DELETE atmaya gerek yok; doğrudan INSERT yeterli.
+     */
+    await insertTeacherSpecialties(
       teacherId,
       specialtyIds
     )
@@ -874,7 +992,6 @@ export async function createTeacher(
         PHOTO_BUCKET,
         uploadedPhotoPath
       ),
-
       removeStorageFile(
         CV_BUCKET,
         uploadedCvPath
@@ -905,6 +1022,7 @@ export async function createTeacher(
     teacherId
   )
 }
+
 
 export async function updateTeacher(
   teacherId,

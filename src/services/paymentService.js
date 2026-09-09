@@ -119,6 +119,32 @@ function mapPaymentFromDb(row) {
   }
 }
 
+const paymentMovementSelect = `
+  id,
+  student_id,
+  student_name,
+  student_package_id,
+  package_id,
+  package_name,
+  instrument,
+  teacher_id,
+  teacher_name,
+  package_price,
+  amount,
+  payment_period,
+  due_date,
+  payment_date,
+  payment_method,
+  reference_number,
+  note,
+  is_active,
+  period_collected_amount,
+  remaining_amount,
+  collection_status,
+  created_at,
+  updated_at
+`
+
 function mapPaymentMovementFromDb(row) {
   return {
     id: row.id,
@@ -934,7 +960,7 @@ export async function getPaymentMovementsPage({
 
   let query = supabase
     .from('payment_movements_view')
-    .select('*', {
+    .select(paymentMovementSelect, {
       count: 'exact'
     })
 

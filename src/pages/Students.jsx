@@ -565,7 +565,9 @@ function Students({
         sortOption:
           studentListSort
       }),
-    enabled: studentView === 'list'
+    enabled: studentView === 'list',
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false
   })
 
   const studentListCountsQuery = useQuery({
@@ -574,7 +576,9 @@ function Students({
       'counts'
     ],
     queryFn: getStudentListCounts,
-    enabled: studentView === 'list'
+    enabled: studentView === 'list',
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false
   })
 
   /*
@@ -3863,6 +3867,7 @@ function Students({
               )
             }
             placeholder="Paket seçilince otomatik gelir"
+          autoComplete="off"
           />
         </div>
 
@@ -3880,6 +3885,7 @@ function Students({
                 event.target.value
               )
             }
+          autoComplete="off"
           />
         </div>
 
@@ -3897,6 +3903,7 @@ function Students({
                 event.target.value
               )
             }
+          autoComplete="off"
           />
         </div>
 
@@ -4199,7 +4206,7 @@ function Students({
         </button>
       </section>
 
-      <form onSubmit={handleStudentSubmit} className="student-form-card">
+      <form onSubmit={handleStudentSubmit} className="student-form-card" autoComplete="off">
         <div className="form-section">
           <h2>Öğrenci Bilgileri</h2>
           <div className="form-grid">
@@ -4210,6 +4217,8 @@ function Students({
                 value={studentForm.tcNo}
                 onChange={handleStudentChange}
                 maxLength="11"
+              autoComplete="off"
+              inputMode="numeric"
               />
             </div>
             <div className="form-group">
@@ -4218,6 +4227,7 @@ function Students({
                 name="fullName"
                 value={studentForm.fullName}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
             <div className="form-group">
@@ -4239,6 +4249,7 @@ function Students({
                 name="birthDate"
                 value={studentForm.birthDate}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
             <div className="form-group">
@@ -4248,6 +4259,7 @@ function Students({
                 name="registerDate"
                 value={studentForm.registerDate}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
             <div className="form-group">
@@ -4256,6 +4268,7 @@ function Students({
                 name="phone"
                 value={studentForm.phone}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
             <div className="form-group">
@@ -4265,6 +4278,7 @@ function Students({
                 name="email"
                 value={studentForm.email}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
             <div className="form-group full-width">
@@ -4296,6 +4310,7 @@ function Students({
                 name="guardian1Name"
                 value={studentForm.guardian1Name}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4328,6 +4343,7 @@ function Students({
                 name="guardian1Phone"
                 value={studentForm.guardian1Phone}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4338,6 +4354,7 @@ function Students({
                 name="guardian1Email"
                 value={studentForm.guardian1Email}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4348,6 +4365,7 @@ function Students({
                   name="guardian1SameAddress"
                   checked={studentForm.guardian1SameAddress}
                   onChange={handleStudentChange}
+                autoComplete="off"
                 />
                 Öğrenciyle aynı adreste yaşıyor
               </label>
@@ -4371,6 +4389,7 @@ function Students({
                   name="guardian1IsPrimary"
                   checked={studentForm.guardian1IsPrimary}
                   onChange={handleStudentChange}
+                autoComplete="off"
                 />
                 Birincil iletişim kişisi
               </label>
@@ -4382,6 +4401,7 @@ function Students({
                 name="guardian1Notes"
                 value={studentForm.guardian1Notes}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4395,6 +4415,7 @@ function Students({
                 name="guardian2Name"
                 value={studentForm.guardian2Name}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4427,6 +4448,7 @@ function Students({
                 name="guardian2Phone"
                 value={studentForm.guardian2Phone}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4437,6 +4459,7 @@ function Students({
                 name="guardian2Email"
                 value={studentForm.guardian2Email}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
 
@@ -4447,6 +4470,7 @@ function Students({
                   name="guardian2SameAddress"
                   checked={studentForm.guardian2SameAddress}
                   onChange={handleStudentChange}
+                autoComplete="off"
                 />
                 Öğrenciyle aynı adreste yaşıyor
               </label>
@@ -4470,6 +4494,7 @@ function Students({
                   name="guardian2IsPrimary"
                   checked={studentForm.guardian2IsPrimary}
                   onChange={handleStudentChange}
+                autoComplete="off"
                 />
                 Birincil iletişim kişisi
               </label>
@@ -4481,6 +4506,7 @@ function Students({
                 name="guardian2Notes"
                 value={studentForm.guardian2Notes}
                 onChange={handleStudentChange}
+              autoComplete="off"
               />
             </div>
           </div>
@@ -4582,6 +4608,7 @@ function Students({
                   <input
                     value={`₺${formatPrice(getTotalFee(studentForm))}`}
                     readOnly
+                  autoComplete="off"
                   />
                 </div>
               )}
@@ -4860,6 +4887,8 @@ function Students({
                     value={editForm.tcNo}
                     onChange={handleEditChange}
                     maxLength="11"
+                  autoComplete="off"
+                  inputMode="numeric"
                   />
                 </div>
                 <div className="form-group">
@@ -4868,6 +4897,7 @@ function Students({
                     name="fullName"
                     value={editForm.fullName}
                     onChange={handleEditChange}
+                  autoComplete="off"
                   />
                 </div>
                 <div className="form-group">
@@ -4877,6 +4907,7 @@ function Students({
                     name="registerDate"
                     value={editForm.registerDate}
                     onChange={handleEditChange}
+                  autoComplete="off"
                   />
                 </div>
                 <div className="form-group">
@@ -4885,6 +4916,7 @@ function Students({
                     name="phone"
                     value={editForm.phone}
                     onChange={handleEditChange}
+                  autoComplete="off"
                   />
                 </div>
                 <div className="form-group">
@@ -4894,6 +4926,7 @@ function Students({
                     name="email"
                     value={editForm.email}
                     onChange={handleEditChange}
+                  autoComplete="off"
                   />
                 </div>
                 <div className="form-group full-width">
@@ -4930,6 +4963,7 @@ function Students({
                 </div>
                 <div className="form-group">
                   <label>Ad Soyad</label>
+                  autoComplete="off"
                   <input name="guardian1Name" value={editForm.guardian1Name || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group">
@@ -4952,14 +4986,17 @@ function Students({
                 </div>
                 <div className="form-group">
                   <label>Telefon</label>
+                  autoComplete="off"
                   <input name="guardian1Phone" value={editForm.guardian1Phone || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group">
                   <label>E-posta</label>
+                  autoComplete="off"
                   <input type="email" name="guardian1Email" value={editForm.guardian1Email || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group full-width">
                   <label className="checkbox-label">
+                    autoComplete="off"
                     <input type="checkbox" name="guardian1SameAddress" checked={editForm.guardian1SameAddress === true} onChange={handleEditChange} />
                     Öğrenciyle aynı adreste yaşıyor
                   </label>
@@ -4972,12 +5009,14 @@ function Students({
                 )}
                 <div className="form-group">
                   <label className="checkbox-label">
+                    autoComplete="off"
                     <input type="checkbox" name="guardian1IsPrimary" checked={editForm.guardian1IsPrimary === true} onChange={handleEditChange} />
                     Birincil iletişim kişisi
                   </label>
                 </div>
                 <div className="form-group">
                   <label>Not</label>
+                  autoComplete="off"
                   <input name="guardian1Notes" value={editForm.guardian1Notes || ''} onChange={handleEditChange} />
                 </div>
 
@@ -4986,6 +5025,7 @@ function Students({
                 </div>
                 <div className="form-group">
                   <label>Ad Soyad</label>
+                  autoComplete="off"
                   <input name="guardian2Name" value={editForm.guardian2Name || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group">
@@ -5008,14 +5048,17 @@ function Students({
                 </div>
                 <div className="form-group">
                   <label>Telefon</label>
+                  autoComplete="off"
                   <input name="guardian2Phone" value={editForm.guardian2Phone || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group">
                   <label>E-posta</label>
+                  autoComplete="off"
                   <input type="email" name="guardian2Email" value={editForm.guardian2Email || ''} onChange={handleEditChange} />
                 </div>
                 <div className="form-group full-width">
                   <label className="checkbox-label">
+                    autoComplete="off"
                     <input type="checkbox" name="guardian2SameAddress" checked={editForm.guardian2SameAddress === true} onChange={handleEditChange} />
                     Öğrenciyle aynı adreste yaşıyor
                   </label>
@@ -5028,12 +5071,14 @@ function Students({
                 )}
                 <div className="form-group">
                   <label className="checkbox-label">
+                    autoComplete="off"
                     <input type="checkbox" name="guardian2IsPrimary" checked={editForm.guardian2IsPrimary === true} onChange={handleEditChange} />
                     Birincil iletişim kişisi
                   </label>
                 </div>
                 <div className="form-group">
                   <label>Not</label>
+                  autoComplete="off"
                   <input name="guardian2Notes" value={editForm.guardian2Notes || ''} onChange={handleEditChange} />
                 </div>
               </div>
@@ -5357,6 +5402,7 @@ function Students({
                   setStudentListPage(1)
                 }}
                 placeholder="Ad, TC, telefon veya e-posta"
+              autoComplete="off"
               />
             </div>
 

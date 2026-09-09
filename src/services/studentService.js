@@ -1222,6 +1222,31 @@ function normalizeStudentForm(form) {
 }
 
 
+
+const studentListSelect = `
+  id,
+  tc_no,
+  full_name,
+  phone,
+  email,
+  status,
+  is_active,
+  is_archived,
+  is_anonymized,
+  retention_status,
+  retention_review_date,
+  list_status,
+  instrument_names,
+  teacher_names,
+  package_names,
+  total_fee,
+  nearest_payment_date,
+  package_ids,
+  teacher_ids,
+  created_at,
+  updated_at
+`
+
 export async function getStudentsPage({
   page = 1,
   pageSize = 10,
@@ -1243,7 +1268,7 @@ export async function getStudentsPage({
 
   let query = supabase
     .from('student_list_view')
-    .select('*', {
+    .select(studentListSelect, {
       count: 'exact'
     })
 

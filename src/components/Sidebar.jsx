@@ -1,24 +1,77 @@
 import academyLogo from '../assets/LOGO.JPG'
 
+import {
+  Home,
+  Users,
+  GraduationCap,
+  Layers,
+  CalendarDays,
+  ClipboardCheck,
+  Package,
+  CreditCard,
+  Wallet,
+  BarChart3,
+  UserCog,
+  LogOut
+} from 'lucide-react'
+
 const menuItems = [
-  { id: 'dashboard', label: 'Ana Sayfa' },
-  { id: 'students', label: 'Öğrenciler' },
-  { id: 'teachers', label: 'Öğretmenler' },
-  { id: 'lesson-groups', label: 'Ders Grupları' },
-  { id: 'schedule', label: 'Ders Programı' },
+  {
+    id: 'dashboard',
+    label: 'Ana Sayfa',
+    icon: Home
+  },
+  {
+    id: 'students',
+    label: 'Öğrenciler',
+    icon: Users
+  },
+  {
+    id: 'teachers',
+    label: 'Öğretmenler',
+    icon: GraduationCap
+  },
+  {
+    id: 'lesson-groups',
+    label: 'Ders Grupları',
+    icon: Layers
+  },
+  {
+    id: 'schedule',
+    label: 'Ders Programı',
+    icon: CalendarDays
+  },
   {
     id: 'lesson-status',
-    label: 'Ders Durum Takibi'
+    label: 'Ders Durum Takibi',
+    icon: ClipboardCheck
   },
-  { id: 'packages', label: 'Paketler' },
-  { id: 'payments', label: 'Tahsilatlar' },
-  { id: 'finance', label: 'Finans' },
-  { id: 'reports', label: 'Raporlar' }
+  {
+    id: 'packages',
+    label: 'Paketler',
+    icon: Package
+  },
+  {
+    id: 'payments',
+    label: 'Tahsilatlar',
+    icon: CreditCard
+  },
+  {
+    id: 'finance',
+    label: 'Finans',
+    icon: Wallet
+  },
+  {
+    id: 'reports',
+    label: 'Raporlar',
+    icon: BarChart3
+  }
 ]
 
 const adminMenuItem = {
   id: 'user-management',
-  label: 'Kullanıcı Yönetimi'
+  label: 'Kullanıcı Yönetimi',
+  icon: UserCog
 }
 
 function Sidebar({
@@ -27,10 +80,9 @@ function Sidebar({
   handleLogout,
   isAdmin = false
 }) {
-  const visibleMenuItems =
-    isAdmin
-      ? [...menuItems, adminMenuItem]
-      : menuItems
+  const visibleMenuItems = isAdmin
+    ? [...menuItems, adminMenuItem]
+    : menuItems
 
   return (
     <aside className="sidebar">
@@ -50,30 +102,52 @@ function Sidebar({
       </div>
 
       <nav className="sidebar-nav">
-        {visibleMenuItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`nav-item ${
-              activePage === item.id
-                ? 'active'
-                : ''
-            }`}
-            onClick={() =>
-              handleMenuClick(item.id)
-            }
-          >
-            {item.label}
-          </button>
-        ))}
+        {visibleMenuItems.map((item) => {
+          const Icon = item.icon
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`nav-item ${
+                activePage === item.id
+                  ? 'active'
+                  : ''
+              }`}
+              onClick={() =>
+                handleMenuClick(item.id)
+              }
+              title={item.label}
+            >
+              <Icon
+                className="nav-icon"
+                size={20}
+                strokeWidth={2}
+              />
+
+              <span className="nav-label">
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
       </nav>
 
       <button
         type="button"
         className="logout-button"
         onClick={handleLogout}
+        title="Çıkış Yap"
       >
-        Çıkış Yap
+        <LogOut
+          className="logout-icon"
+          size={20}
+          strokeWidth={2}
+        />
+
+        <span className="logout-label">
+          Çıkış Yap
+        </span>
       </button>
     </aside>
   )
