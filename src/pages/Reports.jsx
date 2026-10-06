@@ -34,7 +34,21 @@ import {
   getTodayKey
 } from '../utils/dateHelpers'
 
+import {
+  getLessonGroups
+} from '../services/groupService'
+
 import '../styles/reports.css'
+
+
+import { notify } from '../lib/feedback'
+const LESSON_GROUPS_QUERY_KEY = [
+  'lesson-groups',
+  'list',
+  {
+    includeInactive: true
+  }
+]
 
 
 const REPORT_CACHE_GC_TIME =
@@ -210,8 +224,8 @@ const reportGroups = [
       },
       {
         id: 'student-payments',
-        label: 'Öğrenci Ödeme',
-        title: 'Öğrenci Ödeme Raporu',
+        label: 'Öğrenci Tahsilat',
+        title: 'Öğrenci Tahsilat Raporu',
         description:
           'Öğrencilerin paket ücretlerini, yapılan tahsilatları ve kalan tutarlarını görüntüleyin.'
       }
@@ -435,6 +449,10 @@ function getTeacherEarningStatusClass(
     return 'waiting'
   }
 
+  if (className === 'overpaid') {
+    return 'overpaid'
+  }
+
   return 'missing'
 }
 
@@ -628,9 +646,143 @@ function ReportPagination({
   )
 }
 
-function StudentTrackingReport() {
+function StudentTrackingReport({
+  specialties = [],
+  packages = [],
+  teachers = []
+}) {
   const [page, setPage] =
     useState(1)
+
+  const [courseId, setCourseId] =
+    useState('')
+
+  const [lessonType, setLessonType] =
+    useState('all')
+
+  const [groupId, setGroupId] =
+    useState('')
+
+  const [teacherId, setTeacherId] =
+    useState('')
+
+  const [packageId, setPackageId] =
+    useState('')
+
+  const lessonGroupsQuery = useQuery({
+    queryKey:
+      LESSON_GROUPS_QUERY_KEY,
+    queryFn: () =>
+      getLessonGroups({
+        includeInactive: true
+      })
+  })
+
+  const lessonGroups =
+    lessonGroupsQuery.data ?? []
+
+  const sortByName = (items, getName) =>
+    [...items].sort((first, second) =>
+      getName(first).localeCompare(
+        getName(second),
+        'tr'
+      )
+    )
+
+  const courseOptions = sortByName(
+    specialties.filter(
+      (specialty) =>
+        specialty.isActive !== false ||
+        String(specialty.id) === courseId
+    ),
+    (specialty) => specialty.name || ''
+  )
+
+  const packageOptions = sortByName(
+    packages.filter(
+      (packageItem) =>
+        !courseId ||
+        String(packageItem.specialtyId) ===
+          courseId
+    ),
+    (packageItem) => packageItem.name || ''
+  )
+
+  const groupOptions = sortByName(
+    lessonGroups.filter(
+      (group) =>
+        !courseId ||
+        String(group.specialtyId) ===
+          courseId
+    ),
+    (group) => group.name || ''
+  )
+
+  const teacherOptions = sortByName(
+    teachers,
+    (teacher) =>
+      teacher.fullName ||
+      teacher.name ||
+      ''
+  )
+
+  const selectedTeacherRecord =
+    teachers.find(
+      (teacher) =>
+        String(teacher.id) === teacherId
+    )
+
+  const selectedPackageRecord =
+    packages.find(
+      (packageItem) =>
+        String(packageItem.id) === packageId
+    )
+
+  const selectedGroupRecord =
+    lessonGroups.find(
+      (group) =>
+        String(group.id) === groupId
+    )
+
+  /*
+   * Rapor view'i öğretmen/paket/grup adlarını metin olarak tutar.
+   * Seçilen kayıtlar adlarına çevrilerek bu sütunlarda aranır.
+   */
+  const getServiceFilters = () => ({
+    teacherName:
+      selectedTeacherRecord
+        ? selectedTeacherRecord.fullName ||
+          selectedTeacherRecord.name ||
+          ''
+        : '',
+    packageName:
+      selectedPackageRecord?.name || '',
+    groupName:
+      selectedGroupRecord?.name || '',
+    lessonType,
+    courseSelected:
+      Boolean(courseId),
+    coursePackageNames: courseId
+      ? packages
+          .filter(
+            (packageItem) =>
+              String(packageItem.specialtyId) ===
+              courseId
+          )
+          .map((packageItem) => packageItem.name)
+          .filter(Boolean)
+      : [],
+    courseGroupNames: courseId
+      ? lessonGroups
+          .filter(
+            (group) =>
+              String(group.specialtyId) ===
+              courseId
+          )
+          .map((group) => group.name)
+          .filter(Boolean)
+      : []
+  })
 
   const [pageSize, setPageSize] =
     useState(10)
@@ -665,11 +817,21 @@ function StudentTrackingReport() {
     pageSize,
     filters: {
       searchText,
-      studentStatus
+      studentStatus,
+      courseId,
+      lessonType,
+      groupId,
+      teacherId,
+      packageId,
+      groupCount:
+        lessonGroups.length
     },
     sortOption,
-    queryFn:
-      getStudentTrackingReportPage,
+    queryFn: (params) =>
+      getStudentTrackingReportPage({
+        ...params,
+        ...getServiceFilters()
+      }),
     setPage,
     errorMessage:
       'Öğrenci takip raporu yüklenemedi.',
@@ -681,12 +843,18 @@ function StudentTrackingReport() {
 
   const exportFilters = {
     searchText,
-    studentStatus
+    studentStatus,
+    ...getServiceFilters()
   }
 
   const clearFilters = () => {
     setSearchText('')
     setStudentStatus('active')
+    setCourseId('')
+    setLessonType('all')
+    setGroupId('')
+    setTeacherId('')
+    setPackageId('')
     setSortOption('nameAsc')
     setPage(1)
   }
@@ -708,7 +876,7 @@ function StudentTrackingReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak kayıt bulunmamaktadır.'
           )
 
@@ -834,7 +1002,7 @@ function StudentTrackingReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -861,7 +1029,7 @@ function StudentTrackingReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak kayıt bulunmamaktadır.'
           )
 
@@ -1008,7 +1176,7 @@ function StudentTrackingReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -1073,6 +1241,186 @@ function StudentTrackingReport() {
               <option value="all">
                 Tüm öğrenciler
               </option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>
+              Kurs
+            </label>
+
+            <select
+              value={courseId}
+              onChange={(event) => {
+                setCourseId(
+                  event.target.value
+                )
+                setPackageId('')
+                setGroupId('')
+                setPage(1)
+              }}
+            >
+              <option value="">
+                Tüm kurslar
+              </option>
+
+              {courseOptions.map(
+                (specialty) => (
+                  <option
+                    key={specialty.id}
+                    value={String(
+                      specialty.id
+                    )}
+                  >
+                    {specialty.name}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>
+              Ders Türü
+            </label>
+
+            <select
+              value={lessonType}
+              onChange={(event) => {
+                setLessonType(
+                  event.target.value
+                )
+
+                if (
+                  event.target.value ===
+                  'individual'
+                ) {
+                  setGroupId('')
+                }
+
+                setPage(1)
+              }}
+            >
+              <option value="all">
+                Tüm ders türleri
+              </option>
+
+              <option value="group">
+                Grup dersi alanlar
+              </option>
+
+              <option value="individual">
+                Yalnız bireysel ders alanlar
+              </option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>
+              Grup Dersi
+            </label>
+
+            <select
+              value={groupId}
+              disabled={
+                lessonType ===
+                'individual'
+              }
+              onChange={(event) => {
+                setGroupId(
+                  event.target.value
+                )
+                setPage(1)
+              }}
+            >
+              <option value="">
+                {lessonGroupsQuery.isPending
+                  ? 'Gruplar yükleniyor...'
+                  : 'Tüm gruplar'}
+              </option>
+
+              {groupOptions.map(
+                (group) => (
+                  <option
+                    key={group.id}
+                    value={String(
+                      group.id
+                    )}
+                  >
+                    {group.name}
+                    {group.isActive === false
+                      ? ' (pasif)'
+                      : ''}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>
+              Öğretmen
+            </label>
+
+            <select
+              value={teacherId}
+              onChange={(event) => {
+                setTeacherId(
+                  event.target.value
+                )
+                setPage(1)
+              }}
+            >
+              <option value="">
+                Tüm öğretmenler
+              </option>
+
+              {teacherOptions.map(
+                (teacher) => (
+                  <option
+                    key={teacher.id}
+                    value={String(
+                      teacher.id
+                    )}
+                  >
+                    {teacher.fullName ||
+                      teacher.name}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>
+              Paket
+            </label>
+
+            <select
+              value={packageId}
+              onChange={(event) => {
+                setPackageId(
+                  event.target.value
+                )
+                setPage(1)
+              }}
+            >
+              <option value="">
+                Tüm paketler
+              </option>
+
+              {packageOptions.map(
+                (packageItem) => (
+                  <option
+                    key={packageItem.id}
+                    value={String(
+                      packageItem.id
+                    )}
+                  >
+                    {packageItem.name}
+                  </option>
+                )
+              )}
             </select>
           </div>
         </div>
@@ -1309,7 +1657,7 @@ function StudentPaymentReport() {
       getStudentPaymentReportPage,
     setPage,
     errorMessage:
-      'Öğrenci ödeme raporu yüklenemedi.',
+      'Öğrenci tahsilat raporu yüklenemedi.',
     debounce:
       Boolean(
         searchText.trim()
@@ -1347,7 +1695,7 @@ function StudentPaymentReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak ödeme kaydı bulunmamaktadır.'
           )
 
@@ -1514,7 +1862,7 @@ function StudentPaymentReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -1541,7 +1889,7 @@ function StudentPaymentReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak ödeme kaydı bulunmamaktadır.'
           )
 
@@ -1717,7 +2065,7 @@ function StudentPaymentReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -2265,7 +2613,7 @@ function TeacherTrackingReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak öğretmen kaydı bulunmamaktadır.'
           )
 
@@ -2562,7 +2910,7 @@ function TeacherTrackingReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -2589,7 +2937,7 @@ function TeacherTrackingReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak öğretmen kaydı bulunmamaktadır.'
           )
 
@@ -3002,7 +3350,7 @@ function TeacherTrackingReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -3723,7 +4071,7 @@ function TeacherEarningsReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak hakediş kaydı bulunmamaktadır.'
           )
 
@@ -4079,7 +4427,7 @@ function TeacherEarningsReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -4106,7 +4454,7 @@ function TeacherEarningsReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak hakediş kaydı bulunmamaktadır.'
           )
 
@@ -4569,7 +4917,7 @@ function TeacherEarningsReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -4684,6 +5032,10 @@ function TeacherEarningsReport() {
 
               <option value="paid">
                 Ödendi
+              </option>
+
+              <option value="overpaid">
+                Fazla Ödendi
               </option>
 
               <option value="none">
@@ -4920,7 +5272,13 @@ function TeacherEarningsReport() {
                       </td>
 
                       <td className="teacher-earning-money-cell">
-                        <strong className="report-remaining-amount">
+                        <strong
+                          className={`report-remaining-amount ${
+                            row.remainingPayment < 0
+                              ? 'overpaid'
+                              : ''
+                          }`}
+                        >
                           {formatCurrency(
                             row.remainingPayment
                           )}
@@ -4990,10 +5348,13 @@ function TeacherEarningsReport() {
                                 </span>
 
                                 <span>
-                                  {formatCurrency(
-                                    row.remainingPayment
-                                  )}{' '}
-                                  kalan
+                                  {row.remainingPayment < 0
+                                    ? `${formatCurrency(
+                                        Math.abs(row.remainingPayment)
+                                      )} fazla ödendi`
+                                    : `${formatCurrency(
+                                        row.remainingPayment
+                                      )} kalan`}
                                 </span>
                               </div>
                             </div>
@@ -5230,7 +5591,7 @@ function TeacherPaymentsReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak öğretmen ödeme kaydı bulunmamaktadır.'
           )
 
@@ -5388,7 +5749,7 @@ function TeacherPaymentsReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -5415,7 +5776,7 @@ function TeacherPaymentsReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak öğretmen ödeme kaydı bulunmamaktadır.'
           )
 
@@ -5716,7 +6077,7 @@ function TeacherPaymentsReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -6142,7 +6503,7 @@ function StaffPaymentsReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak personel ödeme kaydı bulunmamaktadır.'
           )
 
@@ -6318,7 +6679,7 @@ function StaffPaymentsReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -6345,7 +6706,7 @@ function StaffPaymentsReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak personel ödeme kaydı bulunmamaktadır.'
           )
 
@@ -6572,7 +6933,7 @@ function StaffPaymentsReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -7259,7 +7620,7 @@ function IncomeExpenseReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'Excel’e aktarılacak gelir-gider kaydı bulunmamaktadır.'
           )
 
@@ -7697,7 +8058,7 @@ function IncomeExpenseReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'Excel dosyası oluşturulamadı.'
@@ -7727,7 +8088,7 @@ function IncomeExpenseReport() {
         if (
           exportRows.length === 0
         ) {
-          alert(
+          notify(
             'PDF’e aktarılacak gelir-gider kaydı bulunmamaktadır.'
           )
 
@@ -8144,7 +8505,7 @@ function IncomeExpenseReport() {
           exportError
         )
 
-        alert(
+        notify(
           exportError instanceof Error
             ? exportError.message
             : 'PDF dosyası oluşturulamadı.'
@@ -8765,7 +9126,11 @@ function IncomeExpenseReport() {
   )
 }
 
-function Reports() {
+function Reports({
+  specialties = [],
+  packages = [],
+  teachers = []
+}) {
   const [
     activeReport,
     setActiveReport
@@ -8803,7 +9168,11 @@ function Reports() {
     'student-tracking'
   ) {
     reportContent = (
-      <StudentTrackingReport />
+      <StudentTrackingReport
+        specialties={specialties}
+        packages={packages}
+        teachers={teachers}
+      />
     )
   } else if (
     activeReport ===

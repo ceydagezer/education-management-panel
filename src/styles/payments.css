@@ -1102,3 +1102,95 @@
     width: 100%;
   }
 }
+
+/* Ayrılan öğrenci hesapları */
+.settlement-list-card {
+  margin-bottom: 24px;
+}
+
+.settlement-list-heading h2 {
+  margin: 0 0 4px;
+}
+
+.settlement-list-heading p {
+  margin: 0 0 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.settlement-list-error {
+  color: #b91c1c;
+}
+
+.settlement-table-wrap {
+  overflow-x: auto;
+}
+
+.settlement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.settlement-table th,
+.settlement-table td {
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.settlement-table th {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settlement-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.settlement-status {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.settlement-status.receivable {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.settlement-status.refund {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.settlement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settlement-actions button {
+  white-space: nowrap;
+}
+
+/* Tahsilat formu: öğrenci arama kutusu */
+.payment-form-card .payment-student-search {
+  position: relative;
+  z-index: 50;
+}
+
+.payment-form-card .payment-student-search .schedule-student-search-control input {
+  width: 100%;
+  padding-left: 44px;
+  padding-right: 44px;
+}

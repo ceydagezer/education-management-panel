@@ -2579,3 +2579,509 @@
   font-size: 14px;
   color: #334155;
 }
+/* İşaretlenmemiş dersler */
+.unmarked-lessons-head {
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.unmarked-month-picker {
+  margin: 0;
+  min-width: 180px;
+}
+
+.unmarked-lessons-empty {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  color: #475569;
+  font-size: 14px;
+  background: #f1f5f9;
+  border-radius: 12px;
+}
+
+.unmarked-lessons-empty.ok {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.unmarked-lessons-empty.error {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.unmarked-lessons-count {
+  margin: 12px 0;
+  color: #b45309;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.unmarked-lessons-list {
+  display: grid;
+  gap: 8px;
+}
+
+.unmarked-lesson-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(200px, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+}
+
+.unmarked-lesson-date strong,
+.unmarked-lesson-info strong {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.unmarked-lesson-date span,
+.unmarked-lesson-info span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.unmarked-lesson-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.unmarked-lesson-actions button {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .unmarked-lesson-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Aylık ders kontrolü: buton ve ay gezinme */
+.monthly-check-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  color: #334155;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.monthly-check-button.has-pending {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.monthly-check-button.active {
+  color: #ffffff;
+  background: #0f172a;
+  border-color: #0f172a;
+}
+
+.monthly-check-button span {
+  min-width: 22px;
+  padding: 2px 7px;
+  color: #ffffff;
+  font-size: 12px;
+  text-align: center;
+  background: #d97706;
+  border-radius: 999px;
+}
+
+.unmarked-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.unmarked-month-nav select {
+  min-width: 170px;
+}
+
+.unmarked-month-arrow {
+  width: 38px;
+  height: 38px;
+  color: #334155;
+  font-family: inherit;
+  font-size: 20px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.unmarked-month-arrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Aylık ders takvimi */
+.unmarked-lessons-count.ok {
+  color: #15803d;
+}
+
+.lesson-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.lesson-calendar-weekday {
+  padding: 6px 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.lesson-calendar-cell {
+  display: flex;
+  flex-direction: column;
+  min-height: 110px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.lesson-calendar-cell.empty {
+  background: transparent;
+  border-color: transparent;
+}
+
+.lesson-calendar-cell.today {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 1px #0284c7;
+}
+
+.lesson-calendar-cell.future {
+  background: #f8fafc;
+}
+
+.lesson-calendar-day {
+  margin-bottom: 4px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.lesson-calendar-lessons {
+  display: grid;
+  gap: 3px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.lesson-calendar-chip {
+  overflow: hidden;
+  padding: 3px 6px;
+  color: #334155;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-left-width: 3px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.lesson-calendar-chip.completed {
+  background: #dcfce7;
+  border-color: #86efac;
+  border-left-color: #16a34a;
+}
+
+.lesson-calendar-chip.cancelled {
+  color: #64748b;
+  text-decoration: line-through;
+  background: #f1f5f9;
+  border-left-color: #94a3b8;
+}
+
+.lesson-calendar-chip.makeup {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  border-left-color: #7c3aed;
+}
+
+.lesson-calendar-chip.makeup.makeup-completed {
+  background: #dcfce7;
+  border-color: #86efac;
+  border-left-color: #16a34a;
+}
+
+.lesson-calendar-chip.unmarked {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+  border-left-color: #d97706;
+}
+
+.calendar-lesson-modal {
+  width: min(520px, 100%);
+}
+
+@media (max-width: 900px) {
+  .lesson-calendar {
+    gap: 3px;
+  }
+
+  .lesson-calendar-cell {
+    min-height: 80px;
+    padding: 4px;
+  }
+
+  .lesson-calendar-chip {
+    font-size: 10px;
+  }
+}
+
+/* Aylık ders kontrolü: sayfayı uzatmayan, sağdan kayan panel */
+.monthly-drawer-backdrop {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  animation: monthly-drawer-fade 0.2s ease;
+}
+
+.monthly-drawer-backdrop > .monthly-drawer {
+  display: flex;
+  width: min(1180px, 100%);
+  height: 100%;
+  margin: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px 0 0 20px;
+  box-shadow: -18px 0 48px rgba(15, 23, 42, 0.2);
+  /* fill-mode yok: animasyon bitince transform kalkar, iç modal
+     (position: fixed) ekranı referans almaya devam eder */
+  animation: monthly-drawer-slide 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.monthly-drawer .unmarked-lessons-head {
+  flex-shrink: 0;
+  border-bottom: 1px solid #e8eef5;
+}
+
+.monthly-drawer .unmarked-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.monthly-drawer .unmarked-month-nav .payment-modal-close-button {
+  margin-left: 6px;
+}
+
+.monthly-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px 24px;
+}
+
+.monthly-drawer-body .unmarked-lessons-count {
+  margin-top: 0;
+}
+
+.monthly-drawer .lesson-calendar-cell {
+  min-height: 96px;
+}
+
+@keyframes monthly-drawer-slide {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes monthly-drawer-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .monthly-drawer-backdrop > .monthly-drawer {
+    border-radius: 0;
+  }
+
+  .monthly-drawer .unmarked-lessons-head {
+    flex-wrap: wrap;
+  }
+
+  .monthly-drawer-body {
+    padding: 12px;
+  }
+}
+
+/* Geçmiş tarihli ders ekleme */
+.monthly-drawer .backdated-add-button {
+  height: 40px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.lesson-calendar-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.lesson-calendar-day-row .lesson-calendar-day {
+  margin-bottom: 0;
+}
+
+.lesson-calendar-add {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #0369a1;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  background: #e0f2fe;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.lesson-calendar-cell:hover .lesson-calendar-add,
+.lesson-calendar-add:focus-visible {
+  opacity: 1;
+}
+
+.lesson-calendar-add:hover {
+  background: #bae6fd;
+}
+
+@media (hover: none) {
+  .lesson-calendar-add {
+    opacity: 1;
+  }
+}
+
+.backdated-lesson-modal {
+  width: min(640px, 100%);
+}
+
+.backdated-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0 16px;
+}
+
+.backdated-form-grid .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.backdated-form-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.backdated-form-grid textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.backdated-estimate {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #f0fdf4, #f8fafc);
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+}
+
+.backdated-estimate-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.backdated-estimate-head span {
+  color: #166534;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.backdated-estimate-head strong {
+  color: #14532d;
+  font-size: 20px;
+}
+
+.backdated-estimate ul {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.backdated-estimate li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.backdated-estimate p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+@media (max-width: 650px) {
+  .backdated-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Telafi / geçmiş ders formlarında öğrenci arama kutusu */
+.student-search-select {
+  position: relative;
+  z-index: 40;
+}
+
+.student-search-select .schedule-student-search-control input {
+  width: 100%;
+  padding-left: 44px;
+  padding-right: 44px;
+}

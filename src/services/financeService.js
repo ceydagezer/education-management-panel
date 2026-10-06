@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllRows } from '../lib/supabasePaging'
 
 const FINANCE_OVERVIEW_CACHE_MAX_AGE_MS = 30_000
 
@@ -41,6 +42,14 @@ function isFinanceOverviewCacheEntryFresh(
 
 export function invalidateFinanceIncomeSummaryCache() {
   invalidateFinanceOverviewCacheEntry('incomeSummary')
+}
+
+/*
+ * Ders yapıldı / iptal / silindi gibi değişikliklerde hakediş
+ * özeti eskir; bir sonraki açılışta veritabanından yeniden okunur.
+ */
+export function invalidateTeacherEarningsCache() {
+  invalidateFinanceOverviewCacheEntry('teacherSummaries')
 }
 
 export async function refreshFinanceIncomeSummaryCache() {
@@ -172,19 +181,12 @@ const financeIncomeSelect = `
   updated_at
 `
 
-const teacherEarningSummarySelect = `
-  teacher_id,
-  teacher_name,
-  branch,
-  commission_rate,
-  teacher_is_active,
-  teacher_status,
-  completed_lesson_count,
-  total_lesson_amount,
-  total_earning,
-  total_paid,
-  remaining_payment
-`
+/*
+ * Silinmiş öğretmenler güncel hakediş özetinde gösterilmez.
+ * teacher_is_deleted kolonu 20261009 migration'ıyla gelir; kolon
+ * henüz yoksa sorgu bozulmasın diye '*' ile okunup süzülür.
+ */
+const teacherEarningSummaryListSelect = '*'
 
 const teacherEarningLessonSelect = `
   lesson_id,
@@ -205,7 +207,8 @@ const teacherEarningLessonSelect = `
   unit_price,
   commission_rate,
   teacher_earning,
-  created_at
+  created_at,
+  earning_row_id
 `
 
 const teacherPaymentHistorySelect = `
@@ -365,7 +368,9 @@ function mapTeacherEarningSummaryFromDb(row) {
 function mapTeacherEarningLessonFromDb(row) {
   return {
     earningRecordId:
-      row.lesson_id || '',
+      row.earning_row_id ||
+      row.lesson_id ||
+      '',
     lessonId:
       row.lesson_id || '',
     teacherId:
@@ -1097,7 +1102,7 @@ export async function getTeacherEarningsSummary() {
     .from(
       'teacher_earnings_summary_view'
     )
-    .select(teacherEarningSummarySelect)
+    .select(teacherEarningSummaryListSelect)
     .order(
       'teacher_name',
       {
@@ -1114,7 +1119,9 @@ export async function getTeacherEarningsSummary() {
     )
   }
 
-  const result = (data || []).map(
+  const result = (data || [])
+    .filter((row) => row.teacher_is_deleted !== true)
+    .map(
     mapTeacherEarningSummaryFromDb
   )
 
@@ -1135,24 +1142,29 @@ export async function getTeacherEarningLessons(
     return []
   }
 
+  // Grup derslerinde her katılımcı ayrı satır olduğu için
+  // 1000 satır sınırı hızla aşılabilir; tüm sayfalar alınır.
   const {
     data,
     error
-  } = await supabase
-    .from(
-      'teacher_earning_lessons_view'
-    )
-    .select(teacherEarningLessonSelect)
-    .eq(
-      'teacher_id',
-      cleanTeacherId
-    )
-    .order(
-      'created_at',
-      {
-        ascending: false
-      }
-    )
+  } = await fetchAllRows(() =>
+    supabase
+      .from(
+        'teacher_earning_lessons_view'
+      )
+      .select(teacherEarningLessonSelect)
+      .eq(
+        'teacher_id',
+        cleanTeacherId
+      )
+      .order(
+        'created_at',
+        {
+          ascending: false
+        }
+      )
+      .order('earning_row_id')
+  )
 
   if (error) {
     throw new Error(

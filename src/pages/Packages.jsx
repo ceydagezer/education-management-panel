@@ -26,6 +26,11 @@ import {
   normalizeStatusText
 } from '../utils/textHelpers'
 
+
+import {
+  confirmDialog,
+  notify
+} from '../lib/feedback'
 const PACKAGE_DRAFT_KEY =
   'arti-akademi-package-draft'
 
@@ -381,6 +386,8 @@ function Packages({
           formattedName
         )
 
+      notify.success('Branş eklendi.')
+
       setSpecialties((current) => [
         ...current,
         savedSpecialty
@@ -550,14 +557,14 @@ function Packages({
     )
 
     if (!trimmedName) {
-      alert('Paket adı zorunludur.')
+      notify('Paket adı zorunludur.')
       return null
     }
 
     if (
       !packageForm.specialtyId
     ) {
-      alert(
+      notify(
         'Listeden bir branş seçin veya yazdığınız yeni branşı önce kaydedin.'
       )
       return null
@@ -567,7 +574,7 @@ function Packages({
       !Number.isInteger(lessonCount) ||
       lessonCount < 1
     ) {
-      alert(
+      notify(
         'Paket içindeki ders sayısı 1 veya daha büyük bir tam sayı olmalıdır.'
       )
       return null
@@ -577,7 +584,7 @@ function Packages({
       !Number.isFinite(totalPrice) ||
       totalPrice <= 0
     ) {
-      alert(
+      notify(
         'Paket ücreti 0’dan büyük olmalıdır.'
       )
       return null
@@ -608,7 +615,7 @@ function Packages({
       )
 
     if (activeDuplicate) {
-      alert(
+      notify(
         'Bu paket adıyla aktif bir kayıt bulunmaktadır.'
       )
       return null
@@ -654,7 +661,7 @@ function Packages({
       archivedMatch
     ) {
       const shouldRestore =
-        window.confirm(
+        await confirmDialog(
           `${archivedMatch.name} adlı paket daha önce silinmiş. Yeni bilgilerle geri yüklensin mi?`
         )
 
@@ -692,6 +699,8 @@ function Packages({
             formData
           )
       }
+
+      notify.success(editingPackageId ? 'Paket güncellendi.' : 'Paket kaydedildi.')
 
       setPackages((current) => {
         const targetId =
@@ -736,7 +745,7 @@ function Packages({
   const deletePackage = async (
     packageItem
   ) => {
-    const isConfirmed = window.confirm(
+    const isConfirmed = await confirmDialog(
       `${packageItem.name} paketini silmek istediğinize emin misiniz? Paket geçmiş kayıtlarda kullanılıyorsa veritabanından tamamen kaldırılmayacak, arşivlenecektir.`
     )
 
@@ -754,6 +763,8 @@ function Packages({
         packageItem.id,
         false
       )
+
+      notify.success('Paket durumu güncellendi.')
 
       setPackages((current) =>
         current.map((item) =>
@@ -810,7 +821,7 @@ function Packages({
           <h1>Ders Paketleri</h1>
 
           <p>
-            Ders paketlerini enstrüman,
+            Ders paketlerini branş,
             ders süresi, ders sayısı ve
             ücret bilgileriyle yönetin.
           </p>
@@ -878,7 +889,7 @@ function Packages({
 
               <div className="form-group">
                 <label>
-                  Enstrüman / Branş
+                  Branş
                 </label>
 
                 <div className="specialty-inline-row">
@@ -1178,7 +1189,7 @@ function Packages({
           <thead>
             <tr>
               <th>Paket Adı</th>
-              <th>Enstrüman</th>
+              <th>Branş</th>
               <th>Bir Dersin Süresi</th>
               <th>Ders Sayısı</th>
               <th>Paket Ücreti</th>

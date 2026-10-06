@@ -1548,3 +1548,13 @@
   .report-status-badge {
   margin-inline: auto;
 }
+/* Öğretmene fazla ödeme */
+.report-payment-status.overpaid {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+
+.report-remaining-amount.overpaid {
+  color: #b91c1c;
+}

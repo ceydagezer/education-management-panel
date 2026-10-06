@@ -1107,3 +1107,379 @@
 .schedule-student-result-content {
   gap: 0;
 }
+/* Elle yazılan ders saati: uygunluk ve dolu saatler */
+.manual-time-status {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.manual-time-status.pending {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.manual-time-status.available {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.manual-time-status.blocked {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.manual-time-busy > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.manual-time-busy p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.manual-time-busy ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manual-time-busy li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.manual-time-busy li span {
+  color: #475569;
+}
+
+.schedule-card-time {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Haftalık tablolar: gün sütunları (saat satırı yok) */
+.day-column-table td {
+  vertical-align: top;
+}
+
+.day-column-table .schedule-cell-stack,
+.day-column-table .status-cell-stack {
+  max-height: none;
+}
+
+.day-column-table .schedule-card-time {
+  margin-bottom: 2px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+/* Gün sütunları: tablo düzeni (saat sütunu yok) */
+.weekly-schedule-table.day-column-table th,
+.weekly-schedule-table.day-column-table th:first-child,
+.weekly-schedule-table.day-column-table th:not(:first-child) {
+  width: calc(100% / 7);
+  height: auto;
+  padding: 10px 10px;
+  line-height: 1.2;
+}
+
+.weekly-schedule-table.day-column-table th:first-child,
+.weekly-schedule-table.day-column-table td:first-child {
+  position: static;
+}
+
+.weekly-schedule-table.day-column-table th span,
+.weekly-schedule-table.day-column-table th small {
+  display: block;
+}
+
+.weekly-schedule-table.day-column-table th small {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.weekly-schedule-table.day-column-table td {
+  height: auto;
+  min-height: 120px;
+}
+
+/* Aynı saatte başlayan dersler */
+.day-time-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.day-time-group.multiple {
+  padding: 6px;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+}
+
+.day-time-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  padding: 0 2px;
+  color: #334155;
+  font-size: 11px;
+}
+
+.day-time-group-head b {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 1180px) {
+  .schedule-weekly-table.day-column-table th,
+  .schedule-weekly-table.day-column-table th:first-child,
+  .schedule-weekly-table.day-column-table th:not(:first-child) {
+    width: auto;
+    min-width: 145px;
+  }
+}
+
+/* Yeni Ders Ekle: tek kart, tam genişlik (sağ panel kaldırıldı) */
+.schedule-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.schedule-form-card {
+  overflow: visible;
+  padding: 26px 28px;
+}
+
+.schedule-card-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.schedule-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.schedule-form-grid > .form-group.full-width {
+  grid-column: auto;
+}
+
+.schedule-form-grid > .selected-package-box,
+.schedule-form-grid > .full-width:not(.form-group) {
+  grid-column: 1 / -1;
+}
+
+.selected-package-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 28px;
+  background: linear-gradient(135deg, #f0f9ff, #f8fafc);
+  border-color: #d6eaf6;
+}
+
+.selected-package-box > div:first-child strong {
+  margin-bottom: 0;
+}
+
+.selected-package-box .package-mini-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-package-box .package-mini-grid p {
+  padding: 6px 11px;
+  background: #ffffff;
+  border: 1px solid #e2eaf3;
+  border-radius: 999px;
+}
+
+/* Gün + saat */
+.schedule-time-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 18px;
+  align-items: end;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px dashed #e2eaf3;
+}
+
+.schedule-day-picker {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.schedule-day-chip {
+  height: 52px;
+  padding: 0 6px;
+  overflow: hidden;
+  color: #40546b;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f8fafc;
+  border: 1px solid #d9e2ef;
+  border-radius: 14px;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.schedule-day-chip:hover {
+  color: #0369a1;
+  background: #f0f9ff;
+  border-color: #7dd3fc;
+}
+
+.schedule-day-chip.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #0ea5e9, #14b8a6);
+  border-color: transparent;
+  box-shadow: 0 6px 14px rgba(14, 165, 233, 0.25);
+}
+
+.schedule-form-card input:disabled {
+  color: #94a3b8;
+  background-color: #f1f5f9;
+  cursor: not-allowed;
+}
+
+/* Alt bar: durum + kaydet */
+.schedule-form-footer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #edf2f7;
+}
+
+.manual-time-panel {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manual-time-panel .manual-time-status {
+  align-self: flex-start;
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.manual-time-busy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.manual-time-busy > span {
+  margin: 0;
+}
+
+.manual-time-panel .manual-time-busy ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.manual-time-busy li {
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: #fff7ed;
+  border-color: #fed7aa;
+  border-radius: 999px;
+}
+
+.manual-time-busy li b {
+  color: #9a3412;
+  font-variant-numeric: tabular-nums;
+}
+
+.manual-time-busy li span {
+  color: #c2410c;
+}
+
+.schedule-form-card .schedule-save-button {
+  display: block;
+  flex-shrink: 0;
+  width: auto;
+  min-width: 240px;
+  margin: 0;
+}
+
+@media (max-width: 1180px) {
+  .schedule-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-time-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-day-picker {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .schedule-form-card {
+    padding: 20px 16px;
+  }
+
+  .schedule-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-day-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .schedule-form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schedule-form-card .schedule-save-button {
+    width: 100%;
+    min-width: 0;
+  }
+}

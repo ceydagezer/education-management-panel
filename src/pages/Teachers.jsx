@@ -6,6 +6,7 @@ import {createSpecialty} from '../services/catalogService'
 
 import {
   createTeacher,
+  deleteTeacher,
   getTeacherCvUrl,
   reactivateTeacher,
   setTeacherPassive,
@@ -16,8 +17,15 @@ import '../styles/teachers.css'
 
 import {formatDate,getTodayKey} from '../utils/dateHelpers'
 
-import {areIdsEqual,normalizeSearchText,normalizeStatusText} from '../utils/textHelpers'
+import {areIdsEqual,formatPhoneNumber,isValidMobilePhone,normalizeSearchText,normalizeStatusText,PHONE_INPUT_MAX_LENGTH} from '../utils/textHelpers'
 
+
+import {
+  alertDialog,
+  confirmDialog,
+  notify,
+  promptDialog
+} from '../lib/feedback'
 const TEACHER_DRAFT_DISCARD_EVENT ='arti-akademi-discard-drafts'
 
 let teacherFormDraftCache = null
@@ -405,7 +413,7 @@ unsavedChanges?.markDirty?.()
 
 setTeacherForm((current) => ({
   ...current,
-  [name]: value
+  [name]: name === 'phone' ? formatPhoneNumber(value) : value
 }))
 
 }
@@ -447,7 +455,7 @@ setNewSpecialty(event.target.value)}
 const handleAddSpecialty = async () => {const value = newSpecialty.trim()
 
 if (!value) {
-  alert('Uzmanlık adı giriniz.')
+  notify('Uzmanlık adı giriniz.')
   return
 }
 
@@ -486,6 +494,8 @@ setActionError('')
 try {
   const savedSpecialty =
     await createSpecialty(value)
+
+  notify.success('Branş eklendi.')
 
   setSpecialties((current) => [
     ...current,
@@ -526,13 +536,13 @@ if (!file) {
 }
 
 if (!file.type.startsWith('image/')) {
-  alert('Lütfen geçerli bir görsel dosyası seçiniz.')
+  notify('Lütfen geçerli bir görsel dosyası seçiniz.')
   event.target.value = ''
   return
 }
 
 if (file.size > MAX_PHOTO_SIZE) {
-  alert('Profil fotoğrafı en fazla 5 MB olabilir.')
+  notify('Profil fotoğrafı en fazla 5 MB olabilir.')
   event.target.value = ''
   return
 }
@@ -575,12 +585,12 @@ if (
   !extension ||
   !ALLOWED_CV_EXTENSIONS.includes(extension)
 ) {
-  alert('CV dosyası PDF formatında olmalıdır.')
+  notify('CV dosyası PDF formatında olmalıdır.')
   return false
 }
 
 if (file.size > MAX_CV_SIZE) {
-  alert('CV dosyası en fazla 10 MB olabilir.')
+  notify('CV dosyası en fazla 10 MB olabilir.')
   return false
 }
 
@@ -670,7 +680,7 @@ unsavedChanges?.markClean?.()
 setActionError('')
 setTeacherForm({
   fullName: teacher.fullName || '',
-  phone: teacher.phone || '',
+  phone: formatPhoneNumber(teacher.phone),
   email: teacher.email || '',
   birthDate: teacher.birthDate || '',
   gender: teacher.gender || '',
@@ -747,32 +757,37 @@ runProtectedAction(performCloseForm)
 const saveTeacher = async (event) => {event.preventDefault()
 
 if (!teacherForm.fullName.trim()) {
-  alert('Ad soyad zorunludur.')
+  notify('Ad soyad zorunludur.')
   return
 }
 
 if (!teacherForm.phone.trim()) {
-  alert('Telefon zorunludur.')
+  notify('Telefon zorunludur.')
+  return
+}
+
+if (!isValidMobilePhone(teacherForm.phone)) {
+  notify('Telefon 05xx xxx xx xx biçiminde 11 haneli olmalıdır.')
   return
 }
 
 if (!teacherForm.email.trim()) {
-  alert('E-posta zorunludur.')
+  notify('E-posta zorunludur.')
   return
 }
 
 if (!teacherForm.birthDate) {
-  alert('Doğum tarihi zorunludur.')
+  notify('Doğum tarihi zorunludur.')
   return
 }
 
 if (!teacherForm.gender) {
-  alert('Cinsiyet zorunludur.')
+  notify('Cinsiyet zorunludur.')
   return
 }
 
 if (teacherForm.specialties.length === 0) {
-  alert('En az bir uzmanlık seçiniz.')
+  notify('En az bir uzmanlık seçiniz.')
   return
 }
 
@@ -785,7 +800,7 @@ if (
   commissionRate < 0 ||
   commissionRate > 100
 ) {
-  alert(
+  notify(
     'Hakediş yüzdesi 0 ile 100 arasında olmalıdır.'
   )
   return
@@ -800,7 +815,7 @@ if (
   paymentDay < 1 ||
   paymentDay > 31
 ) {
-  alert('Aylık ödeme gününü seçiniz.')
+  notify('Aylık ödeme gününü seçiniz.')
   return
 }
 
@@ -817,6 +832,8 @@ try {
       : await createTeacher(
           teacherForm
         )
+
+      notify.success(editingTeacherId ? 'Öğretmen bilgileri güncellendi.' : 'Öğretmen kaydedildi.')
 
   setTeachers((current) => {
     if (editingTeacherId) {
@@ -860,25 +877,17 @@ const changeTeacherStatus = async (teacher) => {const isCurrentlyActive =teacher
 setActionError('')
 
 if (isCurrentlyActive) {
-  const passiveReason = window.prompt(
-    'Öğretmenin pasife alınma nedenini yazınız:',
-    teacher.passiveReason || ''
-  )
+  const passiveReason = await promptDialog({
+    title: `${teacher.fullName} pasife alınacak`,
+    message: 'Geçmiş ders, paket ve ödeme kayıtları korunacaktır.',
+    label: 'Pasife alma nedeni',
+    defaultValue: teacher.passiveReason || '',
+    required: true,
+    confirmText: 'Pasife Al',
+    tone: 'danger'
+  })
 
   if (passiveReason === null) {
-    return
-  }
-
-  if (!passiveReason.trim()) {
-    alert('Pasife alma nedeni zorunludur.')
-    return
-  }
-
-  const isConfirmed = window.confirm(
-    `${teacher.fullName} pasife alınacak. Geçmiş ders, paket ve ödeme kayıtları korunacaktır. Devam edilsin mi?`
-  )
-
-  if (!isConfirmed) {
     return
   }
 
@@ -893,6 +902,8 @@ if (isCurrentlyActive) {
         passiveReason,
         getTodayKey()
       )
+
+    notify.success('Öğretmen pasife alındı.')
 
     setTeachers((current) =>
       current.map((item) =>
@@ -924,7 +935,7 @@ if (isCurrentlyActive) {
   return
 }
 
-const isConfirmed = window.confirm(
+const isConfirmed = await confirmDialog(
   `${teacher.fullName} yeniden aktif öğretmen olarak işaretlensin mi?`
 )
 
@@ -942,6 +953,8 @@ try {
       teacher.id,
       getTodayKey()
     )
+
+  notify.success('Öğretmen yeniden aktif edildi.')
 
   setTeachers((current) =>
     current.map((item) =>
@@ -970,6 +983,67 @@ try {
   )
 }
 
+}
+
+const removeTeacher = async (teacher) => {
+  setActionError('')
+
+  const isConfirmed = await confirmDialog({
+    title: `${teacher.fullName} silinecek`,
+    message:
+      'Öğretmen yalnızca hakedişi tamamen ödendiyse silinebilir. ' +
+      'Ders veya ödeme geçmişi varsa kişisel bilgileri (telefon, e-posta, fotoğraf, CV) silinir ve öğretmen listelerden kalkar; ' +
+      'geçmiş ders ve ödeme kayıtları raporlarda adıyla korunur. Bu işlem geri alınamaz.',
+    confirmText: 'Evet, Sil',
+    tone: 'danger'
+  })
+
+  if (!isConfirmed) {
+    return
+  }
+
+  setChangingTeacherStatusId(
+    teacher.id
+  )
+
+  try {
+    await deleteTeacher(teacher.id)
+
+    notify.success('Öğretmen silindi.')
+
+    setTeachers((current) =>
+      current.filter(
+        (item) =>
+          !areIdsEqual(
+            item.id,
+            teacher.id
+          )
+      )
+    )
+  } catch (error) {
+    if (error?.isBlocked) {
+      await alertDialog({
+        title: 'Öğretmen silinemez',
+        message: error.message
+      })
+      return
+    }
+
+    console.error(
+      'Öğretmen silme hatası:',
+      error
+    )
+
+    setActionError(
+      error instanceof Error
+        ? error.message
+        : 'Öğretmen silinemedi.'
+    )
+  } finally {
+    setChangingTeacherStatusId(
+      null
+    )
+  }
 }
 
 const openCvFile = async (teacher) => {
@@ -1496,20 +1570,20 @@ try {
   downloadPdfBlob(finalPdfBlob, fileName)
 
   if (cvCouldNotBeAdded) {
-    alert(
+    notify(
       'Öğretmen bilgi formu indirildi ancak CV PDF dosyası belgeye eklenemedi. CV bağlantısını ve Storage erişimini kontrol ediniz.'
     )
   } else if (
     (teacher.cvFile || teacher.cvUrl || teacher.cvFilePath || teacher.cvFileName) &&
     !isTeacherCvPdf(teacher)
   ) {
-    alert(
+    notify(
       'Öğretmen bilgi formu indirildi ancak mevcut CV dosyası PDF formatında olmadığı için belgeye eklenemedi. CV dosyasını PDF olarak yeniden yükleyiniz.'
     )
   }
 } catch (error) {
   console.error('Öğretmen PDF oluşturma hatası:', error)
-  alert(
+  notify(
     error instanceof Error
       ? `PDF oluşturulamadı: ${error.message}`
       : 'PDF oluşturulamadı. Sayfayı yenileyip tekrar deneyiniz.'
@@ -1692,6 +1766,9 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
 
                 <input
                   autoComplete="off"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={PHONE_INPUT_MAX_LENGTH}
                   name="phone"
                   value={teacherForm.phone}
                   onChange={handleTeacherChange}
@@ -2322,6 +2399,25 @@ return (<div className="dashboard-shell"><section className="page-card"><div><sp
                           ? 'Pasife Al'
                           : 'Aktifleştir'}
                       </LoadingButton>
+
+                      {!isTeacherActive(teacher) && (
+                        <button
+                          className="teacher-delete-button"
+                          type="button"
+                          disabled={
+                            isSavingTeacher ||
+                            areIdsEqual(
+                              changingTeacherStatusId,
+                              teacher.id
+                            )
+                          }
+                          onClick={() =>
+                            removeTeacher(teacher)
+                          }
+                        >
+                          Sil
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

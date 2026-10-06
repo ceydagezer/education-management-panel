@@ -305,6 +305,89 @@ async function createSignedUrl(
   return signedUrl
 }
 
+/*
+ * Liste yüklenirken her öğretmen için ayrı istek atmak yerine
+ * önbellekte olmayan fotoğrafların imzalı bağlantıları tek
+ * istekte alınır. Fotoğraf alınamazsa liste yine yüklenir.
+ */
+async function attachPhotoUrls(
+  teachers
+) {
+  const getCacheKey = (path) =>
+    `${PHOTO_BUCKET}:${path}`
+
+  const isCacheFresh = (path) => {
+    const cachedEntry =
+      signedUrlCache.get(getCacheKey(path))
+
+    return Boolean(
+      cachedEntry?.url &&
+      Date.now() -
+        Number(cachedEntry.createdAt || 0) <=
+        SIGNED_URL_CACHE_MAX_AGE_MS
+    )
+  }
+
+  const missingPaths = [
+    ...new Set(
+      teachers
+        .map((teacher) =>
+          String(teacher.photoPath || '').trim()
+        )
+        .filter(
+          (path) =>
+            path && !isCacheFresh(path)
+        )
+    )
+  ]
+
+  if (missingPaths.length > 0) {
+    const { data, error } = await supabase
+      .storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrls(
+        missingPaths,
+        SIGNED_URL_SECONDS
+      )
+
+    if (error) {
+      console.error(
+        `${PHOTO_BUCKET} signed URL listesi oluşturulamadı:`,
+        error
+      )
+    }
+
+    ;(data || []).forEach((item) => {
+      if (item?.path && item?.signedUrl && !item.error) {
+        signedUrlCache.set(
+          getCacheKey(item.path),
+          {
+            url: item.signedUrl,
+            createdAt: Date.now()
+          }
+        )
+      }
+    })
+  }
+
+  return teachers.map((teacher) => {
+    const path = String(
+      teacher.photoPath || ''
+    ).trim()
+
+    const photoUrl = path
+      ? signedUrlCache.get(getCacheKey(path))?.url || ''
+      : ''
+
+    return {
+      ...teacher,
+      photo: photoUrl,
+      profilePhotoUrl: photoUrl,
+      cvUrl: ''
+    }
+  })
+}
+
 async function attachPhotoUrl(
   teacher
 ) {
@@ -707,10 +790,26 @@ async function getTeacherById(
   )
 }
 
+/*
+ * Liste '*' ile okunur: is_deleted kolonu 20261009 migration'ıyla
+ * gelir; kolon henüz yoksa da liste yüklenmeye devam eder.
+ */
+const teacherListSelect = `
+  *,
+  teacher_specialties (
+    specialty_id,
+    specialty:specialties (
+      id,
+      name,
+      is_active
+    )
+  )
+`
+
 export async function getTeachers() {
   const { data, error } = await supabase
     .from('teachers')
-    .select(teacherSelect)
+    .select(teacherListSelect)
     .order(
       'created_at',
       {
@@ -727,14 +826,92 @@ export async function getTeachers() {
     )
   }
 
-  return Promise.all(
-    (data ?? []).map(
-      (row) =>
-        attachPhotoUrl(
-          mapTeacherFromDb(row)
-        )
-    )
+  return attachPhotoUrls(
+    (data ?? [])
+      .filter((row) => row.is_deleted !== true)
+      .map(mapTeacherFromDb)
   )
+}
+
+/*
+ * Pasif ve hakedişi tamamen ödenmiş öğretmeni siler.
+ * Kurallara takılan durumlarda (aktif ders, ödenmemiş hakediş...)
+ * fırlatılan hata isBlocked = true taşır; ekran bunu uyarı
+ * penceresiyle gösterir.
+ */
+export async function deleteTeacher(
+  teacherId
+) {
+  const cleanTeacherId = String(
+    teacherId || ''
+  ).trim()
+
+  if (!cleanTeacherId) {
+    throw new Error(
+      'Öğretmen kimliği bulunamadı.'
+    )
+  }
+
+  const { data, error } = await supabase.rpc(
+    'delete_teacher_safely',
+    {
+      p_teacher_id: cleanTeacherId
+    }
+  )
+
+  if (error) {
+    if (error.code === '22023' || error.code === 'P0002') {
+      const blockedError = new Error(error.message)
+      blockedError.isBlocked = true
+      throw blockedError
+    }
+
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      throw new Error(
+        'Öğretmen silme özelliği için veritabanı güncellemesi (20261009_teacher_safe_delete.sql) henüz çalıştırılmamış.'
+      )
+    }
+
+    throw new Error(
+      getTeacherErrorMessage(
+        error,
+        `Öğretmen silinemedi: ${error.message}`
+      )
+    )
+  }
+
+  const deleteResult =
+    Array.isArray(data) ? data[0] : data
+
+  /*
+   * Fotoğraf ve CV dosyaları kişisel veridir; kayıt silindikten
+   * sonra depodan da kaldırılır. Dosya silinemezse kayıt
+   * silinmiş sayılır, yalnız konsola yazılır.
+   */
+  const removals = [
+    [PHOTO_BUCKET, deleteResult?.photo_path],
+    [CV_BUCKET, deleteResult?.cv_file_path]
+  ].filter(([, path]) => path)
+
+  await Promise.all(
+    removals.map(async ([bucket, path]) => {
+      const { error: removeError } = await supabase
+        .storage
+        .from(bucket)
+        .remove([path])
+
+      if (removeError) {
+        console.error(
+          `${bucket} dosyası silinemedi:`,
+          removeError
+        )
+      }
+
+      signedUrlCache.delete(`${bucket}:${path}`)
+    })
+  )
+
+  return deleteResult?.result || 'deleted'
 }
 
 async function insertTeacherSpecialties(

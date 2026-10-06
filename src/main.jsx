@@ -3,12 +3,16 @@ import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.jsx'
+import FeedbackHost from './components/FeedbackHost'
+// Ortak tablo hizalaması: sayfa CSS'lerinden sonra yüklenmeli
+import './styles/tables.css'
 import { queryClient } from './lib/queryClient'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
+      <FeedbackHost />
     </QueryClientProvider>
   </StrictMode>,
 )

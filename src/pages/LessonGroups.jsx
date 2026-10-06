@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 import {
@@ -11,21 +12,50 @@ import {
 import {
   addStudentToLessonGroup,
   createLessonGroup,
+  deleteLessonGroup,
   getLessonGroups,
   getLessonGroupStudentPackages,
   getLessonGroupStudents,
   removeStudentFromLessonGroup,
   searchLessonGroupStudents,
-  setLessonGroupActive
+  setLessonGroupActive,
+  updateLessonGroup
 } from '../services/groupService'
 
 import '../styles/lessonGroups.css'
 
+
+import {
+  alertDialog,
+  confirmDialog,
+  notify
+} from '../lib/feedback'
 const normalizeText = (value) =>
   String(value || '')
     .toLocaleLowerCase('tr-TR')
     .replace(/\s+/g, ' ')
     .trim()
+
+const formatMoney = (value) =>
+  `₺${Number(value || 0).toLocaleString('tr-TR', {
+    maximumFractionDigits: 2
+  })}`
+
+const LESSON_GROUPS_LIST_KEY = [
+  'lesson-groups',
+  'list',
+  {
+    includeInactive: true
+  }
+]
+
+const sortGroupsByName = (items) =>
+  [...items].sort((first, second) =>
+    first.name.localeCompare(
+      second.name,
+      'tr'
+    )
+  )
 
 function LessonGroups({
   specialties = [],
@@ -47,6 +77,52 @@ function LessonGroups({
 
   const [saving, setSaving] =
     useState(false)
+
+  const [
+    editingGroupId,
+    setEditingGroupId
+  ] = useState('')
+
+  const [
+    deletingGroupId,
+    setDeletingGroupId
+  ] = useState('')
+
+  const formCardRef = useRef(null)
+  const nameInputRef = useRef(null)
+
+  // Aynı gruba tekrar "Düzenle" basılınca da kaydırma çalışsın diye sayaç.
+  const [
+    editScrollRequest,
+    setEditScrollRequest
+  ] = useState(0)
+
+  /*
+   * Düzenleme başlayınca form yeniden çizildikten sonra forma kaydırılır
+   * ve Grup Adı alanına odaklanılır. Odaklanma, kaydırma herhangi bir
+   * nedenle çalışmazsa da alanı görünür hale getirir.
+   */
+  useEffect(() => {
+    if (!editScrollRequest) {
+      return undefined
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      })
+    })
+
+    const focusTimeoutId = window.setTimeout(() => {
+      nameInputRef.current?.focus()
+    }, 450)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.clearTimeout(focusTimeoutId)
+    }
+  }, [editScrollRequest])
 
   const [
     selectedGroupId,
@@ -179,6 +255,14 @@ function LessonGroups({
         String(group.id) ===
         String(selectedGroupId)
     ) || null
+
+  const groupPackageTotal =
+    groupStudents.reduce(
+      (total, membership) =>
+        total +
+        (Number(membership.packagePrice) || 0),
+      0
+    )
 
   const compatiblePackages =
     selectedGroup
@@ -360,7 +444,89 @@ function LessonGroups({
 
   const resetForm = () => {
     setForm(emptyForm)
+    setEditingGroupId('')
     unsavedChanges?.markClean?.()
+  }
+
+  const startEditGroup = (group) => {
+    setEditingGroupId(group.id)
+    setForm({
+      name: group.name,
+      specialtyId: group.specialtyId,
+      defaultTeacherId: group.defaultTeacherId,
+      defaultDurationMinutes: group.defaultDurationMinutes,
+      capacity: group.capacity,
+      isActive: group.isActive
+    })
+    setEditScrollRequest((current) => current + 1)
+  }
+
+  const deleteGroup = async (group) => {
+    if (deletingGroupId) {
+      return
+    }
+
+    const confirmed =
+      await confirmDialog(
+        `"${group.name}" grubunu kalıcı olarak silmek istediğinize emin misiniz? Gruptaki öğrenci bağlantıları da kaldırılır.`
+      )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingGroupId(group.id)
+
+    try {
+      await deleteLessonGroup(group.id)
+
+      notify.success('Ders grubu silindi.')
+
+      queryClient.setQueryData(
+        LESSON_GROUPS_LIST_KEY,
+        (current = []) =>
+          current.filter(
+            (item) => item.id !== group.id
+          )
+      )
+
+      queryClient.removeQueries({
+        queryKey: [
+          'lesson-groups',
+          'students',
+          String(group.id)
+        ]
+      })
+
+      if (String(selectedGroupId) === String(group.id)) {
+        setSelectedGroupId('')
+      }
+
+      if (String(editingGroupId) === String(group.id)) {
+        resetForm()
+      }
+    } catch (deleteError) {
+      if (deleteError?.isBlocked) {
+        await alertDialog({
+          title: 'Grup silinemez',
+          message: deleteError.message
+        })
+        return
+      }
+
+      console.error(
+        'Ders grubu silinemedi:',
+        deleteError
+      )
+
+      notify(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Ders grubu silinemedi.'
+      )
+    } finally {
+      setDeletingGroupId('')
+    }
   }
 
   const handleSubmit = async (event) => {
@@ -373,27 +539,41 @@ function LessonGroups({
     setSaving(true)
 
     try {
-      const savedGroup =
-        await createLessonGroup(form)
-
-      queryClient.setQueryData(
-        [
-          'lesson-groups',
-          'list',
-          {
-            includeInactive: true
-          }
-        ],
-        (current = []) => [
-          ...current,
-          savedGroup
-        ].sort((first, second) =>
-          first.name.localeCompare(
-            second.name,
-            'tr'
+      if (editingGroupId) {
+        const updatedGroup =
+          await updateLessonGroup(
+            editingGroupId,
+            form
           )
+
+        notify.success('Ders grubu güncellendi.')
+
+        queryClient.setQueryData(
+          LESSON_GROUPS_LIST_KEY,
+          (current = []) =>
+            sortGroupsByName(
+              current.map((item) =>
+                item.id === updatedGroup.id
+                  ? updatedGroup
+                  : item
+              )
+            )
         )
-      )
+      } else {
+        const savedGroup =
+          await createLessonGroup(form)
+
+        notify.success('Ders grubu kaydedildi.')
+
+        queryClient.setQueryData(
+          LESSON_GROUPS_LIST_KEY,
+          (current = []) =>
+            sortGroupsByName([
+              ...current,
+              savedGroup
+            ])
+        )
+      }
 
       resetForm()
     } catch (saveError) {
@@ -402,7 +582,7 @@ function LessonGroups({
         saveError
       )
 
-      alert(
+      notify(
         saveError instanceof Error
           ? saveError.message
           : 'Ders grubu kaydedilemedi.'
@@ -422,14 +602,10 @@ function LessonGroups({
           !group.isActive
         )
 
+      notify.success(group.isActive ? 'Grup pasife alındı.' : 'Grup yeniden aktif edildi.')
+
       queryClient.setQueryData(
-        [
-          'lesson-groups',
-          'list',
-          {
-            includeInactive: true
-          }
-        ],
+        LESSON_GROUPS_LIST_KEY,
         (current = []) =>
           current.map((item) =>
             item.id === group.id
@@ -443,7 +619,7 @@ function LessonGroups({
         statusError
       )
 
-      alert(
+      notify(
         statusError instanceof Error
           ? statusError.message
           : 'Grup durumu güncellenemedi.'
@@ -486,12 +662,12 @@ function LessonGroups({
     }
 
     if (!selectedStudentId) {
-      alert('Öğrenci seçilmelidir.')
+      notify('Öğrenci seçilmelidir.')
       return
     }
 
     if (!selectedStudentPackageId) {
-      alert(
+      notify(
         'Öğrencinin gruba uygun paketi seçilmelidir.'
       )
       return
@@ -501,7 +677,7 @@ function LessonGroups({
       groupStudents.length >=
       selectedGroup.capacity
     ) {
-      alert(
+      notify(
         'Grubun kontenjanı dolmuştur.'
       )
       return
@@ -519,6 +695,8 @@ function LessonGroups({
           studentPackageId:
             selectedStudentPackageId
         })
+
+      notify.success('Öğrenci gruba eklendi.')
 
       queryClient.setQueryData(
         [
@@ -545,7 +723,7 @@ function LessonGroups({
         addError
       )
 
-      alert(
+      notify(
         addError instanceof Error
           ? addError.message
           : 'Öğrenci gruba eklenemedi.'
@@ -559,7 +737,7 @@ function LessonGroups({
     membership
   ) => {
     const confirmed =
-      window.confirm(
+      await confirmDialog(
         `${membership.studentName} adlı öğrenciyi gruptan çıkarmak istediğinize emin misiniz?`
       )
 
@@ -575,6 +753,8 @@ function LessonGroups({
       await removeStudentFromLessonGroup(
         membership.id
       )
+
+      notify.success('Öğrenci gruptan çıkarıldı.')
 
       queryClient.setQueryData(
         [
@@ -595,7 +775,7 @@ function LessonGroups({
         removeError
       )
 
-      alert(
+      notify(
         removeError instanceof Error
           ? removeError.message
           : 'Öğrenci gruptan çıkarılamadı.'
@@ -623,14 +803,24 @@ function LessonGroups({
         </div>
       </section>
 
-      <section className="lesson-table-card lesson-group-form-card">
+      <section
+        ref={formCardRef}
+        className={`lesson-table-card lesson-group-form-card ${
+          editingGroupId ? 'is-editing' : ''
+        }`}
+      >
         <div className="section-title-row">
           <div>
-            <h2>Yeni Grup Oluştur</h2>
+            <h2>
+              {editingGroupId
+                ? 'Grubu Düzenle'
+                : 'Yeni Grup Oluştur'}
+            </h2>
 
             <p>
-              Önce grubun temel bilgilerini
-              kaydedin.
+              {editingGroupId
+                ? 'Grup bilgilerini güncelleyip kaydedin.'
+                : 'Önce grubun temel bilgilerini kaydedin.'}
             </p>
           </div>
         </div>
@@ -641,6 +831,7 @@ function LessonGroups({
               <label>Grup Adı</label>
 
               <input
+                ref={nameInputRef}
                 autoComplete="off"
                 name="name"
                 value={form.name}
@@ -760,7 +951,9 @@ function LessonGroups({
               onClick={resetForm}
               disabled={saving}
             >
-              Temizle
+              {editingGroupId
+                ? 'Vazgeç'
+                : 'Temizle'}
             </button>
 
             <button
@@ -770,7 +963,9 @@ function LessonGroups({
             >
               {saving
                 ? 'Kaydediliyor...'
-                : 'Grubu Kaydet'}
+                : editingGroupId
+                  ? 'Değişiklikleri Kaydet'
+                  : 'Grubu Kaydet'}
             </button>
           </div>
         </form>
@@ -835,7 +1030,15 @@ function LessonGroups({
 
               <tbody>
                 {groups.map((group) => (
-                  <tr key={group.id}>
+                  <tr
+                    key={group.id}
+                    className={
+                      String(editingGroupId) ===
+                      String(group.id)
+                        ? 'is-editing'
+                        : undefined
+                    }
+                  >
                     <td className="lesson-group-name-column">
                       <span
                         className="lesson-group-name-text"
@@ -916,6 +1119,31 @@ function LessonGroups({
                             ? 'Pasif Yap'
                             : 'Aktif Yap'}
                         </button>
+
+                        <button
+                          type="button"
+                          className="lesson-group-edit-button"
+                          onClick={() =>
+                            startEditGroup(group)
+                          }
+                        >
+                          Düzenle
+                        </button>
+
+                        <button
+                          type="button"
+                          className="lesson-group-delete-button"
+                          onClick={() =>
+                            deleteGroup(group)
+                          }
+                          disabled={
+                            deletingGroupId === group.id
+                          }
+                        >
+                          {deletingGroupId === group.id
+                            ? 'Siliniyor...'
+                            : 'Sil'}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -991,6 +1219,13 @@ function LessonGroups({
                   {groupStudents.length}/{selectedGroup.capacity}
                 </strong>
               </div>
+
+              <div>
+                <span>Paket ücretleri toplamı</span>
+                <strong>
+                  {formatMoney(groupPackageTotal)}
+                </strong>
+              </div>
             </div>
 
             <div className="lesson-group-detail-body">
@@ -1035,6 +1270,12 @@ function LessonGroups({
                           <strong>{membership.studentName}</strong>
                           <span>
                             {membership.packageName || 'Paket bilgisi yok'}
+                            {membership.packagePrice > 0 &&
+                              ` · ${formatMoney(membership.packagePrice)}${
+                                membership.paymentPeriod
+                                  ? ` / ${membership.paymentPeriod}`
+                                  : ''
+                              }`}
                           </span>
                           <small>
                             {membership.studentTcNo

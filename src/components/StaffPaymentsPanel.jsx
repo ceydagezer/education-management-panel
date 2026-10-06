@@ -19,6 +19,11 @@ import {
   getTodayKey
 } from '../utils/dateHelpers'
 
+
+import {
+  confirmDialog,
+  notify
+} from '../lib/feedback'
 const paymentTypes = [
   'Maaş',
   'Avans',
@@ -264,21 +269,21 @@ function StaffPaymentsPanel({
       Number(form.amount)
 
     if (!form.staffName.trim()) {
-      alert(
+      notify(
         'Personel adı zorunludur.'
       )
       return
     }
 
     if (!form.roleTitle.trim()) {
-      alert(
+      notify(
         'Personelin görevi zorunludur.'
       )
       return
     }
 
     if (!form.paymentType) {
-      alert(
+      notify(
         'Ödeme türü seçiniz.'
       )
       return
@@ -288,21 +293,21 @@ function StaffPaymentsPanel({
       !Number.isFinite(amount) ||
       amount <= 0
     ) {
-      alert(
+      notify(
         'Ödeme tutarı 0’dan büyük olmalıdır.'
       )
       return
     }
 
     if (!form.paymentDate) {
-      alert(
+      notify(
         'Ödeme tarihi seçiniz.'
       )
       return
     }
 
     if (!form.paymentMethod) {
-      alert(
+      notify(
         'Ödeme yöntemi seçiniz.'
       )
       return
@@ -326,6 +331,8 @@ function StaffPaymentsPanel({
           form.note.trim()
       })
 
+      notify.success('Personel ödemesi kaydedildi.')
+
       setPage(1)
       setReloadKey(
         (current) =>
@@ -340,7 +347,7 @@ function StaffPaymentsPanel({
         saveError
       )
 
-      alert(
+      notify(
         saveError instanceof Error
           ? saveError.message
           : 'Personel ödemesi kaydedilemedi.'
@@ -360,7 +367,7 @@ function StaffPaymentsPanel({
       }
 
       const confirmed =
-        window.confirm(
+        await confirmDialog(
           `${payment.staffName} için girilen ${payment.paymentType.toLocaleLowerCase('tr-TR')} ödemesi iptal edilecek. Devam edilsin mi?`
         )
 
@@ -376,6 +383,8 @@ function StaffPaymentsPanel({
         await cancelStaffPayment(
           payment.id
         )
+
+        notify.success('Personel ödemesi iptal edildi.')
 
         setRows((current) =>
           current.filter(
@@ -412,7 +421,7 @@ function StaffPaymentsPanel({
           cancelError
         )
 
-        alert(
+        notify(
           cancelError instanceof Error
             ? cancelError.message
             : 'Personel ödemesi iptal edilemedi.'

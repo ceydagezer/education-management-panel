@@ -519,3 +519,66 @@
     min-width: 1040px;
   }
 }
+/* =========================================================
+   GRUP DÜZENLE / SİL
+   ========================================================= */
+
+.lesson-group-table {
+  min-width: 1180px;
+}
+
+.lesson-group-name-column { width: 16%; }
+.lesson-group-specialty-column { width: 10%; }
+.lesson-group-teacher-column { width: 14%; }
+.lesson-group-duration-column { width: 8%; }
+.lesson-group-capacity-column { width: 8%; }
+.lesson-group-status-column { width: 8%; }
+.lesson-group-actions-column { width: 36%; }
+
+.lesson-group-edit-button,
+.lesson-group-delete-button {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lesson-group-edit-button {
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.lesson-group-delete-button {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.lesson-group-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lesson-group-table tbody tr.is-editing td {
+  background: #eef2ff;
+}
+
+.lesson-group-detail-summary {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+/* Düzenleme modunda form kartı belirgin olsun */
+.lesson-group-form-card {
+  scroll-margin-top: 24px;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.lesson-group-form-card.is-editing {
+  border: 2px solid #818cf8;
+  box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.18);
+}
+
+.lesson-group-form-card.is-editing h2 {
+  color: #4338ca;
+}

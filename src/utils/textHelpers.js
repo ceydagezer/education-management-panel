@@ -279,3 +279,67 @@ export const keepOnlyDigits = (
     /\D/g,
     ''
   )
+/*
+ * Türkiye cep telefonu biçimi: 0532 123 45 67
+ *
+ * Yazarken rakam dışı karakterler atılır, en fazla
+ * 11 hane kabul edilir ve başta 0 yoksa eklenir.
+ *
+ * Örnek:
+ * "5321234567" -> "0532 123 45 67"
+ */
+export const PHONE_MAX_DIGITS = 11
+
+export const PHONE_INPUT_MAX_LENGTH = 14
+
+export const formatPhoneNumber = (
+  value
+) => {
+  let digits =
+    keepOnlyDigits(value)
+
+  if (!digits) {
+    return ''
+  }
+
+  if (digits[0] !== '0') {
+    digits = `0${digits}`
+  }
+
+  digits = digits.slice(
+    0,
+    PHONE_MAX_DIGITS
+  )
+
+  return [
+    digits.slice(0, 4),
+    digits.slice(4, 7),
+    digits.slice(7, 9),
+    digits.slice(9, 11)
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+/*
+ * Biçimlendirilmiş ya da ham telefonun tam
+ * 11 haneli ve 05 ile başlayan bir cep numarası
+ * olup olmadığını kontrol eder.
+ */
+export const isValidMobilePhone = (
+  value
+) =>
+  /^05\d{9}$/.test(
+    keepOnlyDigits(value)
+  )
+
+/*
+ * Sabit hat dahil, 0 ile başlayan 11 haneli
+ * telefon numarası kontrolü.
+ */
+export const isCompletePhoneNumber = (
+  value
+) =>
+  /^0\d{10}$/.test(
+    keepOnlyDigits(value)
+  )

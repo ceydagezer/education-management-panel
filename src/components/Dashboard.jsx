@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import '../styles/dashboard.css'
 
 import {
@@ -12,10 +13,8 @@ import {
 } from '../services/studentService'
 
 import {
-  addYearsToDate,
   formatDate,
   formatPrice,
-  getDateKey,
   getTodayKey
 } from '../utils/dateHelpers'
 
@@ -25,6 +24,7 @@ import {
 } from '../utils/lessonHelpers'
 
 import {
+  getAcademicYearUnmarkedLessonsQuery,
   getDashboardLessonPlanSnapshot
 } from '../services/lessonService'
 
@@ -158,6 +158,21 @@ function Dashboard({
 
   const dashboardCacheKey =
     `${todayKey}::${currentDayName}`
+
+  /*
+   * Eğitim yılı başından (1 Eylül) bu yana ders programına göre
+   * yapılması gereken ama "Yapıldı" / "İptal edildi" olarak
+   * işaretlenmemiş dersler. Ders Durum Takibi ile aynı sorgu (cache)
+   * kullanılır; orada ders işaretlenince bu sayı da güncellenir.
+   */
+  const unmarkedLessonsQuery = useQuery(
+    getAcademicYearUnmarkedLessonsQuery(
+      todayKey
+    )
+  )
+
+  const unmarkedLessonCount =
+    unmarkedLessonsQuery.data?.length || 0
 
   const formattedToday =
     now.toLocaleDateString('tr-TR', {
@@ -468,55 +483,6 @@ function Dashboard({
     dashboardSummary.completedLessonCount ||
     0
 
-  const retentionReviewStudents =
-    students.filter(
-      (student) => {
-        const isArchived =
-          student.isArchived ===
-            true ||
-          normalizeText(
-            student.status
-          ) ===
-            'arşiv'
-
-        const isAnonymized =
-          student.isAnonymized ===
-            true ||
-          normalizeText(
-            student.retentionStatus
-          ) ===
-            'anonimleştirildi'
-
-        if (
-          !isArchived ||
-          isAnonymized
-        ) {
-          return false
-        }
-
-        let reviewDate =
-          getDateKey(
-            student.retentionReviewDate
-          )
-
-        if (
-          !reviewDate &&
-          student.archivedAt
-        ) {
-          reviewDate =
-            addYearsToDate(
-              student.archivedAt,
-              2
-            )
-        }
-
-        return (
-          reviewDate &&
-          reviewDate <= todayKey
-        )
-      }
-    )
-
   const packagesWithOneLessonLeft =
     packageLessonUsage.filter(
       (item) =>
@@ -612,17 +578,14 @@ function Dashboard({
     })
   }
 
-  if (
-    retentionReviewStudents.length >
-    0
-  ) {
+  if (unmarkedLessonCount > 0) {
     alerts.push({
-      id: 'student-retention-review',
+      id: 'unmarked-lessons',
       type: 'warning',
-      title: `${retentionReviewStudents.length} arşiv kaydı inceleme bekliyor`,
+      title: `${unmarkedLessonCount} geçmiş ders işaretlenmemiş`,
       description:
-        'Saklama süresi dolan kayıtları inceleyip saklamayı uzatın veya anonimleştirin.',
-      page: 'students'
+        `1 Eylül'den bu yana "Yapıldı" veya "İptal edildi" olarak işaretlenmemiş dersler var. İşaretlenmeyen dersler öğretmen hakedişine girmez. Ders Durum Takibi > Aylık Kontrol bölümünden işaretleyin.`,
+      page: 'lesson-status'
     })
   }
 

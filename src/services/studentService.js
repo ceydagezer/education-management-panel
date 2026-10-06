@@ -1271,14 +1271,15 @@ export async function getStudentsPage({
     .select(studentListSelect, {
       count: 'exact'
     })
+    .eq('is_anonymized', false)
 
   if (
-    status &&
-    status !== 'all'
+    status === 'active' ||
+    status === 'passive'
   ) {
     query = query.eq(
-      'list_status',
-      status
+      'is_active',
+      status === 'active'
     )
   }
 
@@ -1400,9 +1401,7 @@ export async function getStudentsPage({
 export async function getStudentListCounts() {
   const statuses = [
     'active',
-    'passive',
-    'archived',
-    'review'
+    'passive'
   ]
 
   const results =
@@ -1419,9 +1418,10 @@ export async function getStudentListCounts() {
               head: true
             })
             .eq(
-              'list_status',
-              status
+              'is_active',
+              status === 'active'
             )
+            .eq('is_anonymized', false)
 
           if (error) {
             throw new Error(
@@ -1446,13 +1446,9 @@ export async function getStudentListCounts() {
   return {
     active: counts.active || 0,
     passive: counts.passive || 0,
-    archived: counts.archived || 0,
-    review: counts.review || 0,
     all:
       (counts.active || 0) +
-      (counts.passive || 0) +
-      (counts.archived || 0) +
-      (counts.review || 0)
+      (counts.passive || 0)
   }
 }
 
@@ -2377,206 +2373,7 @@ export async function updateStudent(
   )
 }
 
-export async function archiveStudent(
-  studentId,
-  {
-    archivedAt,
-    archiveReason,
-    retentionReviewDate
-  }
-) {
-  const cleanStudentId = String(
-    studentId || ''
-  ).trim()
-
-  if (!cleanStudentId) {
-    throw new Error(
-      'Öğrenci kimliği bulunamadı.'
-    )
-  }
-
-  const cleanArchivedAt =
-    normalizeDateKey(
-      archivedAt,
-      'Arşiv tarihi',
-      {
-        required: true
-      }
-    )
-
-  const cleanRetentionReviewDate =
-    normalizeDateKey(
-      retentionReviewDate,
-      'İnceleme tarihi',
-      {
-        required: true
-      }
-    )
-
-  if (
-    cleanRetentionReviewDate <
-      cleanArchivedAt
-  ) {
-    throw new Error(
-      'İnceleme tarihi arşiv tarihinden önce olamaz.'
-    )
-  }
-
-  const { error } = await supabase
-    .from('students')
-    .update({
-      is_active: false,
-      status: 'Arşiv',
-      is_archived: true,
-      archived_at: cleanArchivedAt,
-      archive_reason:
-        String(
-          archiveReason ||
-          'Pasif öğrenci arşive taşındı'
-        ).trim(),
-      retention_review_date:
-        cleanRetentionReviewDate,
-      retention_status:
-        'Saklama Süresi Devam Ediyor'
-    })
-    .eq('id', cleanStudentId)
-    .eq('is_active', false)
-    .eq('is_anonymized', false)
-
-  if (error) {
-    throw new Error(
-      getStudentErrorMessage(
-        error,
-        'Öğrenci arşive taşınamadı.'
-      )
-    )
-  }
-
-  return getStudentById(cleanStudentId)
-}
-
-export async function extendStudentRetention(
-  studentId,
-  retentionReviewDate
-) {
-  const cleanStudentId = String(
-    studentId || ''
-  ).trim()
-
-  if (!cleanStudentId) {
-    throw new Error(
-      'Öğrenci kimliği bulunamadı.'
-    )
-  }
-
-  const cleanRetentionReviewDate =
-    normalizeDateKey(
-      retentionReviewDate,
-      'Yeni inceleme tarihi',
-      {
-        required: true
-      }
-    )
-
-  const { error } = await supabase
-    .from('students')
-    .update({
-      retention_review_date:
-        cleanRetentionReviewDate,
-      retention_status:
-        'Saklamaya Devam'
-    })
-    .eq('id', cleanStudentId)
-    .eq('is_archived', true)
-    .eq('is_anonymized', false)
-
-  if (error) {
-    throw new Error(
-      getStudentErrorMessage(
-        error,
-        'Saklama süresi uzatılamadı.'
-      )
-    )
-  }
-
-  return getStudentById(cleanStudentId)
-}
-
-export async function anonymizeStudent(
-  studentId,
-  anonymizedAt
-) {
-  const cleanStudentId = String(
-    studentId || ''
-  ).trim()
-
-  if (!cleanStudentId) {
-    throw new Error(
-      'Öğrenci kimliği bulunamadı.'
-    )
-  }
-
-  const anonymousName =
-    `Anonim Öğrenci #${cleanStudentId.slice(
-      0,
-      8
-    )}`
-
-  const anonymousTcNo =
-    cleanStudentId
-      .replace(/[^0-9]/g, '')
-      .padEnd(11, '0')
-      .slice(0, 11)
-
-  const { error } = await supabase
-    .from('students')
-    .update({
-      tc_no: anonymousTcNo,
-      full_name: anonymousName,
-      gender: null,
-      birth_date: null,
-      phone: null,
-      email: null,
-      address: null,
-      mother_name: null,
-      mother_phone: null,
-      father_name: null,
-      father_phone: null,
-      notes: null,
-      is_active: false,
-      status: 'Arşiv',
-      is_archived: true,
-      is_anonymized: true,
-      anonymized_at:
-        anonymizedAt || null,
-      retention_status:
-        'Anonimleştirildi'
-    })
-    .eq('id', cleanStudentId)
-    .eq('is_archived', true)
-    .eq('is_anonymized', false)
-
-  if (error) {
-    if (error.code === '23505') {
-      throw new Error(
-        'Anonim öğrenci kimliği oluşturulurken benzersizlik hatası oluştu.'
-      )
-    }
-
-    throw new Error(
-      getStudentErrorMessage(
-        error,
-        'Öğrenci anonimleştirilemedi.',
-        'Anonim öğrenci kimliği oluşturulurken benzersizlik hatası oluştu.'
-      )
-    )
-  }
-
-  return getStudentById(cleanStudentId)
-}
-
-
-export async function deleteStudentPermanently(
+export async function deleteStudent(
   studentId
 ) {
   const cleanStudentId = String(
@@ -2593,18 +2390,35 @@ export async function deleteStudentPermanently(
     data,
     error
   } = await supabase.rpc(
-    'delete_student_permanently_safely',
+    'delete_student_safely',
     {
       p_student_id:
         cleanStudentId
     }
   )
 
+  if (error?.code === 'PGRST202') {
+    throw new Error(
+      'Silme özelliği veritabanında henüz kurulu değil. 20261003_simplify_student_lifecycle_delete.sql dosyası Supabase SQL Editor üzerinden çalıştırılmalıdır.'
+    )
+  }
+
   if (error) {
+    // Kurala takılan durumlar (alacak, açık paket...) ekranda
+    // uyarı penceresiyle gösterilsin diye işaretlenir.
+    if (
+      error.code === '22023' ||
+      error.code === 'P0002'
+    ) {
+      const blockedError = new Error(error.message)
+      blockedError.isBlocked = true
+      throw blockedError
+    }
+
     throw new Error(
       getStudentErrorMessage(
         error,
-        'Öğrenci kalıcı olarak silinemedi.'
+        'Öğrenci silinemedi.'
       )
     )
   }
@@ -2614,80 +2428,176 @@ export async function deleteStudentPermanently(
 
   if (!result) {
     throw new Error(
-      'Kalıcı silme sonucu alınamadı.'
+      'Silme sonucu alınamadı.'
     )
   }
 
-  if (!result.deleted) {
-    const blockers = []
-
-    const packageCount = Number(
-      result.package_count || 0
-    )
-
-    const paymentCount = Number(
+  return {
+    result: result.result,
+    paymentCount: Number(
       result.payment_count || 0
-    )
-
-    const lessonPlanCount = Number(
-      result.lesson_plan_count || 0
-    )
-
-    const occurrenceCount = Number(
+    ),
+    lessonOccurrenceCount: Number(
       result.lesson_occurrence_count || 0
     )
+  }
+}
 
-    const lessonPlanStudentCount = Number(
-      result.lesson_plan_student_count || 0
-    )
+const SETTLEMENT_MIGRATION_MESSAGE =
+  'Hesap kapatma özelliği veritabanında henüz kurulu değil. 20261003_student_package_settlement.sql dosyası Supabase SQL Editor üzerinden çalıştırılmalıdır.'
 
-    const lessonGroupStudentCount = Number(
-      result.lesson_group_student_count || 0
-    )
+function getSettlementErrorMessage(
+  error,
+  fallbackMessage
+) {
+  if (error?.code === 'PGRST202') {
+    return SETTLEMENT_MIGRATION_MESSAGE
+  }
 
-    if (packageCount > 0) {
-      blockers.push(
-        `${packageCount} paket kaydı`
+  if (
+    error?.code === '22023' ||
+    error?.code === 'P0002'
+  ) {
+    return error.message
+  }
+
+  return getStudentErrorMessage(
+    error,
+    fallbackMessage
+  )
+}
+
+function normalizeSettlementRows(settlements) {
+  return (settlements || []).map((item) => {
+    const amount = Number(item.amount)
+
+    if (
+      !Number.isFinite(amount) ||
+      amount < 0
+    ) {
+      throw new Error(
+        `${item.packageName || 'Paket'} için alınması gereken tutar 0 veya daha büyük olmalıdır.`
       )
     }
 
-    if (paymentCount > 0) {
-      blockers.push(
-        `${paymentCount} tahsilat kaydı`
-      )
+    return {
+      student_package_id:
+        item.studentPackageId,
+      amount:
+        Math.round(amount * 100) / 100,
+      note:
+        String(item.note || '').trim()
     }
+  })
+}
 
-    if (lessonPlanCount > 0) {
-      blockers.push(
-        `${lessonPlanCount} güncel ders kaydı`
-      )
+export async function getStudentSettlementPreview(
+  studentId
+) {
+  const { data, error } = await supabase.rpc(
+    'get_student_settlement_preview',
+    {
+      p_student_id: studentId
     }
+  )
 
-    if (occurrenceCount > 0) {
-      blockers.push(
-        `${occurrenceCount} ders geçmişi kaydı`
-      )
-    }
-
-    if (lessonPlanStudentCount > 0) {
-      blockers.push(
-        `${lessonPlanStudentCount} ders katılımcı bağlantısı`
-      )
-    }
-
-    if (lessonGroupStudentCount > 0) {
-      blockers.push(
-        `${lessonGroupStudentCount} ders grubu üyeliği`
-      )
-    }
-
+  if (error) {
     throw new Error(
-      `Bu öğrenci kalıcı olarak silinemez. Bağlı kayıtlar: ${
-        blockers.join(', ') ||
-        'bilinmeyen bağlantı'
-      }. Öğrenciyi pasife alabilir, arşivleyebilir veya anonimleştirebilirsiniz.`
+      getSettlementErrorMessage(
+        error,
+        'Paket hesap bilgileri alınamadı.'
+      )
     )
   }
 
-  return result
+  return (data || []).map((row) => ({
+    studentPackageId: row.student_package_id,
+    packageName: row.package_name || '',
+    teacherName: row.teacher_name || '',
+    agreedPrice: Number(row.agreed_price || 0),
+    packageLessonCount: Number(
+      row.package_lesson_count || 0
+    ),
+    totalLessonCount: Number(
+      row.total_lesson_count || 0
+    ),
+    completedLessonCount: Number(
+      row.completed_lesson_count || 0
+    ),
+    unitPrice: Number(row.unit_price || 0),
+    paidAmount: Number(row.paid_amount || 0),
+    suggestedAmount: Number(
+      row.suggested_amount || 0
+    )
+  }))
+}
+
+export async function setStudentPassiveWithSettlement(
+  studentId,
+  passiveReason,
+  passiveDate,
+  settlements
+) {
+  const cleanReason = String(
+    passiveReason ?? ''
+  ).trim()
+
+  if (!cleanReason) {
+    throw new Error(
+      'Pasife alma nedeni zorunludur.'
+    )
+  }
+
+  const { error } = await supabase.rpc(
+    'set_student_passive_with_settlement',
+    {
+      p_student_id: studentId,
+      p_passive_reason: cleanReason,
+      p_passive_date: normalizeDateKey(
+        passiveDate,
+        'Pasife alma tarihi',
+        {
+          required: true
+        }
+      ),
+      p_settlements:
+        normalizeSettlementRows(settlements)
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      getSettlementErrorMessage(
+        error,
+        'Öğrenci pasife alınamadı.'
+      )
+    )
+  }
+
+  return getStudentById(studentId)
+}
+
+export async function settleStudentPackages(
+  studentId,
+  settlements
+) {
+  const { error } = await supabase.rpc(
+    'settle_student_packages',
+    {
+      p_student_id: studentId,
+      p_settlements:
+        normalizeSettlementRows(settlements)
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      getSettlementErrorMessage(
+        error,
+        'Paket hesabı kapatılamadı.'
+      )
+    )
+  }
+
+  return getStudentById(studentId)
 }

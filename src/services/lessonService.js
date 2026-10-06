@@ -1,4 +1,7 @@
 import { supabase } from '../lib/supabase'
+import { queryClient } from '../lib/queryClient'
+import { fetchAllRows } from '../lib/supabasePaging'
+import { invalidateTeacherEarningsCache } from './financeService'
 
 const LESSON_OCCURRENCES_STALE_EVENT =
   'arti-akademi-lesson-occurrences-stale'
@@ -13,6 +16,19 @@ function notifyLessonOccurrencesStale() {
       LESSON_OCCURRENCES_STALE_EVENT
     )
   )
+}
+
+/*
+ * Ders durumu değişince hakediş tutarları veritabanında hemen
+ * güncellenir; ekrandaki önbellekler de eskimiş sayılır.
+ * Finans RAM cache'i ve rapor sorguları bir sonraki açılışta yenilenir.
+ */
+function notifyLessonEarningsStale() {
+  invalidateTeacherEarningsCache()
+
+  queryClient.invalidateQueries({
+    queryKey: ['reports']
+  })
 }
 
 const lessonPlanSelect = `
@@ -860,9 +876,9 @@ export async function createGroupLessonPlan(
     )
   }
 
-  if (participants.length < 2) {
+  if (participants.length === 0) {
     throw new Error(
-      'Grup dersine en az iki öğrenci eklenmelidir.'
+      'Grup dersine en az bir öğrenci eklenmelidir.'
     )
   }
 
@@ -1182,10 +1198,19 @@ export async function createLessonOccurrence(
     .single()
 
   if (error) {
+    // lesson_occurrences_plan_date_key: aynı plana aynı gün ikinci kayıt
+    if (error.code === '23505') {
+      throw new Error(
+        'Bu ders için seçilen tarihte zaten bir kayıt var. Takvimde o güne tıklayarak mevcut dersi işaretleyiniz.'
+      )
+    }
+
     throw new Error(
       `Ders durum kaydı oluşturulamadı: ${error.message}`
     )
   }
+
+  notifyLessonEarningsStale()
 
   return mapLessonOccurrenceFromDb(data)
 }
@@ -1222,6 +1247,8 @@ export async function deleteLessonPlan(
 
   notifyLessonOccurrencesStale()
 
+  notifyLessonEarningsStale()
+
   return data?.[0] || data || null
 }
 
@@ -1244,6 +1271,8 @@ export async function deleteLessonOccurrence(
       `Ders durum kaydı silinemedi: ${error.message}`
     )
   }
+
+  notifyLessonEarningsStale()
 }
 
 export async function updateLessonOccurrenceStatus(
@@ -1284,5 +1313,332 @@ export async function updateLessonOccurrenceStatus(
     )
   }
 
+  notifyLessonEarningsStale()
+
   return mapLessonOccurrenceFromDb(data)
+}
+/*
+ * İŞARETLENMEMİŞ DERSLER
+ *
+ * Ders programındaki her aktif plan her hafta tekrar eder. Haftalık
+ * Ders Durumu ekranı yalnız bu haftayı gösterdiği için, geçmiş günlerde
+ * "Yapıldı" / "İptal edildi" olarak işaretlenmemiş dersler ekrandan
+ * kaybolur ve hakedişe girmez.
+ *
+ * Bu fonksiyon verilen tarih aralığında (bugünden önceki günler),
+ * planın oluşturulduğu tarihten sonra düşen ve henüz sonuçlandırılmamış
+ * her dersi listeler.
+ */
+const WEEKDAY_NAMES = [
+  'Pazar',
+  'Pazartesi',
+  'Salı',
+  'Çarşamba',
+  'Perşembe',
+  'Cuma',
+  'Cumartesi'
+]
+
+function addDaysToDateKeyLocal(dateKey, days) {
+  const date = new Date(`${dateKey}T12:00:00`)
+  date.setDate(date.getDate() + days)
+
+  return formatLocalDateKey(date)
+}
+
+export async function getUnmarkedLessons({
+  startDate,
+  endDate
+}) {
+  const todayKey = formatLocalDateKey(new Date())
+  const yesterdayKey = addDaysToDateKeyLocal(todayKey, -1)
+
+  const rangeEnd =
+    endDate && endDate < yesterdayKey
+      ? endDate
+      : yesterdayKey
+
+  if (!startDate || startDate > rangeEnd) {
+    return []
+  }
+
+  const [
+    lessonPlans,
+    occurrenceResult
+  ] = await Promise.all([
+    getLessonPlans(),
+    fetchAllRows(() =>
+      supabase
+        .from('lesson_occurrences')
+        .select('id, lesson_plan_id, lesson_date, status')
+        .eq('is_active', true)
+        .eq('is_makeup', false)
+        .not('lesson_plan_id', 'is', null)
+        .gte('lesson_date', startDate)
+        .lte('lesson_date', rangeEnd)
+        .order('id')
+    )
+  ])
+
+  if (occurrenceResult.error) {
+    throw new Error(
+      `Ders kayıtları alınamadı: ${occurrenceResult.error.message}`
+    )
+  }
+
+  /*
+   * "Planlandı" durumundaki kayıt (ör. "Geri al" yapılmış ders)
+   * sonuçlanmamış sayılır; işaretlenince bu kayıt güncellenir.
+   */
+  const occurrenceByPlanAndDate = new Map(
+    (occurrenceResult.data || []).map((row) => [
+      `${row.lesson_plan_id}-${row.lesson_date}`,
+      row
+    ])
+  )
+
+  const unmarkedLessons = []
+
+  lessonPlans
+    .filter((plan) => plan.isActive !== false)
+    .forEach((plan) => {
+      const planStart = String(
+        plan.createdAt || ''
+      ).slice(0, 10)
+
+      let dateKey =
+        planStart && planStart > startDate
+          ? planStart
+          : startDate
+
+      while (dateKey <= rangeEnd) {
+        const weekdayName =
+          WEEKDAY_NAMES[
+            new Date(`${dateKey}T12:00:00`).getDay()
+          ]
+
+        if (weekdayName === plan.day) {
+          const occurrence =
+            occurrenceByPlanAndDate.get(
+              `${plan.id}-${dateKey}`
+            )
+
+          if (
+            !occurrence ||
+            occurrence.status === 'Planlandı'
+          ) {
+            unmarkedLessons.push({
+              ...plan,
+              key: `${plan.id}-${dateKey}`,
+              lessonPlanId: plan.id,
+              occurrenceId: occurrence?.id || '',
+              lessonDate: dateKey,
+              status: 'Planlandı'
+            })
+          }
+
+          dateKey = addDaysToDateKeyLocal(dateKey, 7)
+        } else {
+          dateKey = addDaysToDateKeyLocal(dateKey, 1)
+        }
+      }
+    })
+
+  return unmarkedLessons.sort(
+    (first, second) =>
+      first.lessonDate.localeCompare(second.lessonDate) ||
+      String(first.time).localeCompare(String(second.time))
+  )
+}
+
+/*
+ * Eğitim yılı 1 Eylül'de başlar. İşaretlenmemiş ders kontrolü bu
+ * tarihten itibaren yapılır (Eylül–Ağustos).
+ */
+export function getAcademicYearStartDate(todayKey) {
+  const year = Number(String(todayKey).slice(0, 4))
+  const month = Number(String(todayKey).slice(5, 7))
+
+  return `${month >= 9 ? year : year - 1}-09-01`
+}
+
+export const UNMARKED_LESSONS_QUERY_ROOT = [
+  'unmarked-lessons'
+]
+
+/*
+ * Ders Durum Takibi ve Dashboard aynı sorguyu (aynı cache) kullanır.
+ */
+export function getAcademicYearUnmarkedLessonsQuery(todayKey) {
+  const startDate =
+    getAcademicYearStartDate(todayKey)
+
+  return {
+    queryKey: [
+      ...UNMARKED_LESSONS_QUERY_ROOT,
+      'academic-year',
+      startDate,
+      todayKey
+    ],
+    queryFn: () =>
+      getUnmarkedLessons({
+        startDate,
+        endDate: todayKey
+      }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
+  }
+}
+
+/*
+ * AYLIK DERS TAKVİMİ
+ *
+ * Verilen tarih aralığındaki her günün dersleri:
+ * - Ders programındaki planların o güne düşen tekrarları
+ *   (işaretlendiyse kaydın durumu, işaretlenmediyse "Planlandı"),
+ * - Telafi dersleri,
+ * - Planı sonradan silinmiş (ör. öğrencisi pasife alınmış) ama
+ *   o tarihte işaretlenmiş dersler.
+ */
+export async function getLessonCalendar({
+  startDate,
+  endDate
+}) {
+  if (!startDate || !endDate || startDate > endDate) {
+    return []
+  }
+
+  const [
+    lessonPlans,
+    occurrenceResult
+  ] = await Promise.all([
+    getLessonPlans(),
+    supabase
+      .from('lesson_occurrences')
+      .select(lessonOccurrenceSelect)
+      .eq('is_active', true)
+      .gte('lesson_date', startDate)
+      .lte('lesson_date', endDate)
+  ])
+
+  if (occurrenceResult.error) {
+    throw new Error(
+      `Ders kayıtları alınamadı: ${occurrenceResult.error.message}`
+    )
+  }
+
+  const occurrences = (
+    occurrenceResult.data || []
+  ).map(mapLessonOccurrenceFromDb)
+
+  const activePlans = lessonPlans.filter(
+    (plan) => plan.isActive !== false
+  )
+
+  const activePlanIds = new Set(
+    activePlans.map((plan) => String(plan.id))
+  )
+
+  const regularOccurrenceByPlanAndDate = new Map(
+    occurrences
+      .filter(
+        (occurrence) =>
+          !occurrence.isMakeup &&
+          occurrence.lessonPlanId
+      )
+      .map((occurrence) => [
+        `${occurrence.lessonPlanId}-${occurrence.lessonDate}`,
+        occurrence
+      ])
+  )
+
+  const calendarLessons = []
+
+  /*
+   * Plan tekrarına eşleşen kayıtlar. Eşleşmeyen kayıtlar (ör. sonradan
+   * eklenen geçmiş tarihli grup dersi) aşağıda ayrıca listelenir.
+   */
+  const matchedOccurrenceIds = new Set()
+
+  activePlans.forEach((plan) => {
+    const planStart = String(
+      plan.createdAt || ''
+    ).slice(0, 10)
+
+    let dateKey =
+      planStart && planStart > startDate
+        ? planStart
+        : startDate
+
+    while (dateKey <= endDate) {
+      const weekdayName =
+        WEEKDAY_NAMES[
+          new Date(`${dateKey}T12:00:00`).getDay()
+        ]
+
+      if (weekdayName !== plan.day) {
+        dateKey = addDaysToDateKeyLocal(dateKey, 1)
+        continue
+      }
+
+      const occurrence =
+        regularOccurrenceByPlanAndDate.get(
+          `${plan.id}-${dateKey}`
+        )
+
+      if (occurrence) {
+        matchedOccurrenceIds.add(String(occurrence.id))
+      }
+
+      calendarLessons.push({
+        ...plan,
+        key: `${plan.id}-${dateKey}`,
+        lessonPlanId: plan.id,
+        occurrenceId: occurrence?.id || '',
+        lessonDate: dateKey,
+        status: occurrence?.status || 'Planlandı',
+        note: occurrence?.note || plan.note || '',
+        isMakeup: false
+      })
+
+      dateKey = addDaysToDateKeyLocal(dateKey, 7)
+    }
+  })
+
+  occurrences.forEach((occurrence) => {
+    const belongsToActivePlan =
+      !occurrence.isMakeup &&
+      occurrence.lessonPlanId &&
+      activePlanIds.has(
+        String(occurrence.lessonPlanId)
+      )
+
+    if (
+      belongsToActivePlan &&
+      matchedOccurrenceIds.has(String(occurrence.id))
+    ) {
+      return
+    }
+
+    const plan = belongsToActivePlan
+      ? activePlans.find((item) =>
+          String(item.id) ===
+          String(occurrence.lessonPlanId)
+        )
+      : null
+
+    calendarLessons.push({
+      // Grup bilgisi (ad, katılımcılar) plandan gelir.
+      ...(plan || {}),
+      ...occurrence,
+      key: `occurrence-${occurrence.id}`,
+      occurrenceId: occurrence.id
+    })
+  })
+
+  return calendarLessons.sort(
+    (first, second) =>
+      first.lessonDate.localeCompare(second.lessonDate) ||
+      String(first.time).localeCompare(String(second.time))
+  )
 }

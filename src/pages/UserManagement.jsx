@@ -13,6 +13,8 @@ import {
   setPanelUserRole
 } from '../services/userManagementService'
 
+
+import { confirmDialog } from '../lib/feedback'
 import '../styles/UserManagement.css'
 
 const PASSWORD_LENGTH = 14
@@ -337,7 +339,7 @@ function UserManagement() {
           : 'personel'
 
       if (
-        !window.confirm(
+        !await confirmDialog(
           `${user.fullName || user.email} kullanıcısını ${label} yapmak istediğinize emin misiniz?`
         )
       ) {
@@ -396,7 +398,7 @@ function UserManagement() {
         'Bu kullanıcı'
 
       const confirmed =
-        window.confirm(
+        await confirmDialog(
           `${userLabel} hesabı kalıcı olarak silinecek ve artık sisteme giriş yapamayacak. Devam edilsin mi?`
         )
 
@@ -489,7 +491,7 @@ function UserManagement() {
       }
 
       if (
-        !window.confirm(
+        !await confirmDialog(
           `${resetUser.fullName || resetUser.email} kullanıcısının mevcut şifresi geçersiz olacak ve yeni şifre kaydedilecek. Devam edilsin mi?`
         )
       ) {

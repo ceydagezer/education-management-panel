@@ -1046,3 +1046,56 @@
 .teacher-pdf-button:disabled {
   min-width: 96px;
 }
+/* Pasif öğretmeni silme */
+.teacher-delete-button {
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #dc2626;
+  background: #fff1f2;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.teacher-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   ÖĞRETMEN TABLOSU: SİL BUTONU İÇİN İŞLEM SÜTUNU
+   Pasif öğretmende 4 buton (PDF, Düzenle, Aktifleştir, Sil)
+   tek satıra sığsın diye diğer sütunlar biraz daraltılır.
+   ========================================================= */
+
+.teacher-list-table th:nth-child(1),
+.teacher-list-table td:nth-child(1) { width: 14%; }
+.teacher-list-table th:nth-child(2),
+.teacher-list-table td:nth-child(2) { width: 9%; }
+.teacher-list-table th:nth-child(3),
+.teacher-list-table td:nth-child(3) { width: 12%; }
+.teacher-list-table th:nth-child(4),
+.teacher-list-table td:nth-child(4) { width: 11%; }
+.teacher-list-table th:nth-child(5),
+.teacher-list-table td:nth-child(5) { width: 6%; }
+.teacher-list-table th:nth-child(6),
+.teacher-list-table td:nth-child(6) { width: 6%; }
+.teacher-list-table th:nth-child(7),
+.teacher-list-table td:nth-child(7) { width: 9%; }
+.teacher-list-table th:nth-child(8),
+.teacher-list-table td:nth-child(8) { width: 8%; }
+.teacher-list-table th:nth-child(9),
+.teacher-list-table td:nth-child(9) { width: 25%; }
+
+.teacher-list-table .teacher-delete-button {
+  padding: 7px 8px;
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .teacher-list-table {
+    min-width: 1150px;
+  }
+}

@@ -378,6 +378,55 @@ export async function updateLessonGroup(
     )
 
   const {
+    data: currentGroup,
+    error: currentGroupError
+  } = await supabase
+    .from('lesson_groups')
+    .select('id, specialty_id')
+    .eq('id', cleanGroupId)
+    .single()
+
+  if (currentGroupError || !currentGroup) {
+    throw new Error(
+      'Ders grubu bulunamadı.'
+    )
+  }
+
+  const {
+    count: activeMemberCount,
+    error: memberCountError
+  } = await supabase
+    .from('lesson_group_students')
+    .select('id', {
+      count: 'exact',
+      head: true
+    })
+    .eq('group_id', cleanGroupId)
+    .eq('is_active', true)
+
+  if (memberCountError) {
+    throw new Error(
+      `Grup öğrencileri kontrol edilemedi: ${memberCountError.message}`
+    )
+  }
+
+  if (row.capacity < (activeMemberCount || 0)) {
+    throw new Error(
+      `Kontenjan, gruptaki öğrenci sayısından (${activeMemberCount}) az olamaz.`
+    )
+  }
+
+  if (
+    (activeMemberCount || 0) > 0 &&
+    String(currentGroup.specialty_id) !==
+      String(row.specialty_id)
+  ) {
+    throw new Error(
+      'Grupta öğrenci varken branş değiştirilemez. Önce öğrencileri gruptan çıkarınız.'
+    )
+  }
+
+  const {
     data,
     error
   } = await supabase
@@ -403,6 +452,65 @@ export async function updateLessonGroup(
   return mapLessonGroupFromDb(
     data
   )
+}
+
+/*
+ * Grubu kalıcı olarak siler. Gruba bağlı ders planı
+ * (geçmiş dahil) varsa ders ve kazanç kayıtları bozulmasın
+ * diye silmeye izin verilmez; bu durumda grup pasife alınmalıdır.
+ * Grup üyelikleri veritabanında ON DELETE CASCADE ile silinir.
+ */
+export async function deleteLessonGroup(
+  groupId
+) {
+  const cleanGroupId = String(
+    groupId || ''
+  ).trim()
+
+  if (!cleanGroupId) {
+    throw new Error(
+      'Ders grubu kimliği bulunamadı.'
+    )
+  }
+
+  const {
+    count: lessonPlanCount,
+    error: lessonPlanError
+  } = await supabase
+    .from('lesson_plans')
+    .select('id', {
+      count: 'exact',
+      head: true
+    })
+    .eq('group_id', cleanGroupId)
+
+  if (lessonPlanError) {
+    throw new Error(
+      `Grubun ders planları kontrol edilemedi: ${lessonPlanError.message}`
+    )
+  }
+
+  if ((lessonPlanCount || 0) > 0) {
+    const blockedError = new Error(
+      'Bu grubun ders programında kayıtlı dersleri var. Ders geçmişi korunması için grup silinemez; bunun yerine grubu pasif yapabilirsiniz.'
+    )
+
+    blockedError.isBlocked = true
+    throw blockedError
+  }
+
+  const {
+    error
+  } = await supabase
+    .from('lesson_groups')
+    .delete()
+    .eq('id', cleanGroupId)
+
+  if (error) {
+    throw new Error(
+      `Ders grubu silinemedi: ${error.message}`
+    )
+  }
 }
 
 export async function setLessonGroupActive(
@@ -476,6 +584,14 @@ function mapLessonGroupStudentFromDb(row) {
     packageName:
       row.student_package?.package?.name || '',
 
+    packagePrice:
+      Number(
+        row.student_package?.agreed_price || 0
+      ),
+
+    paymentPeriod:
+      row.student_package?.payment_period || '',
+
     specialtyName:
       row.student_package?.package?.specialty?.name || '',
 
@@ -517,6 +633,8 @@ const lessonGroupStudentSelect = `
   student_package:student_packages (
     id,
     package_id,
+    agreed_price,
+    payment_period,
 
     package:packages (
       id,

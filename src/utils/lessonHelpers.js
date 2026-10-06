@@ -300,3 +300,194 @@ export const isPlannedLesson = (
     ) === 'Planlandı'
   )
 }
+/*
+ * DERS SAATİ / SÜRE YARDIMCILARI
+ *
+ * Ders saatleri elle yazıldığı için (ör. 14:30) çakışma kontrolü
+ * saatin birebir eşleşmesine değil, dersin başlangıç ve bitişine
+ * (başlangıç + süre) göre yapılır.
+ */
+const DEFAULT_LESSON_DURATION_MINUTES = 60
+
+/*
+ * "HH:MM" veya "HH:MM:SS" biçimindeki saati günün dakikasına çevirir.
+ * Geçersiz değerde null döner.
+ */
+export const timeToMinutes = (value) => {
+  const match = String(value || '')
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})/)
+
+  if (!match) {
+    return null
+  }
+
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+
+  if (
+    hours > 23 ||
+    minutes > 59
+  ) {
+    return null
+  }
+
+  return hours * 60 + minutes
+}
+
+/*
+ * Günün dakikasını "HH:MM" biçimine çevirir.
+ */
+export const minutesToTime = (totalMinutes) => {
+  const safeMinutes = Math.max(
+    0,
+    Math.round(Number(totalMinutes) || 0)
+  )
+
+  const hours = Math.floor(safeMinutes / 60)
+  const minutes = safeMinutes % 60
+
+  return `${String(hours).padStart(2, '0')}:${String(
+    minutes
+  ).padStart(2, '0')}`
+}
+
+/*
+ * "45 dk", "45" veya 45 gibi değerlerden süreyi dakika olarak okur.
+ */
+export const parseDurationMinutes = (
+  value,
+  fallback = DEFAULT_LESSON_DURATION_MINUTES
+) => {
+  const numericValue = Number(value)
+
+  if (
+    Number.isFinite(numericValue) &&
+    numericValue > 0
+  ) {
+    return Math.round(numericValue)
+  }
+
+  const match = String(value || '').match(/\d+/)
+
+  return match && Number(match[0]) > 0
+    ? Number(match[0])
+    : fallback
+}
+
+/*
+ * Ders kaydının süresini dakika olarak okur.
+ */
+export const getLessonDurationMinutes = (lesson) =>
+  parseDurationMinutes(
+    lesson?.durationMinutes ||
+      lesson?.duration_minutes ||
+      lesson?.duration
+  )
+
+/*
+ * İki zaman aralığı çakışıyor mu?
+ * Bir ders biterken diğeri başlıyorsa (14:00-14:45 ve 14:45) çakışma sayılmaz.
+ */
+export const doTimeRangesOverlap = (
+  firstStart,
+  firstDuration,
+  secondStart,
+  secondDuration
+) => {
+  const firstStartMinutes = timeToMinutes(firstStart)
+  const secondStartMinutes = timeToMinutes(secondStart)
+
+  if (
+    firstStartMinutes === null ||
+    secondStartMinutes === null
+  ) {
+    return false
+  }
+
+  const firstEndMinutes =
+    firstStartMinutes +
+    parseDurationMinutes(firstDuration)
+
+  const secondEndMinutes =
+    secondStartMinutes +
+    parseDurationMinutes(secondDuration)
+
+  return (
+    firstStartMinutes < secondEndMinutes &&
+    secondStartMinutes < firstEndMinutes
+  )
+}
+
+/*
+ * Ders kaydının saat aralığı: "14:30–15:15"
+ */
+export const getLessonTimeRange = (lesson) => {
+  const startMinutes = timeToMinutes(lesson?.time)
+
+  if (startMinutes === null) {
+    return lesson?.time || '-'
+  }
+
+  return `${minutesToTime(startMinutes)}–${minutesToTime(
+    startMinutes + getLessonDurationMinutes(lesson)
+  )}`
+}
+
+/*
+ * Saatin ait olduğu tam saat satırı: "14:30" -> "14:00"
+ */
+export const getHourSlotKey = (time) => {
+  const minutes = timeToMinutes(time)
+
+  return minutes === null
+    ? ''
+    : `${String(Math.floor(minutes / 60)).padStart(2, '0')}:00`
+}
+
+/*
+ * Haftalık tablo satırları: varsayılan saatler + varsayılan aralığın
+ * dışında kalan derslerin saatleri (ör. 08:30 veya 23:00).
+ */
+export const buildHourSlots = (
+  defaultSlots = [],
+  lessons = []
+) => {
+  const slots = new Set(defaultSlots)
+
+  lessons.forEach((lesson) => {
+    const slot = getHourSlotKey(lesson?.time)
+
+    if (slot) {
+      slots.add(slot)
+    }
+  })
+
+  return [...slots].sort()
+}
+
+/*
+ * Gün sütunundaki dersleri başlangıç saatine göre gruplar.
+ * Aynı saatte başlayan dersler tek grupta toplanır.
+ * Girdi saat sırasına göre sıralı olmalıdır.
+ */
+export const groupLessonsByStartTime = (lessons = []) => {
+  const groups = []
+
+  lessons.forEach((lesson) => {
+    const time = String(lesson?.time || '').slice(0, 5)
+    const lastGroup = groups[groups.length - 1]
+
+    if (lastGroup && lastGroup.time === time) {
+      lastGroup.lessons.push(lesson)
+      return
+    }
+
+    groups.push({
+      time,
+      lessons: [lesson]
+    })
+  })
+
+  return groups
+}

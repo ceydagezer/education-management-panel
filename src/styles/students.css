@@ -1512,3 +1512,87 @@
   font-size: 12px;
   font-weight: 600;
 }
+/* Ayrılan öğrenci hesap kapatma penceresi */
+.settlement-modal {
+  width: min(760px, 100%);
+}
+
+.settlement-modal-info,
+.settlement-modal-error {
+  margin: 14px 0;
+  font-size: 14px;
+}
+
+.settlement-modal-info {
+  color: #64748b;
+}
+
+.settlement-modal-error {
+  color: #b91c1c;
+}
+
+.settlement-package-card {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.settlement-package-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.settlement-package-title small {
+  color: #64748b;
+}
+
+.settlement-package-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.settlement-package-facts span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.settlement-package-facts b {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.settlement-balance {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settlement-balance.receivable {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.settlement-balance.refund {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.settlement-balance.closed {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+@media (max-width: 640px) {
+  .settlement-package-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

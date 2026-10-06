@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllRows } from '../lib/supabasePaging'
 
 const studentTrackingReportSelect = `
   student_id,
@@ -253,13 +254,91 @@ function mapStudentTrackingRow(
   }
 }
 
+/*
+ * PostgREST or() içinde değeri çift tırnakla sarar; virgül, parantez
+ * içeren paket/grup adları da güvenle aranabilir.
+ */
+function quoteFilterPattern(value) {
+  return `"%${String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')}%"`
+}
+
 function applyStudentTrackingFilters(
   query,
   {
     searchText = '',
-    studentStatus = 'active'
+    studentStatus = 'active',
+    teacherName = '',
+    packageName = '',
+    groupName = '',
+    lessonType = 'all',
+    coursePackageNames = [],
+    courseGroupNames = [],
+    courseSelected = false
   } = {}
 ) {
+  if (teacherName) {
+    query = query.ilike(
+      'teacher_names',
+      `%${teacherName}%`
+    )
+  }
+
+  if (packageName) {
+    query = query.ilike(
+      'package_names',
+      `%${packageName}%`
+    )
+  }
+
+  if (groupName) {
+    query = query.ilike(
+      'group_names',
+      `%${groupName}%`
+    )
+  }
+
+  if (lessonType === 'group') {
+    query = query
+      .not('group_names', 'is', null)
+      .neq('group_names', '')
+      .neq('group_names', '-')
+  } else if (
+    lessonType === 'individual'
+  ) {
+    query = query.or(
+      'group_names.is.null,group_names.eq."",group_names.eq.-'
+    )
+  }
+
+  /*
+   * Kurs (branş) filtresi: o branşa ait paketlerden veya gruplardan
+   * en az birine kayıtlı öğrenciler.
+   */
+  if (courseSelected) {
+    const courseConditions = [
+      ...coursePackageNames.map(
+        (name) =>
+          `package_names.ilike.${quoteFilterPattern(name)}`
+      ),
+      ...courseGroupNames.map(
+        (name) =>
+          `group_names.ilike.${quoteFilterPattern(name)}`
+      )
+    ]
+
+    query =
+      courseConditions.length > 0
+        ? query.or(
+            courseConditions.join(',')
+          )
+        : query.is(
+            'student_id',
+            null
+          )
+  }
+
   const cleanSearchText =
     cleanSearchValue(
       searchText
@@ -301,9 +380,8 @@ function applyStudentTrackingFilters(
 export async function getStudentTrackingReportPage({
   page = 1,
   pageSize = 10,
-  searchText = '',
-  studentStatus = 'active',
-  sortOption = 'nameAsc'
+  sortOption = 'nameAsc',
+  ...filters
 } = {}) {
   const {
     safePage,
@@ -329,10 +407,7 @@ export async function getStudentTrackingReportPage({
   query =
     applyStudentTrackingFilters(
       query,
-      {
-        searchText,
-        studentStatus
-      }
+      filters
     )
 
   const sortSettings = {
@@ -1345,6 +1420,13 @@ function getTeacherEarningStatus(
   const safeRemainingPayment =
     Number(remainingPayment || 0)
 
+  if (safeRemainingPayment < 0) {
+    return {
+      label: 'Fazla Ödendi',
+      className: 'overpaid'
+    }
+  }
+
   if (safeTotalEarning <= 0) {
     return {
       label: 'Hakediş Yok',
@@ -1608,10 +1690,17 @@ function applyTeacherEarningsReportFilters(
         'total_earning',
         0
       )
-      .lte(
+      .eq(
         'remaining_payment',
         0
       )
+  } else if (
+    earningStatus === 'overpaid'
+  ) {
+    query = query.lt(
+      'remaining_payment',
+      0
+    )
   } else if (
     earningStatus === 'partial'
   ) {
@@ -1835,29 +1924,32 @@ export async function getTeacherEarningReportDetails(
   const {
     data,
     error
-  } = await supabase
-    .from(
-      'teacher_earning_lessons_view'
-    )
-    .select(teacherEarningLessonReportSelect)
-    .eq(
-      'teacher_id',
-      cleanedTeacherId
-    )
-    .order(
-      'created_at',
-      {
-        ascending: false,
-        nullsFirst: false
-      }
-    )
-    .order(
-      'start_time',
-      {
-        ascending: false,
-        nullsFirst: false
-      }
-    )
+  } = await fetchAllRows(() =>
+    supabase
+      .from(
+        'teacher_earning_lessons_view'
+      )
+      .select(teacherEarningLessonReportSelect)
+      .eq(
+        'teacher_id',
+        cleanedTeacherId
+      )
+      .order(
+        'created_at',
+        {
+          ascending: false,
+          nullsFirst: false
+        }
+      )
+      .order(
+        'start_time',
+        {
+          ascending: false,
+          nullsFirst: false
+        }
+      )
+      .order('earning_row_id')
+  )
 
   if (error) {
     console.error(

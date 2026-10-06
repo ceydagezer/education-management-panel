@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import RequiredStar from '../components/RequiredStar'
 import { queryClient } from '../lib/queryClient'
 
@@ -6,7 +7,9 @@ import {
   createPayment,
   deletePayment as deletePaymentFromDb,
   getPaymentMovementsPage,
+  getOpenStudentSettlements,
   getPaymentsByStudentPackage,
+  resolveStudentSettlement,
   updatePayment,
   updateStudentPackageNextPaymentDate
 } from '../services/paymentService'
@@ -14,6 +17,10 @@ import {
 import {
   refreshFinanceIncomeSummaryCache
 } from '../services/financeService'
+
+import {
+  normalizeSearchText
+} from '../utils/textHelpers'
 
 import {
   formatDate,
@@ -33,6 +40,12 @@ import {
   getPaymentStudentPackageId
 } from '../utils/paymentSchedule'
 
+
+import {
+  confirmDialog,
+  notify,
+  promptDialog
+} from '../lib/feedback'
 const PAYMENT_QUERY_STALE_TIME = 30_000
 
 async function refreshFinanceAfterPaymentChange() {
@@ -134,6 +147,183 @@ function Payments({
 }) {
   const today = getTodayKey()
 
+  /*
+   * Ayrılan öğrencilerin kapanmamış alacak / iade kayıtları.
+   */
+  const settlementsQuery = useQuery({
+    queryKey: ['student-settlements'],
+    queryFn: getOpenStudentSettlements,
+    staleTime: PAYMENT_QUERY_STALE_TIME,
+    refetchOnWindowFocus: false
+  })
+
+  const openSettlements =
+    settlementsQuery.data ?? []
+
+  const [settlementPayment, setSettlementPayment] =
+    useState(null)
+
+  const [resolvingSettlementId, setResolvingSettlementId] =
+    useState(null)
+
+  const refreshSettlements = () =>
+    queryClient.invalidateQueries({
+      queryKey: ['student-settlements']
+    })
+
+  const openSettlementPayment = (settlement) => {
+    setSettlementPayment({
+      settlement,
+      amount: String(settlement.balance),
+      paymentDate: today,
+      paymentMethod: '',
+      referenceNumber: '',
+      note: 'Ayrılan öğrenci kalan alacak tahsilatı',
+      saving: false
+    })
+  }
+
+  const updateSettlementPaymentField = (event) => {
+    const { name, value } = event.target
+
+    setSettlementPayment((current) => ({
+      ...current,
+      [name]: value
+    }))
+  }
+
+  const saveSettlementPayment = async () => {
+    if (!settlementPayment || settlementPayment.saving) {
+      return
+    }
+
+    const { settlement } = settlementPayment
+    const amount = roundMoney(settlementPayment.amount)
+
+    if (amount <= 0) {
+      notify('Tahsilat tutarı 0’dan büyük olmalıdır.')
+      return
+    }
+
+    if (moneyToCents(amount) > moneyToCents(settlement.balance)) {
+      notify(
+        `En fazla ₺${formatPrice(settlement.balance)} tahsil edilebilir.`
+      )
+      return
+    }
+
+    if (!settlementPayment.paymentDate) {
+      notify('Tahsilat tarihi seçiniz.')
+      return
+    }
+
+    if (!settlementPayment.paymentMethod) {
+      notify('Ödeme yöntemi seçiniz.')
+      return
+    }
+
+    setSettlementPayment((current) => ({
+      ...current,
+      saving: true
+    }))
+
+    try {
+      await createPayment({
+        studentId: settlement.studentId,
+        studentPackageId: settlement.studentPackageId,
+        packageId: settlement.packageId,
+        teacherId: settlement.teacherId,
+        amount,
+        paymentPeriod:
+          settlementPayment.paymentDate.slice(0, 7),
+        dueDate: null,
+        paymentDate: settlementPayment.paymentDate,
+        paymentMethod: settlementPayment.paymentMethod,
+        referenceNumber: settlementPayment.referenceNumber,
+        note: settlementPayment.note
+      })
+
+      notify.success('Tahsilat kaydedildi.')
+
+      setSettlementPayment(null)
+      refreshSettlements()
+      queryClient.invalidateQueries({
+        queryKey: ['payment-movements']
+      })
+      await refreshFinanceAfterPaymentChange()
+    } catch (error) {
+      console.error(
+        'Ayrılan öğrenci tahsilat hatası:',
+        error
+      )
+
+      setSettlementPayment((current) =>
+        current
+          ? {
+              ...current,
+              saving: false
+            }
+          : current
+      )
+
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Tahsilat kaydedilemedi.'
+      )
+    }
+  }
+
+  const handleResolveSettlement = async (
+    settlement,
+    resolution
+  ) => {
+    if (resolvingSettlementId) {
+      return
+    }
+
+    const message =
+      resolution === 'Vazgeçildi'
+        ? `${settlement.studentName} adlı öğrencinin ₺${formatPrice(
+            settlement.balance
+          )} tutarındaki alacağından vazgeçilecek. Bu tutar artık alacak olarak görünmeyecek. Devam edilsin mi?`
+        : `${settlement.studentName} adlı öğrenciye ₺${formatPrice(
+            -settlement.balance
+          )} iade yapıldığı kaydedilecek. Devam edilsin mi?`
+
+    if (!await confirmDialog(message)) {
+      return
+    }
+
+    setResolvingSettlementId(
+      settlement.studentPackageId
+    )
+
+    try {
+      await resolveStudentSettlement(
+        settlement.studentPackageId,
+        resolution
+      )
+
+      notify.success('Hesap kaydı kapatıldı.')
+
+      refreshSettlements()
+    } catch (error) {
+      console.error(
+        'Hesap kaydı kapatma hatası:',
+        error
+      )
+
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Hesap kaydı kapatılamadı.'
+      )
+    } finally {
+      setResolvingSettlementId(null)
+    }
+  }
+
   const activeStudents =
     useMemo(
       () =>
@@ -189,6 +379,43 @@ function Payments({
 
   const [paymentForm, setPaymentForm] =
     useState(emptyPaymentForm)
+
+  /*
+   * Öğrenci seçimi: uzun açılır liste yerine ad veya TC ile arama.
+   * null iken kutuda seçili öğrencinin adı görünür.
+   */
+  const [studentQuery, setStudentQuery] =
+    useState(null)
+  const [showStudentResults, setShowStudentResults] =
+    useState(false)
+  const studentSearchRef = useRef(null)
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (
+        studentSearchRef.current &&
+        !studentSearchRef.current.contains(event.target)
+      ) {
+        setShowStudentResults(false)
+        setStudentQuery(null)
+      }
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowStudentResults(false)
+        setStudentQuery(null)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
   const [filters, setFilters] = useState(emptyFilters)
   const [sortOption, setSortOption] = useState('newest')
 
@@ -1013,36 +1240,63 @@ function Payments({
     }))
   }
 
+  const selectedPaymentStudent =
+    activeStudents.find(
+      (student) =>
+        String(student.id) ===
+        String(paymentForm.studentId)
+    )
+
+  const studentSearchValue =
+    studentQuery ??
+    selectedPaymentStudent?.fullName ??
+    ''
+
+  const normalizedStudentQuery =
+    normalizeSearchText(studentQuery || '')
+
+  const studentResults = normalizedStudentQuery
+    ? activeStudents
+        .filter((student) =>
+          normalizeSearchText(
+            [student.fullName, student.name, student.tcNo]
+              .filter(Boolean)
+              .join(' ')
+          ).includes(normalizedStudentQuery)
+        )
+        .slice(0, 8)
+    : []
+
   const validatePaymentForm = () => {
     if (!paymentForm.studentId) {
-      alert('Öğrenci seçiniz.')
+      notify('Öğrenci seçiniz.')
       return false
     }
 
     if (!paymentForm.studentPackageId) {
-      alert('Öğrenci paketi seçiniz.')
+      notify('Öğrenci paketi seçiniz.')
       return false
     }
 
     if (!selectedStudentPackage || !selectedPackageRecord) {
-      alert('Seçilen öğrenci paketi bulunamadı.')
+      notify('Seçilen öğrenci paketi bulunamadı.')
       return false
     }
 
     if (!selectedPackageRecord.dueDate) {
-      alert(
+      notify(
         'Bu paket için ödeme tarihi tanımlanmamıştır. Öğrenci detayından ödeme tarihi ekleyiniz.'
       )
       return false
     }
 
     if (selectedPackagePrice <= 0) {
-      alert('Paketin aylık ücreti geçerli değildir.')
+      notify('Paketin aylık ücreti geçerli değildir.')
       return false
     }
 
     if (selectedRemainingDebt <= 0) {
-      alert('Bu döneme ait kalan ödeme bulunmamaktadır.')
+      notify('Bu döneme ait kalan ödeme bulunmamaktadır.')
       return false
     }
 
@@ -1051,7 +1305,7 @@ function Payments({
       !Number.isFinite(enteredAmount) ||
       enteredAmount <= 0
     ) {
-      alert('Alınan tutar 0’dan büyük olmalıdır.')
+      notify('Alınan tutar 0’dan büyük olmalıdır.')
       return false
     }
 
@@ -1059,7 +1313,7 @@ function Payments({
       moneyToCents(enteredAmount) >
       moneyToCents(selectedRemainingDebt)
     ) {
-      alert(
+      notify(
         `Bu dönem için en fazla ₺${formatPrice(
           selectedRemainingDebt
         )} tahsil edilebilir.`
@@ -1068,12 +1322,12 @@ function Payments({
     }
 
     if (!paymentForm.paymentDate) {
-      alert('Tahsilat tarihi seçiniz.')
+      notify('Tahsilat tarihi seçiniz.')
       return false
     }
 
     if (!paymentForm.paymentMethod) {
-      alert('Ödeme yöntemi seçiniz.')
+      notify('Ödeme yöntemi seçiniz.')
       return false
     }
 
@@ -1119,6 +1373,8 @@ function Payments({
           note:
             paymentForm.note
         })
+
+      notify.success('Tahsilat kaydedildi.')
 
       const updatedPayments = [
         ...payments,
@@ -1168,7 +1424,7 @@ function Payments({
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Tahsilat kaydedilemedi.'
@@ -1378,17 +1634,17 @@ function Payments({
       !Number.isFinite(amount) ||
       amount <= 0
     ) {
-      alert('Alınan tutar 0’dan büyük olmalıdır.')
+      notify('Alınan tutar 0’dan büyük olmalıdır.')
       return
     }
 
     if (!editForm.paymentDate) {
-      alert('Tahsilat tarihi seçiniz.')
+      notify('Tahsilat tarihi seçiniz.')
       return
     }
 
     if (!editForm.paymentMethod) {
-      alert('Ödeme yöntemi seçiniz.')
+      notify('Ödeme yöntemi seçiniz.')
       return
     }
 
@@ -1419,7 +1675,7 @@ function Payments({
     )
 
     if (amount > maximumAllowed) {
-      alert(
+      notify(
         `Bu dönem için en fazla ₺${formatPrice(
           maximumAllowed
         )} girilebilir.`
@@ -1445,6 +1701,8 @@ function Payments({
               editForm.note
           }
         )
+
+      notify.success('Tahsilat güncellendi.')
 
       const updatedPayments = payments.map(
         (item) =>
@@ -1487,7 +1745,7 @@ function Payments({
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Tahsilat güncellenemedi.'
@@ -1505,11 +1763,18 @@ function Payments({
       return
     }
 
-    const confirmed = window.confirm(
-      'Bu tahsilat kaydını silmek istediğinize emin misiniz?'
-    )
+    const reason = await promptDialog({
+      title: 'Tahsilat iptal edilecek',
+      message:
+        'Kayıt silinmez; kim tarafından ve ne zaman iptal edildiği saklanır. İptal edilen tahsilat toplamlardan düşer.',
+      label: 'İptal nedeni (isteğe bağlı)',
+      placeholder: 'Ör. Yanlış tutar girildi',
+      multiline: true,
+      confirmText: 'Tahsilatı İptal Et',
+      tone: 'danger'
+    })
 
-    if (!confirmed) {
+    if (reason === null) {
       return
     }
 
@@ -1517,8 +1782,11 @@ function Payments({
 
     try {
       await deletePaymentFromDb(
-        payment.id
+        payment.id,
+        reason
       )
+
+      notify.success('Tahsilat iptal edildi.')
 
       const updatedPayments = payments.filter(
         (item) =>
@@ -1555,14 +1823,14 @@ function Payments({
       await refreshFinanceAfterPaymentChange()
     } catch (error) {
       console.error(
-        'Tahsilat silme hatası:',
+        'Tahsilat iptal hatası:',
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
-          : 'Tahsilat silinemedi.'
+          : 'Tahsilat iptal edilemedi.'
       )
     } finally {
       setDeletingPaymentId(null)
@@ -1771,23 +2039,115 @@ function Payments({
               <label>
                 Öğrenci <RequiredStar />
               </label>
-              <select
-                name="studentId"
-                value={paymentForm.studentId}
-                onChange={handlePaymentChange}
+<div
+                className="schedule-student-filter-group payment-student-search"
+                ref={studentSearchRef}
               >
-                <option value="">
-                  Öğrenci seçiniz
-                </option>
-                {activeStudents.map((student) => (
-                  <option
-                    key={student.id}
-                    value={student.id}
+                <div className="schedule-student-search-control">
+                  <span
+                    className="schedule-student-search-icon"
+                    aria-hidden="true"
                   >
-                    {student.fullName}
-                  </option>
-                ))}
-              </select>
+                    <svg viewBox="0 0 24 24">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m20 20-4-4" />
+                    </svg>
+                  </span>
+
+                  <input
+                    type="text"
+                    value={studentSearchValue}
+                    onChange={(event) => {
+                      setStudentQuery(event.target.value)
+                      setShowStudentResults(true)
+
+                      if (paymentForm.studentId) {
+                        handlePaymentChange({
+                          target: {
+                            name: 'studentId',
+                            value: ''
+                          }
+                        })
+                      }
+                    }}
+                    onFocus={() => {
+                      if (studentQuery) {
+                        setShowStudentResults(true)
+                      }
+                    }}
+                    placeholder="Ad veya TC yazarak ara"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-expanded={showStudentResults}
+                    aria-controls="payment-student-results"
+                  />
+
+                  {studentSearchValue && (
+                    <button
+                      type="button"
+                      className="schedule-student-search-clear"
+                      onClick={() => {
+                        setStudentQuery(null)
+                        setShowStudentResults(false)
+                        handlePaymentChange({
+                          target: {
+                            name: 'studentId',
+                            value: ''
+                          }
+                        })
+                      }}
+                      aria-label="Seçili öğrenciyi temizle"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                {showStudentResults &&
+                  normalizedStudentQuery && (
+                  <div
+                    id="payment-student-results"
+                    className="schedule-student-search-results"
+                    role="listbox"
+                  >
+                    {studentResults.length > 0 ? (
+                      studentResults.map((student) => (
+                        <button
+                          type="button"
+                          className="schedule-student-search-result"
+                          key={student.id}
+                          role="option"
+                          aria-selected={false}
+                          onClick={() => {
+                            handlePaymentChange({
+                              target: {
+                                name: 'studentId',
+                                value: String(student.id)
+                              }
+                            })
+                            setStudentQuery(null)
+                            setShowStudentResults(false)
+                          }}
+                        >
+                          <span className="schedule-student-result-avatar">
+                            {String(student.fullName || '?')
+                              .charAt(0)
+                              .toLocaleUpperCase('tr-TR')}
+                          </span>
+
+                          <span className="schedule-student-result-content">
+                            <strong>{student.fullName}</strong>
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="schedule-student-search-empty">
+                        Eşleşen aktif öğrenci bulunamadı.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="form-group">
@@ -2008,6 +2368,263 @@ function Payments({
           </div>
         </form>
       </section>
+
+      {(openSettlements.length > 0 ||
+        settlementsQuery.isError) && (
+        <section className="lesson-table-card settlement-list-card">
+          <div className="settlement-list-heading">
+            <div>
+              <h2>Ayrılan Öğrenci Hesapları</h2>
+              <p>
+                Pasife alınan öğrencilerden kalan alacaklar ve
+                yapılacak iadeler. Kapanmadan öğrenci silinemez.
+              </p>
+            </div>
+          </div>
+
+          {settlementsQuery.isError ? (
+            <p className="settlement-list-error">
+              {settlementsQuery.error?.message ||
+                'Ayrılan öğrenci hesapları alınamadı.'}
+            </p>
+          ) : (
+            <div className="settlement-table-wrap">
+              <table className="settlement-table">
+                <thead>
+                  <tr>
+                    <th>Öğrenci</th>
+                    <th>Paket</th>
+                    <th>Alınması Gereken</th>
+                    <th>Ödenen</th>
+                    <th>Durum</th>
+                    <th aria-label="İşlemler" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {openSettlements.map((settlement) => {
+                    const isReceivable =
+                      settlement.balance > 0
+                    const isBusy =
+                      resolvingSettlementId ===
+                      settlement.studentPackageId
+
+                    return (
+                      <tr key={settlement.studentPackageId}>
+                        <td>
+                          <strong>{settlement.studentName}</strong>
+                          {settlement.settledAt && (
+                            <small>
+                              Ayrılış: {formatDate(settlement.settledAt)}
+                            </small>
+                          )}
+                        </td>
+                        <td>
+                          {settlement.packageName}
+                          {settlement.settlementNote && (
+                            <small>{settlement.settlementNote}</small>
+                          )}
+                        </td>
+                        <td>₺{formatPrice(settlement.settlementAmount)}</td>
+                        <td>₺{formatPrice(settlement.paidAmount)}</td>
+                        <td>
+                          <span
+                            className={`settlement-status ${
+                              isReceivable ? 'receivable' : 'refund'
+                            }`}
+                          >
+                            {isReceivable
+                              ? `Alacak ₺${formatPrice(settlement.balance)}`
+                              : `İade ₺${formatPrice(-settlement.balance)}`}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="settlement-actions">
+                            {isReceivable ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="save-button"
+                                  onClick={() =>
+                                    openSettlementPayment(settlement)
+                                  }
+                                  disabled={isBusy}
+                                >
+                                  Tahsil Et
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cancel-button"
+                                  onClick={() =>
+                                    handleResolveSettlement(
+                                      settlement,
+                                      'Vazgeçildi'
+                                    )
+                                  }
+                                  disabled={isBusy}
+                                >
+                                  Alacaktan Vazgeç
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className="save-button"
+                                onClick={() =>
+                                  handleResolveSettlement(
+                                    settlement,
+                                    'İade edildi'
+                                  )
+                                }
+                                disabled={isBusy}
+                              >
+                                İade Yapıldı
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {settlementPayment && (
+        <div
+          className="payment-edit-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !settlementPayment.saving
+            ) {
+              setSettlementPayment(null)
+            }
+          }}
+        >
+          <div
+            className="payment-edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settlement-payment-title"
+          >
+            <div className="payment-edit-modal-heading">
+              <div>
+                <span>Kalan Alacak Tahsilatı</span>
+                <h2 id="settlement-payment-title">
+                  {settlementPayment.settlement.studentName}
+                </h2>
+                <p>
+                  {settlementPayment.settlement.packageName}
+                  {' · Kalan alacak ₺'}
+                  {formatPrice(
+                    settlementPayment.settlement.balance
+                  )}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="payment-modal-close-button"
+                onClick={() => setSettlementPayment(null)}
+                disabled={settlementPayment.saving}
+                aria-label="Pencereyi kapat"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="payment-edit-modal-grid">
+              <div className="form-group">
+                <label>
+                  Alınan Tutar <RequiredStar />
+                </label>
+                <input
+                  type="number"
+                  name="amount"
+                  value={settlementPayment.amount}
+                  onChange={updateSettlementPaymentField}
+                  min="0.01"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>
+                  Tahsilat Tarihi <RequiredStar />
+                </label>
+                <input
+                  type="date"
+                  name="paymentDate"
+                  value={settlementPayment.paymentDate}
+                  onChange={updateSettlementPaymentField}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>
+                  Ödeme Yöntemi <RequiredStar />
+                </label>
+                <select
+                  name="paymentMethod"
+                  value={settlementPayment.paymentMethod}
+                  onChange={updateSettlementPaymentField}
+                >
+                  <option value="">Seçiniz</option>
+                  <option value="Nakit">Nakit</option>
+                  <option value="Havale / EFT">Havale / EFT</option>
+                  <option value="Kredi Kartı">Kredi Kartı</option>
+                  <option value="Banka Kartı">Banka Kartı</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Dekont / İşlem Numarası</label>
+                <input
+                  name="referenceNumber"
+                  value={settlementPayment.referenceNumber}
+                  onChange={updateSettlementPaymentField}
+                  placeholder="İsteğe bağlı"
+                />
+              </div>
+
+              <div className="form-group full-width">
+                <label>Not</label>
+                <textarea
+                  name="note"
+                  value={settlementPayment.note}
+                  onChange={updateSettlementPaymentField}
+                />
+              </div>
+            </div>
+
+            <div className="payment-edit-modal-actions">
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={() => setSettlementPayment(null)}
+                disabled={settlementPayment.saving}
+              >
+                İptal
+              </button>
+
+              <button
+                type="button"
+                className="save-button"
+                onClick={saveSettlementPayment}
+                disabled={settlementPayment.saving}
+              >
+                {settlementPayment.saving
+                  ? 'Kaydediliyor...'
+                  : 'Tahsilatı Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="lesson-table-card payment-list-card">
         <div className="payment-list-top">
@@ -2378,8 +2995,8 @@ function Payments({
                           >
                             {String(deletingPaymentId) ===
                             String(payment.id)
-                              ? 'Siliniyor...'
-                              : 'Sil'}
+                              ? 'İptal ediliyor...'
+                              : 'İptal Et'}
                           </button>
                         </div>
                       </td>

@@ -32,6 +32,8 @@ import {
 import {
   getPaymentStudents
 } from './services/paymentService'
+import { FilePenLine } from 'lucide-react'
+
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Dashboard from './components/Dashboard'
@@ -52,6 +54,8 @@ import LessonGroups from './pages/LessonGroups'
 import Reports from './pages/Reports'
 import UserManagement from './pages/UserManagement'
 
+
+import { notify } from './lib/feedback'
 const VALID_PAGES = [
   'dashboard',
   'students',
@@ -79,6 +83,10 @@ const LESSON_PLAN_DATA_PAGES = new Set([
   'schedule',
   'lesson-status'
 ])
+
+const PANEL_DATA_TIMEOUT_MS = 15000
+
+const PANEL_DATA_RETRY_DELAYS_MS = [1500, 3000]
 
 const getReadableConnectionError = (
   error,
@@ -513,7 +521,12 @@ function App() {
           return
         }
 
-        try {
+        /*
+         * Sunucu uzun süre boşta kaldıysa ilk istek yavaş dönebilir
+         * veya tek seferlik ağ hatası alınabilir. Kullanıcıya hata
+         * göstermeden önce artan beklemelerle birkaç kez tekrar denenir.
+         */
+        const loadPanelDataOnce = () => {
           const panelDataPromise =
             Promise.all([
               getSpecialties(),
@@ -534,26 +547,67 @@ function App() {
                         )
                       )
                     },
-                    10000
+                    PANEL_DATA_TIMEOUT_MS
                   )
               }
             )
+
+          return Promise.race([
+            panelDataPromise,
+            timeoutPromise
+          ]).finally(() => {
+            if (timeoutId) {
+              window.clearTimeout(
+                timeoutId
+              )
+            }
+          })
+        }
+
+        try {
+          let panelData
+          let lastError
+
+          for (
+            let attempt = 0;
+            attempt < PANEL_DATA_RETRY_DELAYS_MS.length + 1;
+            attempt += 1
+          ) {
+            if (attempt > 0) {
+              await new Promise((resolve) => {
+                window.setTimeout(
+                  resolve,
+                  PANEL_DATA_RETRY_DELAYS_MS[attempt - 1]
+                )
+              })
+            }
+
+            if (!isMounted) {
+              return
+            }
+
+            try {
+              panelData = await loadPanelDataOnce()
+              break
+            } catch (attemptError) {
+              lastError = attemptError
+              console.warn(
+                `Panel verileri yüklenemedi (deneme ${attempt + 1}):`,
+                attemptError
+              )
+            }
+          }
+
+          if (!panelData) {
+            throw lastError
+          }
 
           const [
             specialtiesResult,
             packagesResult,
             teachersResult,
             dashboardStudentsResult
-          ] = await Promise.race([
-            panelDataPromise,
-            timeoutPromise
-          ])
-
-          if (timeoutId) {
-            window.clearTimeout(
-              timeoutId
-            )
-          }
+          ] = panelData
 
           if (!isMounted) {
             return
@@ -1757,7 +1811,7 @@ function App() {
           await supabase.auth.signOut()
 
         if (error) {
-          alert(
+          notify(
             getReadableConnectionError(
               error,
               'Çıkış işlemi tamamlanamadı. Lütfen tekrar deneyiniz.'
@@ -1800,7 +1854,7 @@ function App() {
           error
         )
 
-        alert(
+        notify(
           getReadableConnectionError(
             error,
             'Çıkış sırasında beklenmeyen bir hata oluştu.'
@@ -2246,7 +2300,11 @@ function App() {
 
       {activePage ===
         'reports' && (
-        <Reports />
+        <Reports
+          specialties={specialties}
+          packages={packages}
+          teachers={teachers}
+        />
       )}
 
       {activePage ===
@@ -2281,21 +2339,24 @@ function App() {
             aria-labelledby="unsaved-changes-title"
             aria-describedby="unsaved-changes-description"
           >
-            <div className="unsaved-changes-icon">
-              !
+            <div
+              className="unsaved-changes-icon"
+              aria-hidden="true"
+            >
+              <FilePenLine
+                size={26}
+                strokeWidth={2}
+              />
             </div>
 
             <div className="unsaved-changes-content">
               <h2 id="unsaved-changes-title">
-                Kaydedilmemiş
-                değişiklikler var
+                Değişiklikleriniz kaydedilmedi
               </h2>
 
               <p id="unsaved-changes-description">
-                Bu sayfadan
-                ayrılırsanız yaptığınız
-                değişiklikler
-                kaybolacaktır.
+                Şimdi çıkarsanız yaptığınız değişiklikler
+                kaybolacak. Kaydetmek için sayfada kalın.
               </p>
 
               {unsavedSourceLabels.length >
@@ -2327,6 +2388,7 @@ function App() {
                 onClick={
                   stayOnCurrentPage
                 }
+                autoFocus
               >
                 Sayfada Kal
               </button>

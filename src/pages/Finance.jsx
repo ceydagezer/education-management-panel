@@ -32,6 +32,11 @@ import {
   matchesSearchQuery
 } from '../utils/textHelpers'
 
+
+import {
+  confirmDialog,
+  notify
+} from '../lib/feedback'
 const incomeCategories = [
   'Kayıt Ücreti',
   'Materyal / Enstrüman Satışı',
@@ -1239,15 +1244,43 @@ useEffect(() => {
       0
     )
 
+  /*
+   * Fazla ödenen öğretmenin eksi bakiyesi, diğer öğretmenlere olan
+   * borcu düşürmesin diye yalnız alacaklı öğretmenler toplanır.
+   */
   const totalTeacherRemaining =
     teacherSummaries.reduce(
       (total, summary) =>
         total +
-        Number(
-          summary.remainingPayment || 0
+        Math.max(
+          0,
+          Number(
+            summary.remainingPayment || 0
+          )
         ),
       0
     )
+
+  const getTeacherEarningStatusInfo = (summary) => {
+    const remaining = Number(summary?.remainingPayment || 0)
+
+    if (remaining < 0) {
+      return { label: 'Fazla Ödendi', className: 'overpaid' }
+    }
+
+    if (
+      Number(summary?.totalEarning || 0) > 0 &&
+      remaining <= 0
+    ) {
+      return { label: 'Ödendi', className: 'paid' }
+    }
+
+    if (Number(summary?.totalPaid || 0) > 0) {
+      return { label: 'Kısmi Ödendi', className: 'partial' }
+    }
+
+    return { label: 'Bekliyor', className: 'pending' }
+  }
 
   const totalCompletedLessonCount =
     teacherSummaries.reduce(
@@ -1430,7 +1463,7 @@ useEffect(() => {
           error
         )
 
-        alert(
+        notify(
           error instanceof Error
             ? error.message
             : 'Öğretmen hakediş dersleri alınamadı.'
@@ -1585,24 +1618,24 @@ useEffect(() => {
     }
 
     if (!incomeForm.title.trim()) {
-      alert('Gelir başlığı zorunludur.')
+      notify('Gelir başlığı zorunludur.')
       return
     }
 
     if (!incomeForm.category) {
-      alert('Gelir kategorisi seçiniz.')
+      notify('Gelir kategorisi seçiniz.')
       return
     }
 
     const incomeAmount = Number(incomeForm.amount)
 
     if (!Number.isFinite(incomeAmount) || incomeAmount <= 0) {
-      alert('Gelir tutarı 0’dan büyük olmalıdır.')
+      notify('Gelir tutarı 0’dan büyük olmalıdır.')
       return
     }
 
     if (!incomeForm.date) {
-      alert('Gelir tarihi seçiniz.')
+      notify('Gelir tarihi seçiniz.')
       return
     }
 
@@ -1617,6 +1650,8 @@ useEffect(() => {
         documentNumber: incomeForm.documentNumber.trim(),
         note: incomeForm.note.trim()
       })
+
+      notify.success('Ek gelir kaydedildi.')
 
       setOtherIncomes((current) => [
         ...current,
@@ -1635,7 +1670,7 @@ useEffect(() => {
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Ek gelir kaydedilemedi.'
@@ -1653,12 +1688,12 @@ useEffect(() => {
     }
 
     if (!expenseForm.title.trim()) {
-      alert('Gider başlığı zorunludur.')
+      notify('Gider başlığı zorunludur.')
       return
     }
 
     if (!expenseForm.category) {
-      alert('Gider kategorisi seçiniz.')
+      notify('Gider kategorisi seçiniz.')
       return
     }
 
@@ -1668,12 +1703,12 @@ useEffect(() => {
       : NaN
 
     if (!Number.isFinite(expenseAmount) || expenseAmount <= 0) {
-      alert('Gider tutarı 0’dan büyük olmalıdır.')
+      notify('Gider tutarı 0’dan büyük olmalıdır.')
       return
     }
 
     if (!expenseForm.date) {
-      alert('Gider tarihi seçiniz.')
+      notify('Gider tarihi seçiniz.')
       return
     }
 
@@ -1688,6 +1723,8 @@ useEffect(() => {
         documentNumber: expenseForm.documentNumber.trim(),
         note: expenseForm.note.trim()
       })
+
+      notify.success('Gider kaydedildi.')
 
       setExpenses((current) => [
         ...current,
@@ -1736,7 +1773,7 @@ useEffect(() => {
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Gider kaydedilemedi.'
@@ -1754,24 +1791,33 @@ useEffect(() => {
     }
 
     if (!teacherPaymentForm.teacherId) {
-      alert('Öğretmen seçiniz.')
+      notify('Öğretmen seçiniz.')
       return
     }
 
     const amount = Number(teacherPaymentForm.amount)
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      alert('Ödeme tutarı 0’dan büyük olmalıdır.')
+      notify('Ödeme tutarı 0’dan büyük olmalıdır.')
       return
     }
 
-    if (selectedTeacherRemaining <= 0) {
-      alert('Seçilen öğretmenin bekleyen hakedişi bulunmamaktadır.')
+    if (selectedTeacherRemaining < 0) {
+      notify(
+        `Bu öğretmene hakedişinden ₺${formatPrice(
+          Math.abs(selectedTeacherRemaining)
+        )} fazla ödenmiş. Yeni ödeme yapılamaz; fazla tutar sonraki derslerin hakedişinden düşülecektir.`
+      )
+      return
+    }
+
+    if (selectedTeacherRemaining === 0) {
+      notify('Seçilen öğretmenin bekleyen hakedişi bulunmamaktadır.')
       return
     }
 
     if (amount > selectedTeacherRemaining) {
-      alert(
+      notify(
         `Ödeme tutarı bekleyen hakediş olan ₺${formatPrice(
           selectedTeacherRemaining
         )} tutarını aşamaz.`
@@ -1780,12 +1826,12 @@ useEffect(() => {
     }
 
     if (!teacherPaymentForm.paymentDate) {
-      alert('Ödeme tarihi seçiniz.')
+      notify('Ödeme tarihi seçiniz.')
       return
     }
 
     if (!teacherPaymentForm.paymentMethod) {
-      alert('Ödeme yöntemi seçiniz.')
+      notify('Ödeme yöntemi seçiniz.')
       return
     }
 
@@ -1795,7 +1841,7 @@ useEffect(() => {
     )
 
     if (!teacher) {
-      alert('Seçilen öğretmen bulunamadı.')
+      notify('Seçilen öğretmen bulunamadı.')
       return
     }
 
@@ -1811,6 +1857,8 @@ useEffect(() => {
           teacherPaymentForm.referenceNumber.trim(),
         note: teacherPaymentForm.note.trim()
       })
+
+      notify.success('Öğretmen ödemesi kaydedildi.')
 setTeacherHistoryPage(1)
       setTeacherHistoryReloadKey(
         (current) => current + 1
@@ -1827,7 +1875,7 @@ setTeacherHistoryPage(1)
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Öğretmen ödemesi kaydedilemedi.'
@@ -1845,7 +1893,7 @@ setTeacherHistoryPage(1)
       return
     }
 
-    if (!window.confirm('Bu ek gelir kaydını iptal etmek istediğinize emin misiniz?')) {
+    if (!await confirmDialog('Bu ek gelir kaydını iptal etmek istediğinize emin misiniz?')) {
       return
     }
 
@@ -1854,6 +1902,8 @@ setTeacherHistoryPage(1)
     try {
       const cancelledIncome =
         await cancelOtherIncome(incomeId)
+
+      notify.success('Ek gelir kaydı iptal edildi.')
 
       setOtherIncomes((current) =>
         current.map((income) =>
@@ -1872,7 +1922,7 @@ setTeacherHistoryPage(1)
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Ek gelir iptal edilemedi.'
@@ -1890,7 +1940,7 @@ setTeacherHistoryPage(1)
       return
     }
 
-    if (!window.confirm('Bu gider kaydını iptal etmek istediğinize emin misiniz?')) {
+    if (!await confirmDialog('Bu gider kaydını iptal etmek istediğinize emin misiniz?')) {
       return
     }
 
@@ -1899,6 +1949,8 @@ setTeacherHistoryPage(1)
     try {
       const cancelledExpense =
         await cancelExpenseFromDb(expenseId)
+
+      notify.success('Gider kaydı iptal edildi.')
 
       setExpenses((current) =>
         current.map((expense) =>
@@ -1917,7 +1969,7 @@ setTeacherHistoryPage(1)
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Gider iptal edilemedi.'
@@ -3375,8 +3427,13 @@ setTeacherHistoryPage(1)
                         {getTeacherBranch(teacher) !== '-'
                           ? ` - ${getTeacherBranch(teacher)}`
                           : ''}
-                        {' — Bekleyen ₺'}
-                        {formatPrice(summary?.remainingPayment || 0)}
+                        {Number(summary?.remainingPayment || 0) < 0
+                          ? ` — Fazla ödeme ₺${formatPrice(
+                              Math.abs(summary.remainingPayment)
+                            )}`
+                          : ` — Bekleyen ₺${formatPrice(
+                              summary?.remainingPayment || 0
+                            )}`}
                       </option>
                     )
                   })}
@@ -3406,18 +3463,12 @@ setTeacherHistoryPage(1)
 
                   <span
                     className={`finance-status ${
-                      selectedTeacherSummary.remainingPayment <= 0
-                        ? 'paid'
-                        : selectedTeacherSummary.totalPaid > 0
-                          ? 'partial'
-                          : 'pending'
+                      getTeacherEarningStatusInfo(selectedTeacherSummary)
+                        .className
                     }`}
                   >
-                    {selectedTeacherSummary.remainingPayment <= 0
-                      ? 'Ödendi'
-                      : selectedTeacherSummary.totalPaid > 0
-                        ? 'Kısmi Ödendi'
-                        : 'Bekliyor'}
+                    {getTeacherEarningStatusInfo(selectedTeacherSummary)
+                      .label}
                   </span>
                 </div>
 
@@ -3436,12 +3487,23 @@ setTeacherHistoryPage(1)
                     </strong>
                   </div>
 
-                  <div className="teacher-payment-summary-item pending">
-                    <small>Kalan Hakediş</small>
-                    <strong>
-                      ₺{formatPrice(selectedTeacherSummary.remainingPayment)}
-                    </strong>
-                  </div>
+                  {selectedTeacherSummary.remainingPayment < 0 ? (
+                    <div className="teacher-payment-summary-item overpaid">
+                      <small>Fazla Ödeme</small>
+                      <strong>
+                        -₺{formatPrice(
+                          Math.abs(selectedTeacherSummary.remainingPayment)
+                        )}
+                      </strong>
+                    </div>
+                  ) : (
+                    <div className="teacher-payment-summary-item pending">
+                      <small>Kalan Hakediş</small>
+                      <strong>
+                        ₺{formatPrice(selectedTeacherSummary.remainingPayment)}
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
                 <div className="teacher-payment-summary-footer">
@@ -3723,19 +3785,10 @@ setTeacherHistoryPage(1)
                 </tr>
               ) : (
                 filteredTeacherSummaries.map((summary) => {
-                  let status = 'Bekliyor'
-                  let statusClass = 'pending'
-
-                  if (
-                    summary.totalEarning > 0 &&
-                    summary.remainingPayment <= 0
-                  ) {
-                    status = 'Ödendi'
-                    statusClass = 'paid'
-                  } else if (summary.totalPaid > 0) {
-                    status = 'Kısmi Ödendi'
-                    statusClass = 'partial'
-                  }
+                  const {
+                    label: status,
+                    className: statusClass
+                  } = getTeacherEarningStatusInfo(summary)
 
                   return (
                     <tr key={summary.teacher.id}>
@@ -3746,7 +3799,19 @@ setTeacherHistoryPage(1)
                       <td>₺{formatPrice(summary.totalLessonAmount)}</td>
                       <td>₺{formatPrice(summary.totalEarning)}</td>
                       <td>₺{formatPrice(summary.totalPaid)}</td>
-                      <td>₺{formatPrice(summary.remainingPayment)}</td>
+                      <td
+                        className={
+                          summary.remainingPayment < 0
+                            ? 'finance-overpaid-amount'
+                            : undefined
+                        }
+                      >
+                        {summary.remainingPayment < 0
+                          ? `-₺${formatPrice(
+                              Math.abs(summary.remainingPayment)
+                            )}`
+                          : `₺${formatPrice(summary.remainingPayment)}`}
+                      </td>
                       <td>
                         <span className={`finance-status ${statusClass}`}>
                           {status}

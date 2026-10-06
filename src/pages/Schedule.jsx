@@ -18,9 +18,16 @@ import {
 import '../styles/schedule.css'
 
 import {
+  doTimeRangesOverlap,
   getCompactLessonStatusLabel,
+  getLessonDurationMinutes,
   getLessonStatusClass,
-  isActiveLesson
+  getLessonTimeRange,
+  groupLessonsByStartTime,
+  isActiveLesson,
+  minutesToTime,
+  parseDurationMinutes,
+  timeToMinutes
 } from '../utils/lessonHelpers'
 
 import {
@@ -29,6 +36,11 @@ import {
   normalizeStatusText
 } from '../utils/textHelpers'
 
+
+import {
+  confirmDialog,
+  notify
+} from '../lib/feedback'
 const LESSON_GROUPS_QUERY_KEY = [
   'lesson-groups',
   'list',
@@ -70,22 +82,6 @@ function Schedule({
     'Pazar'
   ]
 
-  const timeSlots = [
-    '09:00',
-    '10:00',
-    '11:00',
-    '12:00',
-    '13:00',
-    '14:00',
-    '15:00',
-    '16:00',
-    '17:00',
-    '18:00',
-    '19:00',
-    '20:00',
-    '21:00',
-    '22:00'
-  ]
 
   const dayOrder = {
     Pazartesi: 1,
@@ -125,7 +121,6 @@ function Schedule({
   const [lessonStudentSearch, setLessonStudentSearch] = useState('')
   const [showLessonStudentSuggestions, setShowLessonStudentSuggestions] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [expandedCells, setExpandedCells] = useState({})
   const [isSavingLesson, setIsSavingLesson] = useState(false)
   const [deletingLessonId, setDeletingLessonId] = useState(null)
 
@@ -668,8 +663,8 @@ function Schedule({
       duration: firstStudentPackage?.lessonDuration || '',
       lessonCount: firstStudentPackage?.lessonCount || '',
       totalPrice: firstStudentPackage?.monthlyFee || '',
-      teacherId: firstStudentPackage?.teacherId || '',
-      teacher: firstStudentPackage?.teacher || '',
+      teacherId: '',
+      teacher: '',
       time: ''
     }))
   }
@@ -705,8 +700,8 @@ function Schedule({
       duration: selectedPackage.lessonDuration,
       lessonCount: selectedPackage.lessonCount,
       totalPrice: selectedPackage.monthlyFee,
-      teacherId: selectedPackage.teacherId || '',
-      teacher: selectedPackage.teacher || '',
+      teacherId: '',
+      teacher: '',
       time: ''
     }))
   }
@@ -770,9 +765,9 @@ function Schedule({
           staleTime: 30_000
         })
 
-      if (memberships.length < 2) {
-        alert(
-          'Bu grupta ders planlamak için en az iki aktif öğrenci bulunmalıdır.'
+      if (memberships.length === 0) {
+        notify(
+          'Bu grupta aktif öğrenci yok. Ders planlamak için gruba en az bir öğrenci ekleyiniz.'
         )
       }
 
@@ -829,7 +824,7 @@ function Schedule({
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Grup öğrencileri alınamadı.'
@@ -839,53 +834,106 @@ function Schedule({
     }
   }
 
-  const selectTimeSlot = (time) => {
-    setLessonForm((currentForm) => ({
-      ...currentForm,
-      time
-    }))
+  /*
+   * Seçilen gün için öğretmenin ve öğrencilerin dolu olduğu dersler.
+   * Saat elle yazıldığı için çakışma, dersin başlangıç ve bitişine
+   * (başlangıç + süre) göre hesaplanır.
+   */
+  const getSelectedStudentIds = () =>
+    isGroupMode
+      ? lessonForm.participants.map(
+          (participant) =>
+            participant.studentId
+        )
+      : lessonForm.studentId
+        ? [lessonForm.studentId]
+        : []
+
+  const isLessonForSelectedTeacher = (lesson) =>
+    Boolean(lessonForm.teacherId) &&
+    areIdsEqual(
+      lesson.teacherId,
+      lessonForm.teacherId
+    )
+
+  const isLessonForSelectedStudents = (lesson) => {
+    const selectedStudentIds =
+      getSelectedStudentIds()
+
+    return getLessonStudentIds(
+      lesson
+    ).some((studentId) =>
+      selectedStudentIds.some(
+        (selectedId) =>
+          areIdsEqual(
+            studentId,
+            selectedId
+          )
+      )
+    )
   }
 
-  const getBlockedLesson = (time) => {
-    const teacherId =
-      isGroupMode
-        ? lessonForm.teacherId
-        : lessonForm.teacherId
-
-    const selectedStudentIds =
-      isGroupMode
-        ? lessonForm.participants.map(
-            (participant) =>
-              participant.studentId
+  const getBusyLessonsForSelectedDay = () =>
+    lessonPlans
+      .filter(
+        (lesson) =>
+          lesson.day === lessonForm.day &&
+          isActiveLesson(lesson) &&
+          (
+            isLessonForSelectedTeacher(lesson) ||
+            isLessonForSelectedStudents(lesson)
           )
-        : lessonForm.studentId
-          ? [lessonForm.studentId]
-          : []
+      )
+      .sort(
+        (firstLesson, secondLesson) =>
+          (timeToMinutes(firstLesson.time) ?? 0) -
+          (timeToMinutes(secondLesson.time) ?? 0)
+      )
+
+  const getBlockedLesson = (time) => {
+    if (timeToMinutes(time) === null) {
+      return null
+    }
+
+    const formDuration =
+      parseDurationMinutes(
+        lessonForm.duration
+      )
+
+    const overlaps = (lesson) =>
+      doTimeRangesOverlap(
+        time,
+        formDuration,
+        lesson.time,
+        getLessonDurationMinutes(lesson)
+      )
+
+    const sameDayLessons =
+      lessonPlans.filter(
+        (lesson) =>
+          lesson.day === lessonForm.day &&
+          isActiveLesson(lesson) &&
+          overlaps(lesson)
+      )
 
     const teacherConflict =
-      teacherId
-        ? lessonPlans.find(
-            (lesson) =>
-              lesson.day ===
-                lessonForm.day &&
-              lesson.time === time &&
-              areIdsEqual(
-                lesson.teacherId,
-                teacherId
-              ) &&
-              isActiveLesson(lesson)
-          )
-        : null
+      sameDayLessons.find(
+        isLessonForSelectedTeacher
+      )
 
     if (teacherConflict) {
       return {
         message:
           teacherConflict.isGroupLesson
-            ? `Öğretmen dolu · ${
+            ? `Öğretmen dolu · ${getLessonTimeRange(
+                teacherConflict
+              )} · ${
                 teacherConflict.groupName ||
                 'Grup dersi'
               }`
-            : `Öğretmen dolu · ${getLessonStudentName(
+            : `Öğretmen dolu · ${getLessonTimeRange(
+                teacherConflict
+              )} · ${getLessonStudentName(
                 teacherConflict
               )} / ${getLessonInstrument(
                 teacherConflict
@@ -894,39 +942,23 @@ function Schedule({
     }
 
     const studentConflict =
-      selectedStudentIds.length > 0
-        ? lessonPlans.find(
-            (lesson) =>
-              lesson.day ===
-                lessonForm.day &&
-              lesson.time === time &&
-              isActiveLesson(
-                lesson
-              ) &&
-              getLessonStudentIds(
-                lesson
-              ).some(
-                (studentId) =>
-                  selectedStudentIds.some(
-                    (selectedId) =>
-                      areIdsEqual(
-                        studentId,
-                        selectedId
-                      )
-                  )
-              )
-          )
-        : null
+      sameDayLessons.find(
+        isLessonForSelectedStudents
+      )
 
     if (studentConflict) {
       return {
         message:
           studentConflict.isGroupLesson
-            ? `Öğrenci dolu · ${
+            ? `Öğrenci dolu · ${getLessonTimeRange(
+                studentConflict
+              )} · ${
                 studentConflict.groupName ||
                 'Grup dersi'
               }`
-            : `Öğrenci dolu · ${getLessonTeacherName(
+            : `Öğrenci dolu · ${getLessonTimeRange(
+                studentConflict
+              )} · ${getLessonTeacherName(
                 studentConflict
               )} / ${getLessonInstrument(
                 studentConflict
@@ -937,14 +969,69 @@ function Schedule({
     return null
   }
 
-  const getLessonsForCell = (day, time) =>
-    filteredLessonPlans
-      .filter((lesson) => lesson.day === day && lesson.time === time)
-      .sort((firstLesson, secondLesson) =>
-        getLessonTeacherName(firstLesson).localeCompare(
-          getLessonTeacherName(secondLesson),
-          'tr'
+  const getSelectedTimeRange = () => {
+    const startMinutes =
+      timeToMinutes(lessonForm.time)
+
+    if (startMinutes === null) {
+      return ''
+    }
+
+    return `${minutesToTime(startMinutes)}–${minutesToTime(
+      startMinutes +
+        parseDurationMinutes(
+          lessonForm.duration
         )
+    )}`
+  }
+
+  const getTimeInputBlocker = () => {
+    if (isGroupMode) {
+      if (!lessonForm.groupId) {
+        return 'Saat yazmadan önce kayıtlı bir grup seçiniz.'
+      }
+
+      if (!lessonForm.teacherId) {
+        return 'Saat yazmadan önce öğretmen seçiniz.'
+      }
+
+      if (lessonForm.participants.length === 0) {
+        return 'Seçilen grupta aktif öğrenci yok.'
+      }
+
+      return ''
+    }
+
+    if (!lessonForm.studentId) {
+      return 'Saat yazmadan önce öğrenci seçiniz.'
+    }
+
+    if (!lessonForm.packageId) {
+      return 'Saat yazmadan önce paket seçiniz.'
+    }
+
+    if (!lessonForm.teacherId) {
+      return 'Saat yazmadan önce öğretmen seçiniz.'
+    }
+
+    return ''
+  }
+
+  /*
+   * Haftalık tablo gün sütunlarından oluşur: her günün dersleri
+   * saat sırasıyla alt alta listelenir.
+   */
+  const getLessonsForCell = (day) =>
+    filteredLessonPlans
+      .filter((lesson) => lesson.day === day)
+      .sort(
+        (firstLesson, secondLesson) =>
+          (timeToMinutes(firstLesson.time) ?? 0) -
+            (timeToMinutes(secondLesson.time) ?? 0) ||
+          getLessonTeacherName(firstLesson).localeCompare(
+            getLessonTeacherName(secondLesson),
+            'tr'
+          )
       )
 
   const clearFilters = () => {
@@ -973,13 +1060,6 @@ function Schedule({
     setShowStudentSuggestions(false)
   }
 
-  const toggleCellExpansion = (cellKey) => {
-    setExpandedCells((current) => ({
-      ...current,
-      [cellKey]: !current[cellKey]
-    }))
-  }
-
   const handleLessonSubmit = async (
     event
   ) => {
@@ -991,50 +1071,45 @@ function Schedule({
 
     if (isGroupMode) {
       if (!lessonForm.groupId) {
-        alert('Kayıtlı bir ders grubu seçiniz.')
+        notify('Kayıtlı bir ders grubu seçiniz.')
         return
       }
 
       if (!lessonForm.teacherId) {
-        alert('Öğretmen seçiniz.')
+        notify('Öğretmen seçiniz.')
         return
       }
 
-      if (
-        lessonForm.participants.length <
-        2
-      ) {
-        alert(
-          'Seçilen grupta en az iki aktif öğrenci bulunmalıdır.'
+      if (lessonForm.participants.length === 0) {
+        notify(
+          'Seçilen grupta aktif öğrenci yok. Gruba en az bir öğrenci ekleyiniz.'
         )
         return
       }
     } else {
       if (!lessonForm.studentId) {
-        alert('Öğrenci seçiniz.')
+        notify('Öğrenci seçiniz.')
         return
       }
 
       if (!lessonForm.packageId) {
-        alert('Paket seçiniz.')
+        notify('Paket seçiniz.')
         return
       }
 
       if (!lessonForm.teacherId) {
-        alert(
-          'Bu pakete atanmış öğretmen bulunamadı. Öğrenci detayından paket öğretmenini seçiniz.'
-        )
+        notify('Öğretmen seçiniz.')
         return
       }
     }
 
     if (!lessonForm.day.trim()) {
-      alert('Ders günü seçiniz.')
+      notify('Ders günü seçiniz.')
       return
     }
 
     if (!lessonForm.time.trim()) {
-      alert('Ders saati seçiniz.')
+      notify('Ders saati seçiniz.')
       return
     }
 
@@ -1044,7 +1119,7 @@ function Schedule({
       )
 
     if (blockedLesson) {
-      alert(blockedLesson.message)
+      notify(blockedLesson.message)
       return
     }
 
@@ -1165,6 +1240,8 @@ function Schedule({
           })
       }
 
+      notify.success('Ders planı kaydedildi.')
+
       setLessonPlans(
         (currentLessons) => [
           ...currentLessons,
@@ -1187,7 +1264,7 @@ function Schedule({
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Ders planı kaydedilemedi.'
@@ -1202,7 +1279,7 @@ function Schedule({
       return
     }
 
-    const isConfirmed = window.confirm(
+    const isConfirmed = await confirmDialog(
       'Bu ders planını silmek istediğinize emin misiniz?'
     )
 
@@ -1214,6 +1291,8 @@ function Schedule({
 
     try {
       await deleteLessonPlan(lessonId)
+
+      notify.success('Ders planı silindi.')
 
       setLessonPlans((currentLessons) =>
         currentLessons.filter(
@@ -1244,7 +1323,7 @@ function Schedule({
         error
       )
 
-      alert(
+      notify(
         error instanceof Error
           ? error.message
           : 'Ders planı silinemedi.'
@@ -1401,34 +1480,6 @@ function Schedule({
                   </select>
                 </div>
 
-                <div className="form-group">
-                  <label>Gün</label>
-
-                  <select
-                    name="day"
-                    value={lessonForm.day}
-                    onChange={handleLessonChange}
-                  >
-                    {days.map((day) => (
-                      <option
-                        key={day}
-                        value={day}
-                      >
-                        {day}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group full-width">
-                  <label>Seçilen Saat</label>
-
-                  <input
-                    value={lessonForm.time}
-                    readOnly
-                    placeholder="Saat seçiniz"
-                  />
-                </div>
               </>
             ) : (
               <>
@@ -1575,7 +1626,7 @@ function Schedule({
                           '-'}
                       </p>
                       <p>
-                        <b>Öğretmen:</b>{' '}
+                        <b>Paket Öğretmeni:</b>{' '}
                         {selectedPackageInfo.teacher ||
                           '-'}
                       </p>
@@ -1599,192 +1650,183 @@ function Schedule({
                 )}
 
                 <div className="form-group">
-                  <label>Gün</label>
+                  <label>Öğretmen</label>
+
                   <select
-                    name="day"
-                    value={lessonForm.day}
+                    name="teacherId"
+                    value={lessonForm.teacherId}
                     onChange={handleLessonChange}
+                    disabled={!lessonForm.packageId}
                   >
-                    {days.map((day) => (
-                      <option
-                        key={day}
-                        value={day}
-                      >
-                        {day}
-                      </option>
-                    ))}
+                    <option value="">
+                      {!lessonForm.packageId
+                        ? 'Önce paket seçiniz'
+                        : 'Öğretmen seçiniz'}
+                    </option>
+
+                    {activeTeachers.map(
+                      (teacher) => (
+                        <option
+                          key={teacher.id}
+                          value={teacher.id}
+                        >
+                          {getTeacherNameFromRecord(
+                            teacher
+                          )}
+                        </option>
+                      )
+                    )}
                   </select>
                 </div>
 
-                <div className="form-group">
-                  <label>Seçilen Saat</label>
-                  <input
-                    value={lessonForm.time}
-                    readOnly
-                    placeholder="Saat seçiniz"
-                  />
-                </div>
               </>
             )}
           </div>
 
-          <button
-            className="save-button schedule-save-button"
-            type="submit"
-            disabled={
-              isSavingLesson ||
-              scheduleLoading
-            }
-          >
-            {isSavingLesson
-              ? 'Kaydediliyor...'
-              : 'Ders Planını Kaydet'}
-          </button>
-        </form>
-
-        <section className="schedule-slots-card compact-slots-card">
-          <div className="table-head schedule-slots-heading">
-            <div>
-              <h2>{lessonForm.day} Saat Durumu</h2>
-              <p>
-                {isGroupMode
-                  ? lessonForm.groupId &&
-                    lessonForm.teacherId &&
-                    lessonForm.participants.length >= 2
-                    ? `${lessonForm.groupName || 'Grup dersi'} için uygun saatler`
-                    : 'Dolu saatleri görmek için kayıtlı grup ve öğretmen seçiniz.'
-                  : lessonForm.studentName &&
-                      lessonForm.teacher
-                    ? `${lessonForm.studentName} ve ${lessonForm.teacher} için uygun saatler`
-                    : 'Dolu saatleri görmek için öğrenci ve paket seçiniz.'}
-              </p>
-            </div>
-          </div>
-
-          {(isGroupMode
-            ? lessonForm.groupName ||
-              lessonForm.teacherId ||
-              lessonForm.participants.length > 0
-            : lessonForm.studentName ||
-              lessonForm.teacher ||
-              selectedPackageInfo) && (
-            <div className="selected-plan-summary">
-              <span>Seçilen Plan Özeti</span>
-
-              <div className="plan-summary-grid">
-                <p>
-                  <b>
-                    {isGroupMode
-                      ? 'Grup'
-                      : 'Öğrenci'}:
-                  </b>{' '}
-                  {isGroupMode
-                    ? lessonForm.groupName || '-'
-                    : lessonForm.studentName || '-'}
-                </p>
-                <p>
-                  <b>Öğretmen:</b>{' '}
-                  {isGroupMode
-                    ? getTeacherNameFromRecord(
-                        teachers.find(
-                          (teacher) =>
-                            areIdsEqual(
-                              teacher.id,
-                              lessonForm.teacherId
-                            )
-                        )
-                      ) || '-'
-                    : lessonForm.teacher || '-'}
-                </p>
-                <p>
-                  <b>
-                    {isGroupMode
-                      ? 'Öğrenci Sayısı'
-                      : 'Paket'}:
-                  </b>{' '}
-                  {isGroupMode
-                    ? lessonForm.participants.length
-                    : lessonForm.packageName || '-'}
-                </p>
-                <p>
-                  <b>Gün:</b> {lessonForm.day}
-                </p>
+          <div className="schedule-time-section">
+            <div className="form-group schedule-day-group">
+              <label>Gün</label>
+              <div
+                className="schedule-day-picker"
+                role="radiogroup"
+                aria-label="Ders günü"
+              >
+                {days.map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    role="radio"
+                    aria-checked={lessonForm.day === day}
+                    className={`schedule-day-chip ${
+                      lessonForm.day === day ? 'active' : ''
+                    }`}
+                    onClick={() =>
+                      handleLessonChange({
+                        target: { name: 'day', value: day }
+                      })
+                    }
+                  >
+                    {day}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
 
-          <div className="time-slot-grid compact-time-slot-grid">
-            {timeSlots.map((time) => {
-              const blockedLesson = getBlockedLesson(time)
-              const isSelected = lessonForm.time === time
-
-              return (
-                <button
-                  key={time}
-                  type="button"
-                  className={`time-slot compact-time-slot ${
-                    blockedLesson ? 'occupied' : ''
-                  } ${isSelected ? 'selected' : ''}`}
-                  onClick={() => {
-                    if (isGroupMode) {
-                      if (!lessonForm.groupId) {
-                        alert(
-                          'Saat seçmeden önce kayıtlı bir grup seçiniz.'
-                        )
-                        return
-                      }
-
-                      if (!lessonForm.teacherId) {
-                        alert(
-                          'Saat seçmeden önce öğretmen seçiniz.'
-                        )
-                        return
-                      }
-
-                      if (
-                        lessonForm.participants.length <
-                        2
-                      ) {
-                        alert(
-                          'Seçilen grupta en az iki aktif öğrenci bulunmalıdır.'
-                        )
-                        return
-                      }
-                    } else {
-                      if (!lessonForm.studentId) {
-                        alert(
-                          'Saat seçmeden önce öğrenci seçiniz.'
-                        )
-                        return
-                      }
-
-                      if (!lessonForm.packageId) {
-                        alert(
-                          'Saat seçmeden önce paket seçiniz.'
-                        )
-                        return
-                      }
-
-                      if (!lessonForm.teacher) {
-                        alert(
-                          'Bu pakete atanmış öğretmen bulunamadı.'
-                        )
-                        return
-                      }
-                    }
-
-                    if (!blockedLesson) {
-                      selectTimeSlot(time)
-                    }
-                  }}
-                >
-                  <strong>{time}</strong>
-                  <span>{blockedLesson ? blockedLesson.message : 'Boş'}</span>
-                </button>
-              )
-            })}
+            <div className="form-group schedule-time-group">
+              <label htmlFor="lesson-time">Ders Saati</label>
+              <input
+                id="lesson-time"
+                type="time"
+                step="300"
+                value={lessonForm.time}
+                disabled={Boolean(
+                  getTimeInputBlocker()
+                )}
+                onChange={(event) =>
+                  setLessonForm((currentForm) => ({
+                    ...currentForm,
+                    time: event.target.value
+                  }))
+                }
+              />
+            </div>
           </div>
-        </section>
+
+          <div className="schedule-form-footer">
+            <div className="manual-time-panel">
+              {(() => {
+                const inputBlocker =
+                  getTimeInputBlocker()
+
+                if (inputBlocker) {
+                  return (
+                    <p className="manual-time-status pending">
+                      {inputBlocker}
+                    </p>
+                  )
+                }
+
+                const blockedLesson =
+                  lessonForm.time
+                    ? getBlockedLesson(
+                        lessonForm.time
+                      )
+                    : null
+
+                const busyLessons =
+                  getBusyLessonsForSelectedDay()
+
+                return (
+                  <>
+                    {!lessonForm.time ? (
+                      <p className="manual-time-status pending">
+                        Ders saatini yazınız (ör. 14:30). Ders süresi:{' '}
+                        {parseDurationMinutes(
+                          lessonForm.duration
+                        )}{' '}
+                        dk.
+                      </p>
+                    ) : blockedLesson ? (
+                      <p className="manual-time-status blocked">
+                        {getSelectedTimeRange()} uygun değil ·{' '}
+                        {blockedLesson.message}
+                      </p>
+                    ) : (
+                      <p className="manual-time-status available">
+                        {getSelectedTimeRange()} uygun.
+                      </p>
+                    )}
+
+                    {busyLessons.length > 0 && (
+                      <div className="manual-time-busy">
+                        <span>{lessonForm.day} dolu saatler:</span>
+
+                        <ul>
+                          {busyLessons.map((lesson) => (
+                            <li
+                              key={lesson.id}
+                              title={
+                                lesson.isGroupLesson
+                                  ? lesson.groupName ||
+                                    'Grup dersi'
+                                  : `${getLessonStudentName(
+                                      lesson
+                                    )} / ${getLessonInstrument(
+                                      lesson
+                                    )}`
+                              }
+                            >
+                              <b>{getLessonTimeRange(lesson)}</b>
+                              <span>
+                                {isLessonForSelectedTeacher(lesson)
+                                  ? 'Öğretmen'
+                                  : 'Öğrenci'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+
+            <button
+              className="save-button schedule-save-button"
+              type="submit"
+              disabled={
+                isSavingLesson ||
+                scheduleLoading
+              }
+            >
+              {isSavingLesson
+                ? 'Kaydediliyor...'
+                : 'Ders Planını Kaydet'}
+            </button>
+          </div>
+        </form>
+
       </section>
 
       <section className="lesson-table-card schedule-filter-card">
@@ -1920,10 +1962,9 @@ function Schedule({
         </div>
 
         <div className="weekly-table-wrapper schedule-weekly-wrapper">
-          <table className="weekly-schedule-table schedule-weekly-table">
+          <table className="weekly-schedule-table schedule-weekly-table day-column-table">
             <thead>
               <tr>
-                <th>Saat</th>
                 {days.map((day) => (
                   <th key={day}>{day}</th>
                 ))}
@@ -1934,28 +1975,19 @@ function Schedule({
               {scheduleLoading ? (
                 <tr>
                   <td
-                    colSpan={days.length + 1}
+                    colSpan={days.length}
                     className="empty-table"
                   >
                     Ders programı yükleniyor...
                   </td>
                 </tr>
               ) : (
-                timeSlots.map((time) => (
-                  <tr key={time}>
-                    <td className="weekly-time-cell schedule-hour">{time}</td>
+                <tr className="day-column-row">
 
                     {days.map((day) => {
-                      const cellKey = `${day}-${time}`
-                      const cellLessons = getLessonsForCell(day, time)
-                      const isExpanded = Boolean(expandedCells[cellKey])
-                      const visibleLessons = isExpanded
-                        ? cellLessons
-                        : cellLessons.slice(0, 2)
-                      const hiddenLessonCount = Math.max(
-                        0,
-                        cellLessons.length - 2
-                      )
+                      const cellKey = day
+                      const cellLessons = getLessonsForCell(day)
+                      const visibleLessons = cellLessons
 
                       return (
                         <td
@@ -1968,7 +2000,26 @@ function Schedule({
                         >
                           {cellLessons.length > 0 ? (
                             <div className="schedule-cell-stack">
-                            {visibleLessons.map((lesson) => {
+                            {groupLessonsByStartTime(visibleLessons).map(
+                              (timeGroup) => (
+                                <div
+                                  key={`${cellKey}-${timeGroup.time}`}
+                                  className={`day-time-group ${
+                                    timeGroup.lessons.length > 1
+                                      ? 'multiple'
+                                      : ''
+                                  }`}
+                                >
+                                  {timeGroup.lessons.length > 1 && (
+                                    <div className="day-time-group-head">
+                                      <b>{timeGroup.time}</b>
+                                      <span>
+                                        {timeGroup.lessons.length} ders aynı saatte
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {timeGroup.lessons.map((lesson) => {
                               const compactStatus = getCompactLessonStatusLabel(
                                 lesson.status
                               )
@@ -1985,6 +2036,10 @@ function Schedule({
                                 >
                                   <div className="schedule-card-top">
                                     <div className="schedule-card-text">
+                                      <small className="schedule-card-time">
+                                        {getLessonTimeRange(lesson)}
+                                      </small>
+
                                       <div className="schedule-teacher-line">
                                         <strong
                                           title={getLessonTeacherName(lesson)}
@@ -2050,30 +2105,20 @@ function Schedule({
                                 </div>
                               )
                             })}
-
-                            {cellLessons.length > 2 && (
-                              <button
-                                type="button"
-                                className="schedule-more-button"
-                                aria-expanded={isExpanded}
-                                onClick={() => toggleCellExpansion(cellKey)}
-                              >
-                                {isExpanded
-                                  ? 'Daralt'
-                                  : `+${hiddenLessonCount} ders`}
-                              </button>
+                                </div>
+                              )
                             )}
+
                           </div>
                         ) : (
                           <span className="weekly-empty schedule-empty-slot">
-                            Boş
+                            Ders yok
                           </span>
                         )}
                       </td>
                     )
                     })}
-                  </tr>
-                ))
+                </tr>
               )}
             </tbody>
           </table>

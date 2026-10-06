@@ -15,6 +15,7 @@
 
 /* =========================================================
    SIDEBAR
+   Bilgisayarda yazılarıyla açık; "daralt" ile simge görünümü.
    ========================================================= */
 
 .sidebar {
@@ -24,8 +25,8 @@
 
   display: flex;
 
-  width: 78px;
-  min-width: 78px;
+  width: 248px;
+  min-width: 248px;
 
   height: 100vh;
   height: 100dvh;
@@ -33,64 +34,57 @@
   flex-direction: column;
   flex-shrink: 0;
 
-  padding: 24px 12px;
+  padding: 22px 14px 16px;
 
   overflow: hidden;
 
   background: #ffffff;
   border-right: 1px solid #e7edf5;
 
-  box-shadow:
-    4px 0 18px rgba(15, 23, 42, 0.03);
+  box-shadow: 4px 0 18px rgba(15, 23, 42, 0.03);
 
   transition:
-    width 0.25s ease,
-    min-width 0.25s ease,
-    padding 0.25s ease,
-    box-shadow 0.25s ease;
+    width 0.22s ease,
+    min-width 0.22s ease,
+    padding 0.22s ease;
 }
 
-.sidebar:hover {
-  width: 285px;
-  min-width: 285px;
+.sidebar.collapsed {
+  width: 78px;
+  min-width: 78px;
 
-  padding: 24px 18px;
-
-  box-shadow:
-    8px 0 28px rgba(15, 23, 42, 0.08);
+  padding: 22px 12px 16px;
 }
 
 /* =========================================================
-   SIDEBAR MARKA ALANI
+   MARKA ALANI
    ========================================================= */
 
 .brand {
   display: flex;
 
-  min-height: 56px;
+  min-height: 52px;
 
   align-items: center;
 
   gap: 10px;
 
-  margin-bottom: 24px;
+  margin-bottom: 14px;
 
-  padding: 2px 1px;
-
-  overflow: hidden;
+  padding: 0 4px;
 }
 
-.sidebar:hover .brand {
-  padding: 2px 6px;
+.sidebar.collapsed .brand {
+  padding: 0 1px;
 }
 
 .brand-logo-frame {
   position: relative;
 
-  flex: 0 0 52px;
+  flex: 0 0 48px;
 
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
 
   overflow: hidden;
 
@@ -99,8 +93,7 @@
   border: 1px solid #dbe3ee;
   border-radius: 50%;
 
-  box-shadow:
-    0 6px 16px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
 }
 
 .brand-logo-image {
@@ -115,34 +108,14 @@
   object-fit: cover;
   object-position: center;
 
-  transform:
-    translate(-50%, -50%)
-    scale(1.2);
+  transform: translate(-50%, -50%) scale(1.2);
 }
-
-/* =========================================================
-   MARKA YAZISI
-   ========================================================= */
 
 .brand-text {
-  min-width: 150px;
+  min-width: 0;
+  flex: 1;
 
-  opacity: 0;
-  visibility: hidden;
-
-  transform: translateX(-8px);
-
-  transition:
-    opacity 0.18s ease,
-    visibility 0.18s ease,
-    transform 0.18s ease;
-}
-
-.sidebar:hover .brand-text {
-  opacity: 1;
-  visibility: visible;
-
-  transform: translateX(0);
+  transition: opacity 0.15s ease;
 }
 
 .brand-text h2 {
@@ -169,8 +142,62 @@
   white-space: nowrap;
 }
 
+/* Yalnız telefondaki kayan menüde görünür */
+.sidebar-close-button {
+  display: none;
+}
+
 /* =========================================================
-   SIDEBAR MENÜ
+   DARALT / GENİŞLET DÜĞMESİ
+   ========================================================= */
+
+.sidebar-collapse-button {
+  display: flex;
+
+  width: 100%;
+  min-height: 36px;
+
+  align-items: center;
+
+  gap: 10px;
+
+  margin-bottom: 12px;
+
+  padding: 8px 15px;
+
+  color: #94a3b8;
+
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+
+  white-space: nowrap;
+
+  background: transparent;
+  border: 1px dashed #e2e8f0;
+  border-radius: 10px;
+
+  cursor: pointer;
+
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.sidebar-collapse-button:hover {
+  color: #0369a1;
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.sidebar.collapsed .sidebar-collapse-button {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* =========================================================
+   MENÜ
    ========================================================= */
 
 .sidebar-nav {
@@ -181,44 +208,23 @@
   flex: 1;
   flex-direction: column;
 
-  gap: 7px;
+  gap: 4px;
 
   overflow-x: hidden;
   overflow-y: auto;
 
   scrollbar-width: thin;
-  scrollbar-color:
-    transparent
-    transparent;
-}
-
-.sidebar:hover .sidebar-nav {
-  scrollbar-color:
-    #cbd5e1
-    transparent;
+  scrollbar-color: #e2e8f0 transparent;
 }
 
 .sidebar-nav::-webkit-scrollbar {
   width: 5px;
 }
 
-.sidebar-nav::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .sidebar-nav::-webkit-scrollbar-thumb {
-  background: transparent;
+  background: #e2e8f0;
   border-radius: 999px;
 }
-
-.sidebar:hover
-.sidebar-nav::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-}
-
-/* =========================================================
-   MENÜ BUTONU
-   ========================================================= */
 
 .nav-item {
   position: relative;
@@ -226,7 +232,7 @@
   display: flex;
 
   width: 100%;
-  min-height: 46px;
+  min-height: 44px;
 
   align-items: center;
 
@@ -234,18 +240,17 @@
 
   flex-shrink: 0;
 
-  padding: 12px 15px;
+  padding: 11px 15px;
 
   overflow: hidden;
 
   color: #475569;
 
-  font-size: 15px;
+  font: inherit;
+  font-size: 14.5px;
   font-weight: 600;
 
   text-align: left;
-  text-decoration: none;
-
   white-space: nowrap;
 
   background: transparent;
@@ -256,13 +261,17 @@
   cursor: pointer;
 
   transition:
-    color 0.2s ease,
-    background-color 0.2s ease,
-    transform 0.2s ease;
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 11px 0;
 }
 
 .nav-item:hover {
-  color: #0ea5e9;
+  color: #0284c7;
 
   background: #f1f5f9;
 }
@@ -270,17 +279,8 @@
 .nav-item.active {
   color: #0369a1;
 
-  background:
-    linear-gradient(
-      90deg,
-      #e0f2fe,
-      #ecfeff
-    );
+  background: linear-gradient(90deg, #e0f2fe, #ecfeff);
 }
-
-/* =========================================================
-   AKTİF MENÜ ÇİZGİSİ
-   ========================================================= */
 
 .nav-item.active::before {
   position: absolute;
@@ -295,54 +295,26 @@
 
   background: #facc15;
 
-  border-radius:
-    0
-    6px
-    6px
-    0;
+  border-radius: 0 6px 6px 0;
 }
-
-/* =========================================================
-   MENÜ İKONU
-   ========================================================= */
 
 .nav-icon {
   flex: 0 0 auto;
 
   width: 20px;
   height: 20px;
-
-  transition:
-    transform 0.2s ease;
 }
-
-.nav-item:hover .nav-icon {
-  transform: translateX(1px);
-}
-
-/* =========================================================
-   MENÜ YAZISI
-   ========================================================= */
 
 .nav-label {
-  min-width: 180px;
-
-  opacity: 0;
-  visibility: hidden;
-
-  transform: translateX(-6px);
-
-  transition:
-    opacity 0.18s ease,
-    visibility 0.18s ease,
-    transform 0.18s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.sidebar:hover .nav-label {
-  opacity: 1;
-  visibility: visible;
-
-  transform: translateX(0);
+/* Daraltılmış görünümde yazılar gizlenir */
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .logout-label {
+  display: none;
 }
 
 /* =========================================================
@@ -353,7 +325,7 @@
   display: flex;
 
   width: 100%;
-  min-height: 46px;
+  min-height: 44px;
 
   align-items: center;
 
@@ -361,15 +333,15 @@
 
   flex-shrink: 0;
 
-  margin-top: 14px;
-  margin-bottom: 4px;
+  margin-top: 12px;
 
-  padding: 12px 15px;
+  padding: 11px 15px;
 
   overflow: hidden;
 
   color: #e11d48;
 
+  font: inherit;
   font-weight: 700;
 
   white-space: nowrap;
@@ -381,9 +353,12 @@
 
   cursor: pointer;
 
-  transition:
-    background-color 0.2s ease,
-    transform 0.2s ease;
+  transition: background-color 0.18s ease;
+}
+
+.sidebar.collapsed .logout-button {
+  justify-content: center;
+  padding: 11px 0;
 }
 
 .logout-button:hover {
@@ -395,27 +370,6 @@
 
   width: 20px;
   height: 20px;
-}
-
-.logout-label {
-  min-width: 120px;
-
-  opacity: 0;
-  visibility: hidden;
-
-  transform: translateX(-6px);
-
-  transition:
-    opacity 0.18s ease,
-    visibility 0.18s ease,
-    transform 0.18s ease;
-}
-
-.sidebar:hover .logout-label {
-  opacity: 1;
-  visibility: visible;
-
-  transform: translateX(0);
 }
 
 /* =========================================================
@@ -433,70 +387,193 @@
    ========================================================= */
 
 .nav-item:focus-visible,
-.logout-button:focus-visible {
-  outline: 3px solid
-    rgba(14, 165, 233, 0.22);
+.logout-button:focus-visible,
+.sidebar-collapse-button:focus-visible,
+.mobile-menu-button:focus-visible,
+.sidebar-close-button:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.25);
 
   outline-offset: 2px;
 }
 
 /* =========================================================
-   MOBİL GÖRÜNÜM
+   TELEFON ÜST ÇUBUĞU (yalnız dar ekranda)
    ========================================================= */
+
+.mobile-topbar {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
 
 @media (max-width: 900px) {
   .app {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .sidebar,
-  .sidebar:hover {
-    position: relative;
+  .mobile-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
 
-    width: 100%;
+    display: flex;
+
+    min-height: 58px;
+
+    align-items: center;
+
+    gap: 12px;
+
+    padding: 8px 16px;
+
+    background: rgba(255, 255, 255, 0.96);
+    border-bottom: 1px solid #e7edf5;
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .mobile-menu-button {
+    display: flex;
+
+    width: 42px;
+    height: 42px;
+
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+
+    color: #0f172a;
+
+    background: #f1f5f9;
+    border: 0;
+    border-radius: 12px;
+
+    cursor: pointer;
+  }
+
+  .mobile-topbar-title {
+    display: flex;
+
     min-width: 0;
 
-    height: auto;
-    min-height: auto;
+    align-items: center;
 
-    padding: 18px;
+    gap: 10px;
   }
 
-  .brand {
-    padding: 2px 6px;
+  .mobile-topbar-logo {
+    width: 30px;
+    height: 30px;
+
+    object-fit: cover;
+
+    border: 1px solid #dbe3ee;
+    border-radius: 50%;
   }
 
-  .brand-text,
-  .sidebar:hover .brand-text {
+  .mobile-topbar-title span {
+    overflow: hidden;
+
+    color: #0f172a;
+
+    font-size: 16px;
+    font-weight: 800;
+
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+
+    display: block;
+
+    background: rgba(15, 23, 42, 0.4);
+
+    animation: sidebarFadeIn 0.2s ease;
+  }
+
+  /* Menü soldan kayarak açılır */
+  .sidebar,
+  .sidebar.collapsed {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+
+    width: min(290px, 86vw);
+    min-width: 0;
+
+    height: 100%;
+
+    padding: 18px 14px 16px;
+
+    box-shadow: 18px 0 48px rgba(15, 23, 42, 0.18);
+
+    transform: translateX(-105%);
+
+    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Telefonda daraltma yok; yazılar her zaman görünür */
+  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .logout-label {
+    display: block;
+  }
+
+  .sidebar.collapsed .nav-item,
+  .sidebar.collapsed .logout-button {
+    justify-content: flex-start;
+    padding: 11px 15px;
+  }
+
+  .sidebar-collapse-button {
+    display: none;
+  }
+
+  .sidebar-close-button {
+    display: flex;
+
+    width: 36px;
+    height: 36px;
+
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+
+    color: #64748b;
+
+    background: #f1f5f9;
+    border: 0;
+    border-radius: 10px;
+
+    cursor: pointer;
+  }
+}
+
+@keyframes sidebarFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
     opacity: 1;
-    visibility: visible;
-
-    transform: none;
-  }
-
-  .nav-label,
-  .sidebar:hover .nav-label {
-    opacity: 1;
-    visibility: visible;
-
-    transform: none;
-  }
-
-  .logout-label,
-  .sidebar:hover .logout-label {
-    opacity: 1;
-    visibility: visible;
-
-    transform: none;
-  }
-
-  .sidebar-nav {
-    overflow: visible;
-  }
-
-  .logout-button {
-    margin-top: 18px;
-    margin-bottom: 0;
   }
 }
 
@@ -506,12 +583,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
+  .sidebar.collapsed,
   .brand-text,
   .nav-item,
-  .nav-icon,
-  .nav-label,
   .logout-button,
-  .logout-label {
+  .sidebar-collapse-button,
+  .sidebar-backdrop {
     transition: none;
+    animation: none;
   }
 }

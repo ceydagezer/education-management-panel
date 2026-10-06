@@ -963,6 +963,8 @@ export async function getPaymentMovementsPage({
     .select(paymentMovementSelect, {
       count: 'exact'
     })
+    // İptal edilen tahsilatlar hareket listesinde gösterilmez.
+    .eq('is_active', true)
 
   const searchText =
     cleanSearchValue(
@@ -1204,8 +1206,13 @@ export async function updatePayment(
   return mapPaymentFromDb(data)
 }
 
+/*
+ * Tahsilat kalıcı silinmez: iptal edilir (is_active = false) ve
+ * kim/ne zaman/neden bilgisi veritabanında loglanır.
+ */
 export async function deletePayment(
-  paymentId
+  paymentId,
+  reason = ''
 ) {
   const cleanPaymentId = String(
     paymentId || ''
@@ -1217,16 +1224,19 @@ export async function deletePayment(
     )
   }
 
-  const { error } = await supabase
-    .from('payments')
-    .delete()
-    .eq('id', cleanPaymentId)
+  const { error } = await supabase.rpc(
+    'cancel_payment',
+    {
+      p_payment_id: cleanPaymentId,
+      p_reason: String(reason || '').trim() || null
+    }
+  )
 
   if (error) {
     throw new Error(
       getPaymentErrorMessage(
         error,
-        'Tahsilat silinemedi.'
+        'Tahsilat iptal edilemedi.'
       )
     )
   }
@@ -1265,6 +1275,77 @@ export async function updateStudentPackageNextPaymentDate(
       getPaymentErrorMessage(
         error,
         'Sonraki ödeme tarihi güncellenemedi.'
+      )
+    )
+  }
+}
+
+function getSettlementErrorMessage(
+  error,
+  fallbackMessage
+) {
+  if (error?.code === 'PGRST202') {
+    return 'Hesap kapatma özelliği veritabanında henüz kurulu değil. 20261003_student_package_settlement.sql dosyası Supabase SQL Editor üzerinden çalıştırılmalıdır.'
+  }
+
+  if (
+    error?.code === '22023' ||
+    error?.code === 'P0002'
+  ) {
+    return error.message
+  }
+
+  return fallbackMessage
+}
+
+export async function getOpenStudentSettlements() {
+  const { data, error } = await supabase.rpc(
+    'get_open_student_settlements'
+  )
+
+  if (error) {
+    throw new Error(
+      getSettlementErrorMessage(
+        error,
+        'Ayrılan öğrenci hesapları alınamadı.'
+      )
+    )
+  }
+
+  return (data || []).map((row) => ({
+    studentPackageId: row.student_package_id,
+    studentId: row.student_id,
+    studentName: row.student_name || '',
+    packageId: row.package_id,
+    packageName: row.package_name || '',
+    teacherId: row.teacher_id || null,
+    settlementAmount: Number(
+      row.settlement_amount || 0
+    ),
+    paidAmount: Number(row.paid_amount || 0),
+    balance: Number(row.balance || 0),
+    settledAt: row.settled_at || '',
+    settlementNote: row.settlement_note || ''
+  }))
+}
+
+export async function resolveStudentSettlement(
+  studentPackageId,
+  resolution
+) {
+  const { error } = await supabase.rpc(
+    'resolve_student_settlement',
+    {
+      p_student_package_id: studentPackageId,
+      p_resolution: resolution
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      getSettlementErrorMessage(
+        error,
+        'Hesap kaydı kapatılamadı.'
       )
     )
   }

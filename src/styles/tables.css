@@ -1,0 +1,47 @@
+/* =========================================================
+   ORTAK TABLO HİZALAMASI
+
+   Sayfalardaki tablo hizalamaları tablo tablo ayrı yazıldığı için
+   bazı sütunlarda başlık sola, içerik ortaya (ya da tersi) kayıyordu.
+   Tahsilat, paket ve finans tablolarında olduğu gibi tüm sistem
+   tablolarında başlık ve içerik ortalıdır.
+
+   :is() tekrarları, sayfa CSS'lerindeki eski !important kurallarının
+   (en fazla 3 sınıflık seçiciler) önüne geçmek içindir. Bu dosya en
+   son yüklenir (main.jsx).
+
+   Hariç: haftalık program tabloları (gün sütunları, kartlar sola),
+   öğretmen detay satırı ve içindeki detay tablosu (açıklamalar sola).
+   ========================================================= */
+
+table:is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table):is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table):is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table):is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table)
+  > thead
+  > tr
+  > th,
+table:is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table):is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table):is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table):is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table)
+  > tbody
+  > tr:not(.teacher-detail-row)
+  > td {
+  text-align: center !important;
+  vertical-align: middle;
+}
+
+/*
+ * Ortalanan hücrelerdeki blok içerikler (iki satırlı ad / alt bilgi,
+ * rozet kapları) de ortaya gelsin.
+ */
+table:is(.report-table, .lesson-table, .settlement-table, .user-management-table, .dashboard-home-table)
+  > tbody
+  > tr:not(.teacher-detail-row)
+  > td
+  > :is(div, strong, small, p) {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* Öğretmen detay satırı ve içindeki tablo sola */
+table.report-table > tbody > tr.teacher-detail-row > td,
+.teacher-detail-table th,
+.teacher-detail-table td {
+  text-align: left !important;
+}
