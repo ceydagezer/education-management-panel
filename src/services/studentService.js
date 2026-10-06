@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllRows } from '../lib/supabasePaging'
 
 const studentSelect = `
   id,
@@ -1488,23 +1489,26 @@ export async function getStudentPackageLessonUsage() {
 }
 
 export async function getDashboardStudents() {
-  const { data, error } = await supabase
-    .from('students')
-    .select(`
-      id,
-      full_name,
-      gender,
-      phone,
-      status,
-      is_active,
-      is_archived,
-      is_anonymized,
-      retention_status,
-      retention_review_date
-    `)
-    .order('full_name', {
-      ascending: true
-    })
+  const { data, error } = await fetchAllRows(() =>
+    supabase
+      .from('students')
+      .select(`
+        id,
+        full_name,
+        gender,
+        phone,
+        status,
+        is_active,
+        is_archived,
+        is_anonymized,
+        retention_status,
+        retention_review_date
+      `)
+      .order('full_name', {
+        ascending: true
+      })
+      .order('id')
+  )
 
   if (error) {
     throw new Error(
@@ -1533,51 +1537,54 @@ export async function getDashboardStudents() {
 }
 
 export async function getScheduleStudents() {
-  const { data, error } = await supabase
-    .from('students')
-    .select(`
-      id,
-      tc_no,
-      full_name,
-      status,
-      is_active,
-      is_archived,
-
-      student_packages (
+  const { data, error } = await fetchAllRows(() =>
+    supabase
+      .from('students')
+      .select(`
         id,
-        student_id,
-        package_id,
-        default_teacher_id,
-        agreed_price,
-        total_lesson_count,
+        tc_no,
+        full_name,
         status,
         is_active,
-        created_at,
+        is_archived,
 
-        package:packages (
+        student_packages (
           id,
-          name,
-          duration_minutes,
-          lesson_count,
-          total_price,
-
-          specialty:specialties (
-            id,
-            name
-          )
-        ),
-
-        default_teacher:teachers (
-          id,
-          full_name,
+          student_id,
+          package_id,
+          default_teacher_id,
+          agreed_price,
+          total_lesson_count,
           status,
-          is_active
+          is_active,
+          created_at,
+
+          package:packages (
+            id,
+            name,
+            duration_minutes,
+            lesson_count,
+            total_price,
+
+            specialty:specialties (
+              id,
+              name
+            )
+          ),
+
+          default_teacher:teachers (
+            id,
+            full_name,
+            status,
+            is_active
+          )
         )
-      )
-    `)
-    .order('full_name', {
-      ascending: true
-    })
+      `)
+      .order('full_name', {
+        ascending: true
+      })
+      .order('id')
+  )
 
   if (error) {
     throw new Error(
@@ -1618,12 +1625,15 @@ export async function getScheduleStudents() {
 }
 
 export async function getStudents() {
-  const { data, error } = await supabase
-    .from('students')
-    .select(studentSelect)
-    .order('created_at', {
-      ascending: false
-    })
+  const { data, error } = await fetchAllRows(() =>
+    supabase
+      .from('students')
+      .select(studentSelect)
+      .order('created_at', {
+        ascending: false
+      })
+      .order('id')
+  )
 
   if (error) {
     throw new Error(

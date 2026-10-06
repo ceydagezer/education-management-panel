@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllRows } from '../lib/supabasePaging'
 
 const paymentSelect = `
   id,
@@ -694,18 +695,21 @@ export async function getPaymentStudents() {
   const {
     data,
     error
-  } = await supabase
-    .from('students')
-    .select(
-      paymentStudentSelect
-    )
-    .eq('is_active', true)
-    .order(
-      'full_name',
-      {
-        ascending: true
-      }
-    )
+  } = await fetchAllRows(() =>
+    supabase
+      .from('students')
+      .select(
+        paymentStudentSelect
+      )
+      .eq('is_active', true)
+      .order(
+        'full_name',
+        {
+          ascending: true
+        }
+      )
+      .order('id')
+  )
 
   if (error) {
     throw new Error(
